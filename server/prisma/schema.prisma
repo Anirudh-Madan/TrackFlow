@@ -1,0 +1,22 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  partNo      String   @unique
+  description String?
+  qty         Decimal  @default(0.00)
+  unit        String   @default("Pcs.")
+  amount      String?  // Made this a String because the sample data showed "xyz". If it should be numeric (like price), we can change this to Decimal!
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
