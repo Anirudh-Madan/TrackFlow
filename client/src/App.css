@@ -1,1 +1,94 @@
-/* Empty App.css since we are using Tailwind */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background: radial-gradient(circle at top, rgba(170, 59, 255, 0.1), transparent 50%);
+}
+
+.card {
+  max-width: 42rem;
+  width: 100%;
+  background-color: var(--card-bg);
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-content {
+  padding: 3rem;
+  text-align: center;
+}
+
+.title {
+  font-size: 3rem;
+  font-weight: 800;
+  background: linear-gradient(to right, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  color: transparent;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.025em;
+  animation: pulseGlow 3s infinite alternate;
+}
+
+.subtitle {
+  font-size: 1.125rem;
+  color: var(--text-color);
+  opacity: 0.8;
+  margin-bottom: 2rem;
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.card-footer {
+  background-color: rgba(0, 0, 0, 0.03);
+  padding: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0.7;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card-footer {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.code-badge {
+  background-color: rgba(128, 128, 128, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    filter: drop-shadow(0 0 10px rgba(170, 59, 255, 0.2));
+  }
+  100% {
+    filter: drop-shadow(0 0 20px rgba(192, 132, 252, 0.6));
+  }
+}
