@@ -10,6 +10,9 @@ import LoginPage from '../modules/auth/pages/LoginPage'
 import ChangePasswordPage from '../modules/auth/pages/ChangePasswordPage'
 import AuthLayout from '../layouts/AuthLayout'
 
+// Non-admin placeholder
+import RolePlaceholderPage from '../modules/dashboard/RolePlaceholderPage'
+
 const router = createBrowserRouter([
   // Root redirect
   {
@@ -50,6 +53,42 @@ const router = createBrowserRouter([
       </AuthGuard>
     ),
     children: adminRoutes,
+  },
+
+  // Sales Manager
+  {
+    path: '/sm',
+    element: (
+      <AuthGuard>
+        <RoleGuard role="sales_manager">
+          <RolePlaceholderPage />
+        </RoleGuard>
+      </AuthGuard>
+    ),
+  },
+
+  // Inventory Manager
+  {
+    path: '/im',
+    element: (
+      <AuthGuard>
+        <RoleGuard role="inventory_manager">
+          <RolePlaceholderPage />
+        </RoleGuard>
+      </AuthGuard>
+    ),
+  },
+
+  // Dispatch Worker
+  {
+    path: '/dw',
+    element: (
+      <AuthGuard>
+        <RoleGuard role="dispatch_worker">
+          <RolePlaceholderPage />
+        </RoleGuard>
+      </AuthGuard>
+    ),
   },
 
   // Catch-all

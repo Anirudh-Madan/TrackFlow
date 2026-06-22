@@ -5,25 +5,21 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../../../store/authStore'
 import { useNotificationStore } from '../../../store/notificationStore'
+import { login } from '../../../api/endpoints/auth.api'
 import Button from '../../../components/ui/Button'
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Lock, User as UserIcon, AlertCircle } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 
 const schema = z.object({
-  email:    z.string().email('Invalid email address'),
+  login_id: z.string().min(1, 'Login ID is required'),
   password: z.string().min(1, 'Password is required'),
 })
 
-// Mock credentials for demo
-const DEMO_USERS = {
-  'admin@trackflow.com': {
-    id: 1,
-    name: 'Arjun Mehta',
-    email: 'admin@trackflow.com',
-    role: 'admin',
-    permissions: ['users.read', 'users.write', 'roles.read', 'roles.write', 'parties.read', 'products.read', 'inventory.read', 'orders.read'],
-    must_change_password: false,
-  },
+const ROLE_HOME = {
+  admin: '/admin',
+  sales_manager: '/sm',
+  inventory_manager: '/im',
+  dispatch_worker: '/dw',
 }
 
 export default function LoginPage() {
@@ -39,17 +35,21 @@ export default function LoginPage() {
 
   const onSubmit = async (data) => {
     setServerError(null)
-    await new Promise((r) => setTimeout(r, 800))
-
-    const user = DEMO_USERS[data.email]
-    if (!user || data.password !== 'admin123') {
-      setServerError('Invalid email or password.')
-      return
+    try {
+      const res = await login(data.login_id, data.password)
+      if (res.success) {
+        localStorage.setItem('trackflow-refresh-token', res.data.refreshToken)
+        setUser(res.data.user, res.data.accessToken)
+        setUnreadCount(0)
+        
+        const homePath = ROLE_HOME[res.data.user.role] || '/login'
+        navigate(homePath)
+      } else {
+        setServerError(res.error || 'Invalid login ID or password.')
+      }
+    } catch (err) {
+      setServerError(err.message || 'Connection failed. Please ensure MySQL and the backend are running.')
     }
-
-    setUser(user, 'mock-access-token-' + Date.now())
-    setUnreadCount(3)
-    navigate('/admin')
   }
 
   return (
@@ -59,27 +59,27 @@ export default function LoginPage() {
           Welcome back
         </h1>
         <p className="text-sm text-surface-500 dark:text-surface-400">
-          Sign in to your admin account to continue.
+          Sign in to your TrackFlow account to continue.
         </p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>
-          <label htmlFor="email" className="block text-xs font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Email address
+          <label htmlFor="login_id" className="block text-xs font-medium text-surface-700 dark:text-surface-300 mb-1.5">
+            Login ID
           </label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+            <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
             <input
-              {...register('email')}
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="admin@trackflow.com"
-              className={cn('input-base pl-9', errors.email && 'border-danger-500 focus:ring-danger-500')}
+              {...register('login_id')}
+              id="login_id"
+              type="text"
+              autoComplete="username"
+              placeholder="e.g. admin or sm_ravi"
+              className={cn('input-base pl-9', errors.login_id && 'border-danger-500 focus:ring-danger-500')}
             />
           </div>
-          {errors.email && <p className="text-xs text-danger-600 mt-1">{errors.email.message}</p>}
+          {errors.login_id && <p className="text-xs text-danger-600 mt-1">{errors.login_id.message}</p>}
         </div>
 
         <div>
@@ -122,9 +122,11 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-6 p-3.5 rounded-xl bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700">
-        <p className="text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Demo Credentials</p>
-        <p className="text-xs text-surface-500 font-mono">admin@trackflow.com / admin123</p>
+        <p className="text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Seeded Administrator</p>
+        <p className="text-xs text-surface-500 font-mono">Login ID: admin / Password: admin123</p>
       </div>
     </div>
   )
 }
+
+

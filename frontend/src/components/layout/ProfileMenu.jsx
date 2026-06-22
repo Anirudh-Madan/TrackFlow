@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { cn } from '../../utils/cn'
+import { logout as apiLogout } from '../../api/endpoints/auth.api'
 import { User, LogOut, Moon, Sun, ChevronDown } from 'lucide-react'
 
 export default function ProfileMenu() {
@@ -15,9 +16,19 @@ export default function ProfileMenu() {
     ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
     : 'A'
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      const refreshToken = localStorage.getItem('trackflow-refresh-token')
+      if (refreshToken) {
+        await apiLogout(refreshToken)
+      }
+    } catch (err) {
+      console.error('Logout API error:', err)
+    } finally {
+      localStorage.removeItem('trackflow-refresh-token')
+      logout()
+      navigate('/login')
+    }
   }
 
   return (
@@ -56,8 +67,8 @@ export default function ProfileMenu() {
             <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
               {user?.name || 'Admin User'}
             </p>
-            <p className="text-xs text-surface-500 dark:text-surface-400 truncate mt-0.5">
-              {user?.email || ''}
+            <p className="text-xs text-surface-500 dark:text-surface-400 truncate mt-0.5 font-mono">
+              {user?.login_id || ''}
             </p>
             <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300">
               {user?.role?.replace('_', ' ').toUpperCase() || 'ADMIN'}
