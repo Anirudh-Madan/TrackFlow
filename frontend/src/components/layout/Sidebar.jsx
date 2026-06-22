@@ -1,3 +1,179 @@
+import { useUIStore } from '../../store/uiStore'
+import { useNotificationStore } from '../../store/notificationStore'
+import { cn } from '../../utils/cn'
+import SidebarGroup from './SidebarGroup'
+import { SidebarItem, SidebarGroup as CollapsibleGroup } from './SidebarItem'
+import {
+  LayoutDashboard,
+  Users,
+  ShieldCheck,
+  MapPin,
+  Building2,
+  Package,
+  History,
+  Warehouse,
+  ArrowDownToLine,
+  Trash2,
+  ShoppingCart,
+  Truck,
+  CreditCard,
+  RefreshCcw,
+  BarChart3,
+  TrendingUp,
+  ClipboardList,
+  FileUp,
+  Lightbulb,
+  Bell,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Zap,
+} from 'lucide-react'
+
 export default function Sidebar() {
-  return null;
+  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { unreadCount } = useNotificationStore()
+
+  return (
+    <aside
+      id="admin-sidebar"
+      className={cn(
+        'flex flex-col h-full bg-white dark:bg-surface-900',
+        'border-r border-surface-200 dark:border-surface-800',
+        'sidebar-transition overflow-hidden shrink-0',
+        sidebarCollapsed ? 'w-16' : 'w-60'
+      )}
+    >
+      {/* ── Logo ── */}
+      <div
+        className={cn(
+          'flex items-center h-14 px-4 border-b border-surface-200 dark:border-surface-800 shrink-0',
+          sidebarCollapsed ? 'justify-center' : 'justify-between'
+        )}
+      >
+        {!sidebarCollapsed && (
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-600 to-primary-400 flex items-center justify-center shadow-md shadow-primary-500/30">
+              <Zap className="h-4 w-4 text-white" strokeWidth={2.5} />
+            </div>
+            <div className="leading-none">
+              <p className="text-sm font-bold text-surface-900 dark:text-surface-50 tracking-tight">
+                TrackFlow
+              </p>
+              <p className="text-[10px] text-surface-400 dark:text-surface-500 font-medium">
+                Admin Portal
+              </p>
+            </div>
+          </div>
+        )}
+
+        {sidebarCollapsed && (
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-600 to-primary-400 flex items-center justify-center shadow-md shadow-primary-500/30">
+            <Zap className="h-4 w-4 text-white" strokeWidth={2.5} />
+          </div>
+        )}
+
+        {!sidebarCollapsed && (
+          <button
+            id="sidebar-toggle-btn"
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-lg text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-800 dark:hover:text-surface-300 transition-colors"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* ── Nav ── */}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 scrollbar-thin">
+
+        {/* Dashboard */}
+        <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
+          <SidebarItem
+            to="/admin"
+            end
+            icon={LayoutDashboard}
+            label="Dashboard"
+            collapsed={sidebarCollapsed}
+          />
+        </SidebarGroup>
+
+        {/* Users & Roles */}
+        <SidebarGroup label="Access" collapsed={sidebarCollapsed}>
+          <CollapsibleGroup
+            label="Users & Roles"
+            icon={Users}
+            collapsed={sidebarCollapsed}
+            defaultOpen
+          >
+            <SidebarItem to="/admin/users" icon={Users} label="Users" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/roles" icon={ShieldCheck} label="Roles" collapsed={sidebarCollapsed} />
+          </CollapsibleGroup>
+        </SidebarGroup>
+
+        {/* Operations */}
+        <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
+
+          <CollapsibleGroup label="Products" icon={Package} collapsed={sidebarCollapsed} defaultOpen>
+            <SidebarItem to="/admin/products" icon={Package} label="Catalogue" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/prices/history" icon={History} label="Price History" collapsed={sidebarCollapsed} />
+          </CollapsibleGroup>
+
+          <CollapsibleGroup label="Inventory" icon={Warehouse} collapsed={sidebarCollapsed} defaultOpen>
+            <SidebarItem to="/admin/inventory/stock" icon={Warehouse} label="Stock Overview" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/inventory/inward" icon={ArrowDownToLine} label="Inward Entries" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/inventory/cleanup" icon={Trash2} label="Stock Cleanup" collapsed={sidebarCollapsed} />
+          </CollapsibleGroup>
+        </SidebarGroup>
+
+        {/* Fulfilment */}
+        <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders & Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/dispatch" icon={Truck} label="Dispatch" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Ledger" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/reorder" icon={RefreshCcw} label="Reorder List" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Intelligence */}
+        <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
+          <CollapsibleGroup label="Reports" icon={BarChart3} collapsed={sidebarCollapsed} defaultOpen>
+            <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/imports" icon={FileUp} label="Import History" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/suggestions" icon={Lightbulb} label="Suggestion Conversion" collapsed={sidebarCollapsed} />
+          </CollapsibleGroup>
+        </SidebarGroup>
+
+        {/* System */}
+        <SidebarGroup label="System" collapsed={sidebarCollapsed}>
+          <SidebarItem
+            to="/admin/notifications"
+            icon={Bell}
+            label="Notifications"
+            badge={unreadCount}
+            collapsed={sidebarCollapsed}
+          />
+          <SidebarItem to="/admin/settings" icon={Settings} label="Settings" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+      </nav>
+
+      {/* ── Expand button when collapsed ── */}
+      {sidebarCollapsed && (
+        <div className="px-2 pb-3">
+          <button
+            id="sidebar-expand-btn"
+            onClick={toggleSidebar}
+            className="w-full flex justify-center p-2 rounded-lg text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:bg-surface-800 dark:hover:text-surface-300 transition-colors"
+            aria-label="Expand sidebar"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </aside>
+  )
 }
