@@ -26,7 +26,6 @@ const StockCleanupPage  = lazy(() => import('../../modules/inventory/pages/Stock
 const InwardListPage    = lazy(() => import('../../modules/inward/pages/InwardListPage'))
 
 const OrdersListPage   = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
-const ChallansListPage = lazy(() => import('../../modules/challans/pages/ChallansListPage'))
 const DispatchQueuePage = lazy(() => import('../../modules/dispatch/pages/DispatchQueuePage'))
 
 const PaymentsListPage = lazy(() => import('../../modules/payments/pages/PaymentsListPage'))
@@ -79,7 +78,6 @@ export const adminRoutes = [
 
   // Orders & Challans
   { path: 'orders',              element: <Wrap><OrdersListPage /></Wrap> },
-  { path: 'challans',            element: <Wrap><ChallansListPage /></Wrap> },
 
   // Dispatch
   { path: 'dispatch',            element: <Wrap><DispatchQueuePage /></Wrap> },

@@ -2,120 +2,212 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { getUsers, createUser } from '../../../api/endpoints/users.api'
+import { getUsers, createUser, updateUser, deleteUser, getRegions, createRegion } from '../../../api/endpoints/users.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
-import { Plus, Search, User as UserIcon, Phone, Shield, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react'
+import {
+  Plus, Search, User as UserIcon, Phone, Shield, Eye, EyeOff,
+  AlertCircle, Pencil, Trash2, MapPin, ChevronDown, X
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 
-const schema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name must be under 100 characters'),
+// ─── Schemas ──────────────────────────────────────────────────────────────────
+const createSchema = z.object({
+  name:      z.string().min(1, 'Name is required').max(100),
   role_name: z.enum(['admin', 'sales_manager', 'inventory_manager', 'dispatch_worker'], {
     errorMap: () => ({ message: 'Please select a valid role' }),
   }),
-  login_id: z.string().min(2, 'Login ID must be at least 2 characters').max(50, 'Login ID must be under 50 characters'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().optional(),
+  login_id:  z.string().min(2, 'Login ID must be at least 2 characters').max(50),
+  password:  z.string().min(6, 'Password must be at least 6 characters'),
+  phone:     z.string().optional(),
+  region_id: z.string().optional(),
+  new_region: z.string().optional(),
+})
+
+const editSchema = z.object({
+  name:      z.string().min(1, 'Name is required').max(100),
+  phone:     z.string().optional(),
+  region_id: z.string().optional(),
+  new_region: z.string().optional(),
+  is_active: z.boolean().optional(),
 })
 
 const ROLE_LABELS = {
-  admin: 'Admin',
-  sales_manager: 'Sales Manager',
-  inventory_manager: 'Inventory Manager',
-  dispatch_worker: 'Dispatch Worker',
+  admin:               'Admin',
+  sales_manager:       'Sales Manager',
+  inventory_manager:   'Inventory Manager',
+  dispatch_worker:     'Dispatch Worker',
 }
 
 const ROLE_PREFIXES = {
-  admin: 'admin_',
-  sales_manager: 'sm_',
-  inventory_manager: 'im_',
-  dispatch_worker: 'dw_',
+  admin:               'admin_',
+  sales_manager:       'sm_',
+  inventory_manager:   'im_',
+  dispatch_worker:     'dw_',
 }
 
+function getInitials(name) {
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)
+}
+
+// ─── Inline Region Picker ─────────────────────────────────────────────────────
+function RegionPicker({ regions, value, onChange, onNewRegionChange, newRegion, error }) {
+  const [showNew, setShowNew] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-medium text-surface-700 dark:text-surface-300 flex items-center gap-1">
+        <MapPin className="h-3.5 w-3.5 text-surface-400" />
+        Region <span className="text-surface-400 text-xs">(optional)</span>
+      </label>
+
+      {!showNew ? (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <select
+              value={value || ''}
+              onChange={e => onChange(e.target.value)}
+              className={cn(
+                'input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em]',
+                'bg-[url("data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3e%3cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M6 8l4 4 4-4\'/%3e%3c/svg%3e")]',
+                error && 'border-danger-500 focus:ring-danger-500'
+              )}
+              id="user-region-select"
+            >
+              <option value="">— No Region —</option>
+              {regions.map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowNew(true)}
+            className="shrink-0 h-[38px] px-3 text-xs font-medium rounded-lg border border-surface-300 dark:border-surface-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex items-center gap-1"
+            id="add-new-region-btn"
+          >
+            <Plus className="h-3.5 w-3.5" /> New
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={newRegion || ''}
+            onChange={e => onNewRegionChange(e.target.value)}
+            placeholder="e.g. South UP"
+            className="input-base flex-1"
+            id="new-region-name-input"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => { setShowNew(false); onNewRegionChange(''); onChange('') }}
+            className="shrink-0 h-[38px] w-[38px] flex items-center justify-center rounded-lg border border-surface-300 dark:border-surface-600 text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
+            id="cancel-new-region-btn"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {showNew && (
+        <p className="text-xs text-primary-600 dark:text-primary-400">
+          A new region will be created and assigned automatically.
+        </p>
+      )}
+      {error && <p className="text-xs text-danger-600">{error}</p>}
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function UsersListPage() {
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [users,        setUsers]        = useState([])
+  const [regions,      setRegions]      = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [searchTerm,   setSearchTerm]   = useState('')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isEditOpen,   setIsEditOpen]   = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [activeUser,   setActiveUser]   = useState(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [submitError, setSubmitError] = useState(null)
+  const [submitError,  setSubmitError]  = useState(null)
+  const [deleting,     setDeleting]     = useState(false)
 
-  const { register, handleSubmit, setValue, getValues, watch, reset, formState: { errors, isSubmitting } } = useForm({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: '',
-      role_name: 'sales_manager',
-      login_id: 'sm_',
-      password: '',
-      phone: '',
-    },
+  // ── Create form ────────────────────────────────
+  const createForm = useForm({
+    resolver: zodResolver(createSchema),
+    defaultValues: { name: '', role_name: 'sales_manager', login_id: 'sm_', password: '', phone: '', region_id: '', new_region: '' },
   })
+  const selectedRole = createForm.watch('role_name')
+  const newRegionCreate = createForm.watch('new_region')
+  const regionIdCreate  = createForm.watch('region_id')
 
-  // Watch the role select field to dynamically update prefix
-  const selectedRole = watch('role_name')
-
-  // Effect to handle prefix updates when the role is changed
   useEffect(() => {
     if (!selectedRole) return
     const prefix = ROLE_PREFIXES[selectedRole] || ''
-    const currentLoginId = getValues('login_id') || ''
-    
-    // Check if the current value already has any role prefix
-    const hasExistingPrefix = /^(admin_|sm_|im_|dw_)/.test(currentLoginId)
-    
-    if (hasExistingPrefix) {
-      // Replace existing prefix with the new one, keeping whatever suffix they typed
-      const suffix = currentLoginId.replace(/^(admin_|sm_|im_|dw_)/, '')
-      setValue('login_id', prefix + suffix)
+    const cur = createForm.getValues('login_id') || ''
+    const hasPrefix = /^(admin_|sm_|im_|dw_)/.test(cur)
+    if (hasPrefix) {
+      const suffix = cur.replace(/^(admin_|sm_|im_|dw_)/, '')
+      createForm.setValue('login_id', prefix + suffix)
     } else {
-      // Just append the prefix
-      setValue('login_id', prefix + currentLoginId)
+      createForm.setValue('login_id', prefix + cur)
     }
-  }, [selectedRole, setValue, getValues])
+  }, [selectedRole])
 
-  const fetchUsers = async () => {
+  // ── Edit form ──────────────────────────────────
+  const editForm = useForm({
+    resolver: zodResolver(editSchema),
+    defaultValues: { name: '', phone: '', region_id: '', new_region: '', is_active: true },
+  })
+  const newRegionEdit = editForm.watch('new_region')
+  const regionIdEdit  = editForm.watch('region_id')
+
+  // ── Data fetching ──────────────────────────────
+  const fetchAll = async () => {
     setLoading(true)
     try {
-      const res = await getUsers()
-      if (res.success) {
-        setUsers(res.data)
-      } else {
-        toast.error(res.error || 'Failed to load users')
-      }
+      const [usersRes, regionsRes] = await Promise.all([getUsers(), getRegions()])
+      if (usersRes.success) setUsers(usersRes.data)
+      if (regionsRes.success) setRegions(regionsRes.data)
     } catch (err) {
-      toast.error(err.message || 'Error connecting to server')
+      toast.error(err.message || 'Failed to load data')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  const handleOpenModal = () => {
-    reset({
-      name: '',
-      role_name: 'sales_manager',
-      login_id: 'sm_',
-      password: '',
-      phone: '',
-    })
+  // ── Handlers ───────────────────────────────────
+  const openCreate = () => {
+    createForm.reset({ name: '', role_name: 'sales_manager', login_id: 'sm_', password: '', phone: '', region_id: '', new_region: '' })
     setSubmitError(null)
     setShowPassword(false)
-    setIsModalOpen(true)
+    setIsCreateOpen(true)
   }
 
-  const onSubmit = async (data) => {
+  const onCreateSubmit = async (data) => {
     setSubmitError(null)
     try {
-      const res = await createUser(data)
+      let region_id = data.region_id || null
+
+      // If user typed a new region name, create it first
+      if (data.new_region?.trim()) {
+        const rRes = await createRegion({ name: data.new_region.trim() })
+        if (!rRes.success) { setSubmitError(rRes.error || 'Failed to create region'); return }
+        region_id = rRes.data.id
+        setRegions(prev => [...prev, rRes.data])
+      }
+
+      const res = await createUser({ ...data, region_id })
       if (res.success) {
         toast.success('User created successfully!')
-        setIsModalOpen(false)
-        fetchUsers()
+        setIsCreateOpen(false)
+        fetchAll()
       } else {
         setSubmitError(res.error || 'Failed to create user')
       }
@@ -124,19 +216,68 @@ export default function UsersListPage() {
     }
   }
 
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.login_id.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  const getInitials = (name) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2)
+  const openEdit = (user) => {
+    setActiveUser(user)
+    editForm.reset({
+      name:       user.name,
+      phone:      user.phone || '',
+      region_id:  user.region_id ? String(user.region_id) : '',
+      new_region: '',
+      is_active:  user.is_active,
+    })
+    setSubmitError(null)
+    setIsEditOpen(true)
   }
+
+  const onEditSubmit = async (data) => {
+    setSubmitError(null)
+    try {
+      let region_id = data.region_id || null
+
+      if (data.new_region?.trim()) {
+        const rRes = await createRegion({ name: data.new_region.trim() })
+        if (!rRes.success) { setSubmitError(rRes.error || 'Failed to create region'); return }
+        region_id = rRes.data.id
+        setRegions(prev => [...prev, rRes.data])
+      }
+
+      const res = await updateUser(activeUser.id, { name: data.name, phone: data.phone, region_id, is_active: data.is_active })
+      if (res.success) {
+        toast.success('User updated successfully!')
+        setIsEditOpen(false)
+        fetchAll()
+      } else {
+        setSubmitError(res.error || 'Failed to update user')
+      }
+    } catch (err) {
+      setSubmitError(err.message || 'Error updating user')
+    }
+  }
+
+  const openDelete = (user) => { setActiveUser(user); setIsDeleteOpen(true) }
+
+  const confirmDelete = async () => {
+    setDeleting(true)
+    try {
+      const res = await deleteUser(activeUser.id)
+      if (res.success) {
+        toast.success(`User "${activeUser.name}" deleted.`)
+        setIsDeleteOpen(false)
+        fetchAll()
+      } else {
+        toast.error(res.error || 'Failed to delete user')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error deleting user')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const filteredUsers = users.filter(u =>
+    u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.login_id.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-6">
@@ -147,23 +288,17 @@ export default function UsersListPage() {
             Users Management
           </h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-            Create, manage, and view login histories of your TrackFlow enterprise users.
+            Create, edit, and manage TrackFlow enterprise users.
           </p>
         </div>
-        <Button
-          onClick={handleOpenModal}
-          icon={Plus}
-          size="md"
-          id="create-user-btn"
-          className="w-full sm:w-auto"
-        >
+        <Button onClick={openCreate} icon={Plus} size="md" id="create-user-btn" className="w-full sm:w-auto">
           Create User
         </Button>
       </div>
 
-      {/* Main Table Card */}
+      {/* Table Card */}
       <div className="card overflow-hidden">
-        {/* Table Filters */}
+        {/* Filters */}
         <div className="p-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50 flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative w-full sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
@@ -171,7 +306,7 @@ export default function UsersListPage() {
               type="text"
               placeholder="Search by name or login ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
               className="input-base pl-9 py-1.5"
               id="user-search-input"
             />
@@ -181,19 +316,19 @@ export default function UsersListPage() {
           </div>
         </div>
 
-        {/* Table Content */}
+        {/* Table */}
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-8 space-y-4">
-              <div className="h-6 bg-surface-200 dark:bg-surface-700 animate-pulse rounded w-1/3"></div>
-              <div className="h-20 bg-surface-100 dark:bg-surface-800 animate-pulse rounded"></div>
-              <div className="h-20 bg-surface-100 dark:bg-surface-800 animate-pulse rounded"></div>
+              <div className="h-6 bg-surface-200 dark:bg-surface-700 animate-pulse rounded w-1/3" />
+              <div className="h-20 bg-surface-100 dark:bg-surface-800 animate-pulse rounded" />
+              <div className="h-20 bg-surface-100 dark:bg-surface-800 animate-pulse rounded" />
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="p-12 text-center">
               <UserIcon className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600 mb-3" />
               <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No users found</h3>
-              <p className="text-xs text-surface-500 mt-1">Try adjusting your search criteria or create a new user.</p>
+              <p className="text-xs text-surface-500 mt-1">Try adjusting your search or create a new user.</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -202,17 +337,18 @@ export default function UsersListPage() {
                   <th className="px-6 py-3.5">User</th>
                   <th className="px-6 py-3.5">Role</th>
                   <th className="px-6 py-3.5">Phone</th>
+                  <th className="px-6 py-3.5">Region</th>
                   <th className="px-6 py-3.5">Status</th>
                   <th className="px-6 py-3.5">Last Active</th>
-                  <th className="px-6 py-3.5">Created At</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                {filteredUsers.map((user) => (
+                {filteredUsers.map(user => (
                   <tr key={user.id} className="table-row-hover">
                     {/* User info */}
                     <td className="px-6 py-4 flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 flex items-center justify-center font-bold text-xs">
+                      <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 flex items-center justify-center font-bold text-xs shrink-0">
                         {getInitials(user.name)}
                       </div>
                       <div>
@@ -221,14 +357,14 @@ export default function UsersListPage() {
                       </div>
                     </td>
 
-                    {/* Role badge */}
+                    {/* Role */}
                     <td className="px-6 py-4">
                       <span className={cn(
                         'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border',
-                        user.role?.name === 'admin' && 'bg-danger-50 text-danger-700 border-danger-100 dark:bg-danger-900/20 dark:text-danger-400 dark:border-danger-900/50',
-                        user.role?.name === 'sales_manager' && 'bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-900/20 dark:text-primary-400 dark:border-primary-900/50',
-                        user.role?.name === 'inventory_manager' && 'bg-success-50 text-success-700 border-success-100 dark:bg-success-900/20 dark:text-success-400 dark:border-success-900/50',
-                        user.role?.name === 'dispatch_worker' && 'bg-warning-50 text-warning-700 border-warning-100 dark:bg-warning-900/20 dark:text-warning-400 dark:border-warning-900/50'
+                        user.role?.name === 'admin'               && 'bg-danger-50 text-danger-700 border-danger-100 dark:bg-danger-900/20 dark:text-danger-400 dark:border-danger-900/50',
+                        user.role?.name === 'sales_manager'       && 'bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-900/20 dark:text-primary-400 dark:border-primary-900/50',
+                        user.role?.name === 'inventory_manager'   && 'bg-success-50 text-success-700 border-success-100 dark:bg-success-900/20 dark:text-success-400 dark:border-success-900/50',
+                        user.role?.name === 'dispatch_worker'     && 'bg-warning-50 text-warning-700 border-warning-100 dark:bg-warning-900/20 dark:text-warning-400 dark:border-warning-900/50',
                       )}>
                         {ROLE_LABELS[user.role?.name] || user.role?.display_name}
                       </span>
@@ -236,13 +372,21 @@ export default function UsersListPage() {
 
                     {/* Phone */}
                     <td className="px-6 py-4 font-medium">
-                      {user.phone || <span className="text-surface-400">-</span>}
+                      {user.phone || <span className="text-surface-400">—</span>}
+                    </td>
+
+                    {/* Region */}
+                    <td className="px-6 py-4 text-xs text-surface-500">
+                      {user.region?.name
+                        ? <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{user.region.name}</span>
+                        : <span className="text-surface-400">—</span>
+                      }
                     </td>
 
                     {/* Status */}
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center gap-1.5 font-medium text-xs">
-                        <span className={cn('status-dot', user.is_active ? 'bg-success-500' : 'bg-surface-400')}></span>
+                        <span className={cn('status-dot', user.is_active ? 'bg-success-500' : 'bg-surface-400')} />
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -252,9 +396,26 @@ export default function UsersListPage() {
                       {user.last_active_at ? new Date(user.last_active_at).toLocaleString() : 'Never'}
                     </td>
 
-                    {/* Created At */}
-                    <td className="px-6 py-4 text-xs font-medium text-surface-500 dark:text-surface-400">
-                      {new Date(user.created_at).toLocaleDateString()}
+                    {/* Actions */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="p-1.5 rounded-lg text-surface-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                          title="Edit user"
+                          id={`edit-user-${user.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => openDelete(user)}
+                          className="p-1.5 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
+                          title="Delete user"
+                          id={`delete-user-${user.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -264,15 +425,15 @@ export default function UsersListPage() {
         </div>
       </div>
 
-      {/* Creation Modal */}
+      {/* ── Create User Modal ──────────────────────────────────────────────── */}
       <Modal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
         title="Create New User"
-        description="Add a new system user with credentials. Login ID prefix updates based on role selection."
+        description="Add a new system user with credentials. Login ID prefix updates with role selection."
         size="md"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4" noValidate>
           {submitError && (
             <div className="flex items-center gap-2 text-sm text-danger-600 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 px-3 py-2.5 rounded-lg">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -280,19 +441,10 @@ export default function UsersListPage() {
             </div>
           )}
 
-          {/* Full Name */}
-          <Input
-            {...register('name')}
-            label="Full Name"
-            placeholder="e.g. Ramesh Kumar"
-            required
-            error={errors.name?.message}
-            icon={UserIcon}
-            id="user-create-name"
-          />
+          <Input {...createForm.register('name')} label="Full Name" placeholder="e.g. Ramesh Kumar" required error={createForm.formState.errors.name?.message} icon={UserIcon} id="user-create-name" />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Role Select */}
+            {/* Role */}
             <div className="flex flex-col gap-1.5">
               <label htmlFor="user-create-role" className="text-xs font-medium text-surface-700 dark:text-surface-300">
                 System Role <span className="text-danger-500">*</span>
@@ -300,12 +452,12 @@ export default function UsersListPage() {
               <div className="relative">
                 <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
                 <select
-                  {...register('role_name')}
+                  {...createForm.register('role_name')}
                   id="user-create-role"
                   className={cn(
                     'input-base pl-9 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em]',
                     'bg-[url("data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3e%3cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M6 8l4 4 4-4\'/%3e%3c/svg%3e")]',
-                    errors.role_name && 'border-danger-500 focus:ring-danger-500'
+                    createForm.formState.errors.role_name && 'border-danger-500 focus:ring-danger-500'
                   )}
                 >
                   <option value="sales_manager">Sales Manager (sm_)</option>
@@ -314,18 +466,10 @@ export default function UsersListPage() {
                   <option value="admin">Administrator (admin_)</option>
                 </select>
               </div>
-              {errors.role_name && <p className="text-xs text-danger-600 mt-1">{errors.role_name.message}</p>}
+              {createForm.formState.errors.role_name && <p className="text-xs text-danger-600">{createForm.formState.errors.role_name.message}</p>}
             </div>
 
-            {/* Login ID */}
-            <Input
-              {...register('login_id')}
-              label="Login ID"
-              placeholder="e.g. sm_ramesh"
-              required
-              error={errors.login_id?.message}
-              id="user-create-login-id"
-            />
+            <Input {...createForm.register('login_id')} label="Login ID" placeholder="e.g. sm_ramesh" required error={createForm.formState.errors.login_id?.message} id="user-create-login-id" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -336,56 +480,108 @@ export default function UsersListPage() {
               </label>
               <div className="relative">
                 <input
-                  {...register('password')}
+                  {...createForm.register('password')}
                   id="user-create-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
-                  className={cn('input-base pr-10', errors.password && 'border-danger-500 focus:ring-danger-500')}
+                  className={cn('input-base pr-10', createForm.formState.errors.password && 'border-danger-500 focus:ring-danger-500')}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600 transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  id="user-password-toggle-btn"
-                >
+                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600 transition-colors" id="user-password-toggle-btn">
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-danger-600 mt-1">{errors.password.message}</p>}
+              {createForm.formState.errors.password && <p className="text-xs text-danger-600">{createForm.formState.errors.password.message}</p>}
             </div>
 
-            {/* Phone */}
-            <Input
-              {...register('phone')}
-              label="Phone Number"
-              placeholder="e.g. +91 9876543210"
-              error={errors.phone?.message}
-              icon={Phone}
-              id="user-create-phone"
-            />
+            <Input {...createForm.register('phone')} label="Phone Number" placeholder="e.g. +91 9876543210" error={createForm.formState.errors.phone?.message} icon={Phone} id="user-create-phone" />
           </div>
 
-          {/* Modal Actions */}
+          {/* Region Picker */}
+          <RegionPicker
+            regions={regions}
+            value={regionIdCreate}
+            onChange={v => createForm.setValue('region_id', v)}
+            newRegion={newRegionCreate}
+            onNewRegionChange={v => { createForm.setValue('new_region', v); if (v) createForm.setValue('region_id', '') }}
+          />
+
           <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 dark:border-surface-700">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-              disabled={isSubmitting}
-              id="modal-cancel-btn"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              loading={isSubmitting}
-              id="modal-submit-btn"
-            >
-              Create User
-            </Button>
+            <Button type="button" variant="secondary" onClick={() => setIsCreateOpen(false)} disabled={createForm.formState.isSubmitting} id="modal-cancel-btn">Cancel</Button>
+            <Button type="submit" loading={createForm.formState.isSubmitting} id="modal-submit-btn">Create User</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* ── Edit User Modal ────────────────────────────────────────────────── */}
+      <Modal
+        open={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        title={`Edit User: ${activeUser?.name}`}
+        description="Update user details. Role and login ID cannot be changed."
+        size="md"
+      >
+        <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4" noValidate>
+          {submitError && (
+            <div className="flex items-center gap-2 text-sm text-danger-600 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 px-3 py-2.5 rounded-lg">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {submitError}
+            </div>
+          )}
+
+          <Input {...editForm.register('name')} label="Full Name" placeholder="e.g. Ramesh Kumar" required error={editForm.formState.errors.name?.message} icon={UserIcon} id="user-edit-name" />
+
+          <Input {...editForm.register('phone')} label="Phone Number" placeholder="e.g. +91 9876543210" error={editForm.formState.errors.phone?.message} icon={Phone} id="user-edit-phone" />
+
+          {/* Status toggle */}
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-surface-900 dark:text-surface-100">Account Status</p>
+              <p className="text-xs text-surface-500">Inactive users cannot log in.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer" htmlFor="user-edit-active-toggle">
+              <input
+                type="checkbox"
+                id="user-edit-active-toggle"
+                {...editForm.register('is_active')}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-5 bg-surface-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-primary-600 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-600" />
+            </label>
+          </div>
+
+          {/* Region Picker */}
+          <RegionPicker
+            regions={regions}
+            value={regionIdEdit}
+            onChange={v => editForm.setValue('region_id', v)}
+            newRegion={newRegionEdit}
+            onNewRegionChange={v => { editForm.setValue('new_region', v); if (v) editForm.setValue('region_id', '') }}
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 dark:border-surface-700">
+            <Button type="button" variant="secondary" onClick={() => setIsEditOpen(false)} disabled={editForm.formState.isSubmitting} id="edit-modal-cancel-btn">Cancel</Button>
+            <Button type="submit" loading={editForm.formState.isSubmitting} id="edit-modal-submit-btn">Save Changes</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Delete Confirm Modal ───────────────────────────────────────────── */}
+      <Modal
+        open={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        title="Delete User"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-surface-600 dark:text-surface-300">
+            Are you sure you want to delete <strong className="text-surface-900 dark:text-surface-50">{activeUser?.name}</strong>?
+            This action cannot be undone and will remove all session data for this user.
+          </p>
+          <div className="flex justify-end gap-3 pt-2 border-t border-surface-100 dark:border-surface-700">
+            <Button type="button" variant="secondary" onClick={() => setIsDeleteOpen(false)} disabled={deleting} id="delete-cancel-btn">Cancel</Button>
+            <Button variant="danger" loading={deleting} onClick={confirmDelete} icon={Trash2} id="delete-confirm-btn">Delete User</Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
