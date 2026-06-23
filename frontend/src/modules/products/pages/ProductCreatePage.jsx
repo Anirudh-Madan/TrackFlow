@@ -1,4 +1,8 @@
-import ComingSoon from '../../../components/ui/ComingSoon'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+
 export default function ProductCreatePage() {
-  return <ComingSoon module="products" title="Add New Product" />
+  const navigate = useNavigate()
+  useEffect(() => { navigate('/products', { replace: true }) }, [navigate])
+  return null
 }

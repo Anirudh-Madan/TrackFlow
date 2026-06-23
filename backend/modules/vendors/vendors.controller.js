@@ -9,7 +9,7 @@ exports.getVendors = async (req, res, next) => {
         {
           model: VendorProductMapping,
           as: 'productMappings',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'price'] }]
+          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'selling_price'] }]
         }
       ],
       order: [['company_name', 'ASC']]
