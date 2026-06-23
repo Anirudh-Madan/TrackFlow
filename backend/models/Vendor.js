@@ -1,31 +1,30 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Region = sequelize.define('Region', {
+const Vendor = sequelize.define('Vendor', {
   id: {
     type: DataTypes.INTEGER.UNSIGNED,
     primaryKey: true,
     autoIncrement: true,
   },
-  name: {
-    type: DataTypes.STRING(100),
+  company_name: {
+    type: DataTypes.STRING(150),
+    allowNull: false,
+  },
+  gst: {
+    type: DataTypes.STRING(15),
     allowNull: false,
     unique: true,
   },
-  code: {
-    type: DataTypes.STRING(20),
-    allowNull: false,
-    unique: true,
-  },
-  description: {
-    type: DataTypes.STRING(255),
+  remarks: {
+    type: DataTypes.TEXT,
     allowNull: true,
   },
 }, {
-  tableName: 'region',
+  tableName: 'vendor',
   timestamps: true,
-  paranoid: false,
+  paranoid: true,
   underscored: true,
 });
 
-module.exports = Region;
+module.exports = Vendor;

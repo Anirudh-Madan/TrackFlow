@@ -7,6 +7,8 @@ const errorHandler = require('./middleware/errorHandler');
 const authRoutes    = require('./modules/auth/auth.routes');
 const usersRoutes   = require('./modules/users/users.routes');
 const regionsRoutes = require('./modules/regions/regions.routes');
+const customersRoutes = require('./modules/customers/customers.routes');
+const vendorsRoutes   = require('./modules/vendors/vendors.routes');
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.use(morgan('dev'));
 app.use('/api/v1/auth',    authRoutes);
 app.use('/api/v1/users',   usersRoutes);
 app.use('/api/v1/regions', regionsRoutes);
+app.use('/api/v1/customers', customersRoutes);
+app.use('/api/v1/vendors',   vendorsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

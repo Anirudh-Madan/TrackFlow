@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { attachRefreshInterceptor } from './interceptors/refreshInterceptor'
 
 const client = axios.create({
   baseURL: '/api/v1',
@@ -17,24 +18,10 @@ client.interceptors.request.use(
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// Response Interceptor: Handle 401 / token expiration
-client.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Token is invalid or expired, force logout
-      useAuthStore.getState().logout()
-    }
-    const message = error.response?.data?.error || error.message || 'Something went wrong'
-    return Promise.reject(new Error(message))
-  }
-)
+// Response Interceptor: Auto-refresh on 401 before forcing logout
+attachRefreshInterceptor(client)
 
 export default client

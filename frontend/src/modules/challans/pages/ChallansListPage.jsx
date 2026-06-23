@@ -169,9 +169,9 @@ const STATUS_CONFIG = {
 }
 
 // ─── PDF Utility ─────────────────────────────────────────────────────────────
-function generateChallanPDF(challan) {
+function getChallanHTML(challan) {
   const now = new Date().toLocaleString('en-IN')
-  const html = `
+  return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -286,12 +286,30 @@ function generateChallanPDF(challan) {
     </body>
     </html>
   `
+}
+
+function generateChallanPDF(challan) {
+  const html = getChallanHTML(challan)
   const win = window.open('', '_blank', 'width=900,height=700')
   if (!win) { alert('Please allow popups for this site to download challan.'); return; }
   win.document.write(html)
   win.document.close()
   win.focus()
   win.print()
+}
+
+function downloadChallanHTML(challan) {
+  const html = getChallanHTML(challan)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `challan_${challan.id}.html`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  toast.success('Challan HTML file downloaded!')
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -608,6 +626,15 @@ export default function ChallansListPage() {
                         <Button
                           variant="secondary"
                           size="sm"
+                          icon={Download}
+                          onClick={() => downloadChallanHTML(c)}
+                          id={`download-html-${c.id}`}
+                        >
+                          Download
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           icon={Printer}
                           onClick={() => generateChallanPDF(c)}
                           id={`download-challan-${c.id}`}
@@ -708,8 +735,11 @@ export default function ChallansListPage() {
               <Button variant="secondary" onClick={() => setViewChallan(null)} id="challan-modal-close">
                 Close
               </Button>
+              <Button variant="secondary" icon={Download} onClick={() => downloadChallanHTML(viewChallan)} id="challan-modal-download">
+                Download HTML
+              </Button>
               <Button icon={Printer} onClick={() => generateChallanPDF(viewChallan)} id="challan-modal-print">
-                Print / Download
+                Print
               </Button>
             </div>
           </div>

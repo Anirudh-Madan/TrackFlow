@@ -1,31 +1,36 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Region = sequelize.define('Region', {
+const VendorContact = sequelize.define('VendorContact', {
   id: {
     type: DataTypes.INTEGER.UNSIGNED,
     primaryKey: true,
     autoIncrement: true,
   },
+  vendor_id: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false,
+  },
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
-    unique: true,
   },
-  code: {
+  phone: {
     type: DataTypes.STRING(20),
-    allowNull: false,
-    unique: true,
+    allowNull: true,
   },
-  description: {
-    type: DataTypes.STRING(255),
+  email: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  designation: {
+    type: DataTypes.STRING(50),
     allowNull: true,
   },
 }, {
-  tableName: 'region',
+  tableName: 'vendor_contact',
   timestamps: true,
-  paranoid: false,
   underscored: true,
 });
 
-module.exports = Region;
+module.exports = VendorContact;

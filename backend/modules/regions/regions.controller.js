@@ -13,7 +13,7 @@ exports.getRegions = async (req, res, next) => {
 // POST /api/v1/regions
 exports.createRegion = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, code, description } = req.body;
     if (!name?.trim()) {
       return res.status(400).json({ success: false, error: 'Region name is required' });
     }
@@ -24,7 +24,22 @@ exports.createRegion = async (req, res, next) => {
       return res.status(200).json({ success: true, data: existing, message: 'Region already exists' });
     }
 
-    const region = await Region.create({ name: name.trim(), description: description || null });
+    // Auto-generate code from name if not provided
+    let baseCode = (code?.trim() || name.trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s]/g, '')
+      .replace(/\s+/g, '_')
+      .substring(0, 20)
+    );
+
+    // Ensure code is unique by appending a counter if needed
+    let uniqueCode = baseCode;
+    let counter = 1;
+    while (await Region.findOne({ where: { code: uniqueCode } })) {
+      uniqueCode = baseCode.substring(0, 17) + '_' + counter++;
+    }
+
+    const region = await Region.create({ name: name.trim(), code: uniqueCode, description: description || null });
 
     await AuditLog.create({
       actor_id:    req.user.id,
