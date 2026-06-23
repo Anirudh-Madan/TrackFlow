@@ -142,6 +142,63 @@ exports.logout = async (req, res, next) => {
   }
 };
 
+exports.refreshToken = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'No refresh token provided' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    } catch {
+      return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+    }
+
+    const dbTokens = await RefreshToken.findAll({ where: { user_id: payload.id } });
+    let matchedToken = null;
+    for (const t of dbTokens) {
+      const isMatch = await bcrypt.compare(token, t.token_hash).catch(() => false);
+      if (isMatch) { matchedToken = t; break; }
+    }
+
+    if (!matchedToken || matchedToken.expires_at < new Date()) {
+      return res.status(401).json({ success: false, error: 'Refresh token not found or expired' });
+    }
+
+    const user = await User.findOne({
+      where: { id: payload.id },
+      include: [{ model: Role, as: 'role' }],
+    });
+    if (!user || !user.is_active) {
+      return res.status(401).json({ success: false, error: 'User not found or inactive' });
+    }
+
+    await matchedToken.destroy();
+
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await RefreshToken.create({
+      user_id: user.id,
+      token_hash: bcrypt.hashSync(newRefreshToken, 10),
+      expires_at: expiresAt,
+      ip_address: req.ip,
+    });
+
+    res.json({
+      success: true,
+      data: { accessToken: newAccessToken, refreshToken: newRefreshToken },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
