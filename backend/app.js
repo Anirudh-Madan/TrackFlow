@@ -9,6 +9,7 @@ const usersRoutes   = require('./modules/users/users.routes');
 const regionsRoutes = require('./modules/regions/regions.routes');
 const customersRoutes = require('./modules/customers/customers.routes');
 const vendorsRoutes   = require('./modules/vendors/vendors.routes');
+const productsRoutes  = require('./modules/products/products.routes');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/v1/users',   usersRoutes);
 app.use('/api/v1/regions', regionsRoutes);
 app.use('/api/v1/customers', customersRoutes);
 app.use('/api/v1/vendors',   vendorsRoutes);
+app.use('/api/v1/products',  productsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -117,10 +117,7 @@ export default function Sidebar() {
           <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
 
-          <CollapsibleGroup label="Products" icon={Package} collapsed={sidebarCollapsed} defaultOpen>
-            <SidebarItem to="/admin/products" icon={Package} label="Catalogue" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/prices/history" icon={History} label="Price History" collapsed={sidebarCollapsed} />
-          </CollapsibleGroup>
+          <SidebarItem to="/admin/products" icon={Package} label="Products" collapsed={sidebarCollapsed} />
 
           <CollapsibleGroup label="Inventory" icon={Warehouse} collapsed={sidebarCollapsed} defaultOpen>
             <SidebarItem to="/admin/inventory/stock" icon={Warehouse} label="Stock Overview" collapsed={sidebarCollapsed} />
