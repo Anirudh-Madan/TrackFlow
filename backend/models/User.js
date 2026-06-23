@@ -28,6 +28,10 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(20),
     allowNull: true,
   },
+  region_id: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: true,
+  },
   is_active: {
     type: DataTypes.BOOLEAN,
     allowNull: false,

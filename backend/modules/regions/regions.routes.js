@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const usersController = require('./users.controller');
+const regionsController = require('./regions.controller');
 const authenticate = require('../../middleware/authenticate');
 
 router.use(authenticate);
@@ -11,9 +11,9 @@ router.use((req, res, next) => {
   next();
 });
 
-router.get('/',        usersController.getUsers);
-router.post('/',       usersController.createUser);
-router.put('/:id',     usersController.updateUser);
-router.delete('/:id',  usersController.deleteUser);
+router.get('/',     regionsController.getRegions);
+router.post('/',    regionsController.createRegion);
+router.put('/:id',  regionsController.updateRegion);
+router.delete('/:id', regionsController.deleteRegion);
 
 module.exports = router;
