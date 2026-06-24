@@ -11,6 +11,7 @@ import {
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
+import Badge from '../../../components/ui/Badge'
 import {
   Plus, Search, Package, Tag, Ruler, TrendingUp, AlertCircle,
   Pencil, Trash2, ChevronRight, X, Calendar, Layers,
@@ -564,6 +565,7 @@ export default function ProductsListPage() {
                       <th className="px-6 py-3.5">Product Name</th>
                       <th className="px-6 py-3.5">Category</th>
                       <th className="px-6 py-3.5">UOM</th>
+                      <th className="px-6 py-3.5">Stock</th>
                       <th className="px-6 py-3.5">Selling Price</th>
                       <th className="px-6 py-3.5">Purchase Price</th>
                       <th className="px-6 py-3.5">Reorder At</th>
@@ -592,6 +594,23 @@ export default function ProductsListPage() {
                               {p.uom.code}
                             </span>
                           ) : <span className="text-surface-400">—</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="font-semibold text-surface-900 dark:text-surface-50">
+                              {p.available != null ? parseFloat(p.available).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'}
+                              <span className="text-xs text-surface-500 font-normal ml-1">{p.uom?.code}</span>
+                            </div>
+                            <div>
+                              {p.available <= 0 ? (
+                                <Badge variant="danger" dot size="sm">Out of Stock</Badge>
+                              ) : p.is_low_stock ? (
+                                <Badge variant="warning" dot size="sm">Low Stock</Badge>
+                              ) : (
+                                <Badge variant="success" dot size="sm">In Stock</Badge>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(p.selling_price)}</td>
                         <td className="px-6 py-4 text-surface-600 dark:text-surface-400">{fmt(p.purchase_price)}</td>

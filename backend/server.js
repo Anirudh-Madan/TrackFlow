@@ -53,6 +53,32 @@ async function seedDatabase() {
   }
 }
 
+async function ensureAllStockRows() {
+  try {
+    const { Product, StockOnHand, StockReserved } = require('./models');
+    const products = await Product.findAll();
+    let count = 0;
+    for (const p of products) {
+      const [soh, sohCreated] = await StockOnHand.findOrCreate({
+        where: { product_id: p.id },
+        defaults: { product_id: p.id, quantity: 0 },
+      });
+      const [sr, srCreated] = await StockReserved.findOrCreate({
+        where: { product_id: p.id },
+        defaults: { product_id: p.id, quantity: 0 },
+      });
+      if (sohCreated || srCreated) {
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.log(`Ensured stock rows for ${count} product(s) with missing records.`);
+    }
+  } catch (error) {
+    console.error('Error during ensuring all stock rows:', error);
+  }
+}
+
 async function startServer() {
   try {
     console.log('Connecting to database...');
@@ -67,6 +93,9 @@ async function startServer() {
     // Seed data
     await seedDatabase();
 
+    // Ensure all products have stock rows
+    await ensureAllStockRows();
+
     // Start server
     app.listen(PORT, () => {
       console.log(`Backend server is running on port ${PORT}`);
@@ -78,3 +107,4 @@ async function startServer() {
 }
 
 startServer();
+

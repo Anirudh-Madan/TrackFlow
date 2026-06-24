@@ -1,4 +1,5 @@
-const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, sequelize } = require('../../models');
+const { fn, col } = require('sequelize');
+const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockOnHand, StockReserved, StockDamaged, sequelize } = require('../../models');
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -8,10 +9,38 @@ exports.getProducts = async (req, res, next) => {
       include: [
         { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
         { model: UnitOfMeasure, as: 'uom', attributes: ['id', 'name', 'code'] },
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] },
       ],
       order: [['name', 'ASC']],
     });
-    res.json({ success: true, data: products });
+
+    const damagedTotals = await StockDamaged.findAll({
+      attributes: ['product_id', [fn('SUM', col('quantity')), 'total_damaged']],
+      group: ['product_id'],
+      raw: true,
+    });
+    const damagedMap = {};
+    damagedTotals.forEach(d => { damagedMap[d.product_id] = parseFloat(d.total_damaged) || 0; });
+
+    const data = products.map(p => {
+      const onHand    = parseFloat(p.stockOnHand?.quantity || 0);
+      const reserved  = parseFloat(p.stockReserved?.quantity || 0);
+      const damaged   = damagedMap[p.id] || 0;
+      const available = onHand - reserved - damaged;
+      const threshold = p.reorder_threshold || 0;
+
+      const productJson = p.toJSON();
+      productJson.on_hand = onHand;
+      productJson.reserved = reserved;
+      productJson.damaged = damaged;
+      productJson.available = available;
+      productJson.is_low_stock = threshold > 0 && available <= threshold;
+
+      return productJson;
+    });
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
@@ -39,6 +68,10 @@ exports.createProduct = async (req, res, next) => {
       remarks: remarks || null,
     });
 
+    // Create initial stock rows
+    await StockOnHand.create({ product_id: product.id, quantity: 0 });
+    await StockReserved.create({ product_id: product.id, quantity: 0 });
+
     await AuditLog.create({
       actor_id: req.user.id, actor_name: req.user.name, actor_role: req.user.role,
       action_type: 'create', module: 'products', entity_type: 'product', entity_id: product.id,
@@ -50,10 +83,25 @@ exports.createProduct = async (req, res, next) => {
       include: [
         { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
         { model: UnitOfMeasure, as: 'uom', attributes: ['id', 'name', 'code'] },
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] },
       ],
     });
 
-    res.status(201).json({ success: true, data: result });
+    const onHand    = parseFloat(result.stockOnHand?.quantity || 0);
+    const reserved  = parseFloat(result.stockReserved?.quantity || 0);
+    const damaged   = 0;
+    const available = onHand - reserved - damaged;
+    const threshold = result.reorder_threshold || 0;
+
+    const resultJson = result.toJSON();
+    resultJson.on_hand = onHand;
+    resultJson.reserved = reserved;
+    resultJson.damaged = damaged;
+    resultJson.available = available;
+    resultJson.is_low_stock = threshold > 0 && available <= threshold;
+
+    res.status(201).json({ success: true, data: resultJson });
   } catch (err) {
     next(err);
   }
@@ -94,10 +142,31 @@ exports.updateProduct = async (req, res, next) => {
       include: [
         { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
         { model: UnitOfMeasure, as: 'uom', attributes: ['id', 'name', 'code'] },
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] },
       ],
     });
 
-    res.json({ success: true, data: result });
+    const damagedTotals = await StockDamaged.findAll({
+      where: { product_id: product.id },
+      attributes: [[fn('SUM', col('quantity')), 'total_damaged']],
+      raw: true,
+    });
+    const damaged = parseFloat(damagedTotals[0]?.total_damaged) || 0;
+
+    const onHand    = parseFloat(result.stockOnHand?.quantity || 0);
+    const reserved  = parseFloat(result.stockReserved?.quantity || 0);
+    const available = onHand - reserved - damaged;
+    const threshold = result.reorder_threshold || 0;
+
+    const resultJson = result.toJSON();
+    resultJson.on_hand = onHand;
+    resultJson.reserved = reserved;
+    resultJson.damaged = damaged;
+    resultJson.available = available;
+    resultJson.is_low_stock = threshold > 0 && available <= threshold;
+
+    res.json({ success: true, data: resultJson });
   } catch (err) {
     next(err);
   }

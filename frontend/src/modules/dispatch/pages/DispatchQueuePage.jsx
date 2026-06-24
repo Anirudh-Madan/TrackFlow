@@ -1,4 +1,5 @@
-import ComingSoon from '../../../components/ui/ComingSoon'
+import DispatchTable from '../components/DispatchTable'
+
 export default function DispatchQueuePage() {
-  return <ComingSoon module="dispatch" title="Dispatch Queue" />
+  return <DispatchTable />
 }

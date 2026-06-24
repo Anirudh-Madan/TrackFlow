@@ -12,8 +12,6 @@ import {
   Package,
   History,
   Warehouse,
-  ArrowDownToLine,
-  Trash2,
   ShoppingCart,
   Truck,
   CreditCard,
@@ -101,15 +99,12 @@ export default function Sidebar() {
 
         {/* Users & Roles */}
         <SidebarGroup label="Access" collapsed={sidebarCollapsed}>
-          <CollapsibleGroup
-            label="Users & Roles"
+          <SidebarItem
+            to="/admin/users"
             icon={Users}
+            label="Users & Roles"
             collapsed={sidebarCollapsed}
-            defaultOpen
-          >
-            <SidebarItem to="/admin/users" icon={Users} label="Users" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/roles" icon={ShieldCheck} label="Roles" collapsed={sidebarCollapsed} />
-          </CollapsibleGroup>
+          />
         </SidebarGroup>
 
         {/* Operations */}
@@ -119,19 +114,14 @@ export default function Sidebar() {
 
           <SidebarItem to="/admin/products" icon={Package} label="Products" collapsed={sidebarCollapsed} />
 
-          <CollapsibleGroup label="Inventory" icon={Warehouse} collapsed={sidebarCollapsed} defaultOpen>
-            <SidebarItem to="/admin/inventory/stock" icon={Warehouse} label="Stock Overview" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/inventory/inward" icon={ArrowDownToLine} label="Inward Entries" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/inventory/cleanup" icon={Trash2} label="Stock Cleanup" collapsed={sidebarCollapsed} />
-          </CollapsibleGroup>
+          <SidebarItem to="/admin/inventory" icon={Warehouse} label="Inventory" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Fulfilment */}
         <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
           <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders & Challans" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/dispatch" icon={Truck} label="Dispatch" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Ledger" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/reorder" icon={RefreshCcw} label="Reorder List" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Finance" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Intelligence */}
