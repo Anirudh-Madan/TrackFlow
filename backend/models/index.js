@@ -16,6 +16,12 @@ const Vendor = require('./Vendor');
 const VendorContact = require('./VendorContact');
 const VendorProductMapping = require('./VendorProductMapping');
 
+const StockOnHand = require('./StockOnHand');
+const StockReserved = require('./StockReserved');
+const StockDamaged = require('./StockDamaged');
+const StockTransaction = require('./StockTransaction');
+const InventoryAdjustment = require('./InventoryAdjustment');
+
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
 User.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
@@ -69,6 +75,30 @@ VendorProductMapping.belongsTo(Vendor, { foreignKey: 'vendor_id', as: 'vendor' }
 Product.hasMany(VendorProductMapping, { foreignKey: 'product_id', as: 'vendorMappings', onDelete: 'CASCADE' });
 VendorProductMapping.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// ── Inventory ─────────────────────────────────────────────────────────────────
+Product.hasOne(StockOnHand, { foreignKey: 'product_id', as: 'stockOnHand' });
+StockOnHand.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+Product.hasOne(StockReserved, { foreignKey: 'product_id', as: 'stockReserved' });
+StockReserved.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+Product.hasMany(StockDamaged, { foreignKey: 'product_id', as: 'damagedStock' });
+StockDamaged.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(StockDamaged, { foreignKey: 'recorded_by', as: 'recordedDamages' });
+StockDamaged.belongsTo(User, { foreignKey: 'recorded_by', as: 'recorder' });
+
+Product.hasMany(StockTransaction, { foreignKey: 'product_id', as: 'stockTransactions' });
+StockTransaction.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(StockTransaction, { foreignKey: 'performed_by', as: 'stockTransactions' });
+StockTransaction.belongsTo(User, { foreignKey: 'performed_by', as: 'performer' });
+
+Product.hasMany(InventoryAdjustment, { foreignKey: 'product_id', as: 'adjustments' });
+InventoryAdjustment.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(InventoryAdjustment, { foreignKey: 'performed_by', as: 'performedAdjustments' });
+InventoryAdjustment.belongsTo(User, { foreignKey: 'performed_by', as: 'performer' });
+User.hasMany(InventoryAdjustment, { foreignKey: 'approved_by', as: 'approvedAdjustments' });
+InventoryAdjustment.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
+
 module.exports = {
   sequelize,
   Role,
@@ -86,4 +116,9 @@ module.exports = {
   Vendor,
   VendorContact,
   VendorProductMapping,
+  StockOnHand,
+  StockReserved,
+  StockDamaged,
+  StockTransaction,
+  InventoryAdjustment,
 };
