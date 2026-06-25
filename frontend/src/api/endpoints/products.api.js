@@ -23,3 +23,7 @@ export const getPricing    = (params)     => client.get('/products/pricing', { p
 export const createPricing = (data)       => client.post('/products/pricing', data)
 export const updatePricing = (id, data)   => client.put(`/products/pricing/${id}`, data)
 export const deletePricing = (id)         => client.delete(`/products/pricing/${id}`)
+
+// Bulk Imports
+export const bulkImportProducts = (data)  => client.post('/products/bulk-import', data)
+export const getImportHistory   = ()      => client.get('/products/import-history')

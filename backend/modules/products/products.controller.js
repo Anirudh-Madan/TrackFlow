@@ -1,5 +1,5 @@
 const { fn, col } = require('sequelize');
-const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockOnHand, StockReserved, StockDamaged, sequelize } = require('../../models');
+const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockOnHand, StockReserved, StockDamaged, StockTransaction, InventoryAdjustment, sequelize } = require('../../models');
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -432,6 +432,214 @@ exports.deletePricing = async (req, res, next) => {
 
     await record.destroy();
     res.json({ success: true, message: 'Pricing record deleted' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.bulkImport = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  try {
+    const { items, stock_mode = 'absolute', effective_from, notes } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'No items provided for import' });
+    }
+
+    // Step 1: Pre-validate all SKUs
+    const skus = items.map(item => item.sku?.trim().toUpperCase()).filter(Boolean);
+    const uniqueSkus = [...new Set(skus)];
+
+    const existingProducts = await Product.findAll({
+      where: { sku: uniqueSkus },
+      transaction: t
+    });
+
+    const productMap = {};
+    existingProducts.forEach(p => {
+      productMap[p.sku] = p;
+    });
+
+    const missingSkus = uniqueSkus.filter(sku => !productMap[sku]);
+    if (missingSkus.length > 0) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Import aborted. The following SKUs were not found in the database: ${missingSkus.join(', ')}`
+      });
+    }
+
+    const importDetails = [];
+    const effFrom = effective_from || new Date().toISOString().split('T')[0];
+
+    // Step 2: Perform the updates
+    for (const item of items) {
+      const sku = item.sku.trim().toUpperCase();
+      const product = productMap[sku];
+      
+      let priceUpdated = false;
+      let stockUpdated = false;
+      let oldQty = 0;
+      let newQty = 0;
+      let oldPrices = {
+        purchase_price: product.purchase_price,
+        dealer_landing_price: product.dealer_landing_price,
+        selling_price: product.selling_price
+      };
+
+      // Check if price updates are provided
+      const hasPurchase = item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '';
+      const hasSelling = item.selling_price !== undefined && item.selling_price !== null && item.selling_price !== '';
+      
+      if (hasPurchase || hasSelling) {
+        const purchase = hasPurchase ? parseFloat(item.purchase_price) : parseFloat(product.purchase_price);
+        const selling = hasSelling ? parseFloat(item.selling_price) : parseFloat(product.selling_price);
+        const dealer = (item.dealer_landing_price !== undefined && item.dealer_landing_price !== null && item.dealer_landing_price !== '') 
+          ? parseFloat(item.dealer_landing_price) 
+          : product.dealer_landing_price;
+
+        product.purchase_price = purchase;
+        product.selling_price = selling;
+        product.dealer_landing_price = dealer;
+        await product.save({ transaction: t });
+
+        // Add to pricing history
+        await Pricing.create({
+          product_id: product.id,
+          purchase_price: purchase,
+          dealer_landing_price: dealer,
+          selling_price: selling,
+          effective_from: effFrom,
+          created_by: req.user.id,
+          notes: notes || 'Bulk price import'
+        }, { transaction: t });
+
+        // Audit Log for pricing update
+        await AuditLog.create({
+          actor_id: req.user.id,
+          actor_name: req.user.name,
+          actor_role: req.user.role,
+          action_type: 'price_update',
+          module: 'products',
+          entity_type: 'pricing',
+          entity_id: product.id,
+          before_state: oldPrices,
+          after_state: { purchase_price: purchase, dealer_landing_price: dealer, selling_price: selling },
+          ip_address: req.ip,
+          user_agent: req.headers['user-agent']
+        }, { transaction: t });
+
+        priceUpdated = true;
+      }
+
+      // Check if stock update is provided
+      if (item.quantity !== undefined && item.quantity !== null && item.quantity !== '') {
+        const qtyToImport = parseFloat(item.quantity);
+        if (!isNaN(qtyToImport)) {
+          // Ensure stock rows exist
+          await StockOnHand.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
+          await StockReserved.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
+
+          const soh = await StockOnHand.findOne({ where: { product_id: product.id }, transaction: t, lock: true });
+          oldQty = parseFloat(soh.quantity);
+
+          if (stock_mode === 'relative') {
+            newQty = oldQty + qtyToImport;
+          } else {
+            newQty = qtyToImport;
+          }
+
+          const delta = newQty - oldQty;
+          await soh.update({ quantity: newQty }, { transaction: t });
+
+          // Record adjustment
+          const adjustment = await InventoryAdjustment.create({
+            product_id: product.id,
+            reason: notes || 'Bulk stock import',
+            quantity_before: oldQty,
+            quantity_after: newQty,
+            approved_by: req.user.id,
+            performed_by: req.user.id
+          }, { transaction: t });
+
+          // Record stock transaction ledger entry
+          await StockTransaction.create({
+            product_id: product.id,
+            type: delta >= 0 ? 'stock_in' : 'dispatch',
+            reference: `IMPORT-${adjustment.id}`,
+            quantity_change: delta,
+            quantity_after: newQty,
+            performed_by: req.user.id,
+            notes: notes || 'Bulk stock import'
+          }, { transaction: t });
+
+          stockUpdated = true;
+        }
+      }
+
+      if (priceUpdated || stockUpdated) {
+        importDetails.push({
+          product_id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price_updated: priceUpdated,
+          stock_updated: stockUpdated,
+          old_prices: priceUpdated ? oldPrices : null,
+          new_prices: priceUpdated ? { purchase_price: product.purchase_price, dealer_landing_price: product.dealer_landing_price, selling_price: product.selling_price } : null,
+          old_stock: stockUpdated ? oldQty : null,
+          new_stock: stockUpdated ? newQty : null
+        });
+      }
+    }
+
+    // Write a parent AuditLog entry for the bulk import
+    const mainLog = await AuditLog.create({
+      actor_id: req.user.id,
+      actor_name: req.user.name,
+      actor_role: req.user.role,
+      action_type: 'import',
+      module: 'products',
+      entity_type: 'bulk_import',
+      entity_id: null,
+      before_state: { total_items: items.length },
+      after_state: {
+        success_count: importDetails.length,
+        stock_mode,
+        notes,
+        items: importDetails
+      },
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent']
+    }, { transaction: t });
+
+    await t.commit();
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully imported ${importDetails.length} items.`,
+      data: {
+        import_id: mainLog.id,
+        items_imported: importDetails.length
+      }
+    });
+
+  } catch (err) {
+    await t.rollback();
+    next(err);
+  }
+};
+
+exports.getImportHistory = async (req, res, next) => {
+  try {
+    const records = await AuditLog.findAll({
+      where: {
+        action_type: 'import',
+        entity_type: 'bulk_import'
+      },
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({ success: true, data: records });
   } catch (err) {
     next(err);
   }
