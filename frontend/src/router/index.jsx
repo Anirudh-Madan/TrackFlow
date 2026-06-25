@@ -3,7 +3,9 @@ import AuthGuard from './guards/AuthGuard'
 import RoleGuard from './guards/RoleGuard'
 import FirstLoginGuard from './guards/FirstLoginGuard'
 import AdminLayout from '../layouts/AdminLayout'
+import IMLayout from '../layouts/IMLayout'
 import { adminRoutes } from './routes/adminRoutes'
+import { imRoutes } from './routes/imRoutes'
 
 // Auth pages (eagerly loaded — small)
 import LoginPage from '../modules/auth/pages/LoginPage'
@@ -73,10 +75,13 @@ const router = createBrowserRouter([
     element: (
       <AuthGuard>
         <RoleGuard role="inventory_manager">
-          <RolePlaceholderPage />
+          <FirstLoginGuard>
+            <IMLayout />
+          </FirstLoginGuard>
         </RoleGuard>
       </AuthGuard>
     ),
+    children: imRoutes,
   },
 
   // Dispatch Worker

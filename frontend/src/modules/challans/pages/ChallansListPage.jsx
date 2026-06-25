@@ -1,165 +1,14 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   FileText, Download, Eye, Search, Filter, ChevronDown,
   Package, MapPin, User, Calendar, CheckCircle, Clock, AlertCircle,
-  X, Printer, ArrowUpRight
+  X, Printer, ArrowUpRight, Loader2
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
-
-// ─── Dummy Challan Data ──────────────────────────────────────────────────────
-const DUMMY_CHALLANS = [
-  {
-    id: 'CHN-2406-0041',
-    order_ref: 'ORD-2406-0098',
-    date: '2026-06-22',
-    party_name: 'Verma Enterprises Pvt Ltd',
-    party_city: 'Lucknow',
-    region: 'North UP',
-    dispatched_by: 'Rajan Kumar',
-    items: [
-      { sku: 'SKU-1021', name: 'Heavy Duty Pipe 2"', qty: 120, unit: 'pcs' },
-      { sku: 'SKU-1044', name: 'Elbow Connector 90°', qty: 80, unit: 'pcs' },
-      { sku: 'SKU-1067', name: 'PVC Reducer 2"×1.5"', qty: 40, unit: 'pcs' },
-    ],
-    total_items: 3,
-    total_qty: 240,
-    status: 'delivered',
-    vehicle_no: 'UP32 AK 4512',
-    driver: 'Suresh Yadav',
-  },
-  {
-    id: 'CHN-2406-0040',
-    order_ref: 'ORD-2406-0095',
-    date: '2026-06-22',
-    party_name: 'Singh Traders',
-    party_city: 'Kanpur',
-    region: 'Central UP',
-    dispatched_by: 'Mohan Singh',
-    items: [
-      { sku: 'SKU-2011', name: 'GI Clamp 1"', qty: 200, unit: 'pcs' },
-      { sku: 'SKU-2022', name: 'GI Clamp 1.5"', qty: 150, unit: 'pcs' },
-    ],
-    total_items: 2,
-    total_qty: 350,
-    status: 'in_transit',
-    vehicle_no: 'UP78 BK 9901',
-    driver: 'Ramesh Verma',
-  },
-  {
-    id: 'CHN-2406-0039',
-    order_ref: 'ORD-2406-0091',
-    date: '2026-06-21',
-    party_name: 'Gupta & Sons Hardware',
-    party_city: 'Agra',
-    region: 'West UP',
-    dispatched_by: 'Priya Sharma',
-    items: [
-      { sku: 'SKU-3001', name: 'Ball Valve 3/4"', qty: 60, unit: 'pcs' },
-      { sku: 'SKU-3015', name: 'Ball Valve 1"', qty: 40, unit: 'pcs' },
-      { sku: 'SKU-3030', name: 'Gate Valve 1.5"', qty: 25, unit: 'pcs' },
-      { sku: 'SKU-3050', name: 'Non-Return Valve 1"', qty: 30, unit: 'pcs' },
-    ],
-    total_items: 4,
-    total_qty: 155,
-    status: 'delivered',
-    vehicle_no: 'UP32 DK 1102',
-    driver: 'Anil Gupta',
-  },
-  {
-    id: 'CHN-2406-0038',
-    order_ref: 'ORD-2406-0088',
-    date: '2026-06-21',
-    party_name: 'Rajput Plumbing Supplies',
-    party_city: 'Meerut',
-    region: 'North UP',
-    dispatched_by: 'Rajan Kumar',
-    items: [
-      { sku: 'SKU-4001', name: 'CPVC Pipe 3/4" (10ft)', qty: 500, unit: 'pcs' },
-      { sku: 'SKU-4015', name: 'CPVC Elbow 3/4"', qty: 200, unit: 'pcs' },
-    ],
-    total_items: 2,
-    total_qty: 700,
-    status: 'pending',
-    vehicle_no: '—',
-    driver: '—',
-  },
-  {
-    id: 'CHN-2406-0037',
-    order_ref: 'ORD-2406-0085',
-    date: '2026-06-20',
-    party_name: 'Khan Construction Co.',
-    party_city: 'Varanasi',
-    region: 'East UP',
-    dispatched_by: 'Deepak Nair',
-    items: [
-      { sku: 'SKU-5001', name: 'Cement Pipe 6"', qty: 80, unit: 'pcs' },
-      { sku: 'SKU-5010', name: 'Cement Pipe 4"', qty: 120, unit: 'pcs' },
-      { sku: 'SKU-5020', name: 'Manhole Cover CI', qty: 10, unit: 'pcs' },
-    ],
-    total_items: 3,
-    total_qty: 210,
-    status: 'delivered',
-    vehicle_no: 'UP62 BL 5511',
-    driver: 'Deepak Tripathi',
-  },
-  {
-    id: 'CHN-2406-0036',
-    order_ref: 'ORD-2406-0082',
-    date: '2026-06-20',
-    party_name: 'Metro Build Infra',
-    party_city: 'Noida',
-    region: 'NCR',
-    dispatched_by: 'Priya Sharma',
-    items: [
-      { sku: 'SKU-6001', name: 'HDPE Pipe 110mm', qty: 300, unit: 'm' },
-      { sku: 'SKU-6012', name: 'HDPE Coupler 110mm', qty: 100, unit: 'pcs' },
-      { sku: 'SKU-6025', name: 'HDPE Elbow 90° 110mm', qty: 50, unit: 'pcs' },
-    ],
-    total_items: 3,
-    total_qty: 450,
-    status: 'in_transit',
-    vehicle_no: 'DL01 TC 3344',
-    driver: 'Manoj Sharma',
-  },
-  {
-    id: 'CHN-2406-0035',
-    order_ref: 'ORD-2406-0080',
-    date: '2026-06-19',
-    party_name: 'Jain Plumbers',
-    party_city: 'Allahabad',
-    region: 'East UP',
-    dispatched_by: 'Mohan Singh',
-    items: [
-      { sku: 'SKU-1021', name: 'Heavy Duty Pipe 2"', qty: 60, unit: 'pcs' },
-    ],
-    total_items: 1,
-    total_qty: 60,
-    status: 'delivered',
-    vehicle_no: 'UP70 BJ 8812',
-    driver: 'Ravi Kumar',
-  },
-  {
-    id: 'CHN-2406-0034',
-    order_ref: 'ORD-2406-0077',
-    date: '2026-06-19',
-    party_name: 'Sahni Trading Corp.',
-    party_city: 'Ghaziabad',
-    region: 'NCR',
-    dispatched_by: 'Rajan Kumar',
-    items: [
-      { sku: 'SKU-7001', name: 'Water Tank 500L Cylindrical', qty: 20, unit: 'pcs' },
-      { sku: 'SKU-7005', name: 'Water Tank 1000L Flat Base', qty: 10, unit: 'pcs' },
-    ],
-    total_items: 2,
-    total_qty: 30,
-    status: 'cancelled',
-    vehicle_no: '—',
-    driver: '—',
-  },
-]
+import { getChallans } from '../../../api/endpoints/challans.api'
 
 const STATUS_CONFIG = {
   delivered:  { label: 'Delivered',  color: 'bg-success-50 text-success-700 border-success-200 dark:bg-success-900/20 dark:text-success-400 dark:border-success-900/40', icon: CheckCircle },
@@ -219,7 +68,7 @@ function getChallanHTML(challan) {
           <p><strong>${challan.id}</strong></p>
           <p>Date: ${challan.date}</p>
           <p>Generated: ${now}</p>
-          <p><span class="badge ${challan.status}">${STATUS_CONFIG[challan.status]?.label}</span></p>
+          <p><span class="badge ${challan.status}">${STATUS_CONFIG[challan.status]?.label || challan.status}</span></p>
         </div>
       </div>
 
@@ -326,9 +175,74 @@ function StatusBadge({ status }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ChallansListPage() {
+  const [challans, setChallans]       = useState([])
+  const [loading, setLoading]         = useState(true)
   const [search, setSearch]           = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [viewChallan, setViewChallan] = useState(null)
+
+  const fetchChallansList = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await getChallans()
+      if (res.data?.success) {
+        setChallans(res.data.data)
+      } else {
+        toast.error(res.data?.error || 'Failed to fetch challans')
+      }
+    } catch (err) {
+      toast.error('Failed to load challans list')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchChallansList()
+  }, [fetchChallansList])
+
+  const formattedChallans = useMemo(() => {
+    return challans.map(c => {
+      const order = c.order || {}
+      const party = order.party || {}
+      const region = party.region || {}
+      const salesManager = order.salesManager || {}
+      const items = order.items || []
+
+      const mappedItems = items.map(item => ({
+        sku: item.product?.sku || 'N/A',
+        name: item.product?.name || 'N/A',
+        qty: item.quantity,
+        unit: 'pcs'
+      }))
+
+      const totalQty = items.reduce((sum, item) => sum + item.quantity, 0)
+
+      // Map status from order
+      const dbStatus = (order.status || '').toLowerCase()
+      let status = 'pending'
+      if (dbStatus === 'dispatched') status = 'delivered'
+      if (dbStatus === 'cancelled') status = 'cancelled'
+      if (dbStatus === 'approved') status = 'in_transit'
+
+      return {
+        id: c.challan_number,
+        dbId: c.id,
+        order_ref: order.order_number || 'N/A',
+        date: c.generated_at || c.created_at || new Date(),
+        party_name: party.company_name || 'N/A',
+        party_city: region.name || 'N/A',
+        region: region.name || 'N/A',
+        dispatched_by: salesManager.name || 'N/A',
+        items: mappedItems,
+        total_items: items.length,
+        total_qty: totalQty,
+        status,
+        vehicle_no: '—',
+        driver: '—',
+      }
+    })
+  }, [challans])
 
   const downloadSampleChallanCSV = () => {
     const headers = [
@@ -456,21 +370,25 @@ export default function ChallansListPage() {
     toast.success('Challans list exported successfully!')
   }
 
-  const filtered = DUMMY_CHALLANS.filter(c => {
-    const matchSearch =
-      c.id.toLowerCase().includes(search.toLowerCase()) ||
-      c.party_name.toLowerCase().includes(search.toLowerCase()) ||
-      c.order_ref.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = filterStatus === 'all' || c.status === filterStatus
-    return matchSearch && matchStatus
-  })
+  const filtered = useMemo(() => {
+    return formattedChallans.filter(c => {
+      const matchSearch =
+        c.id.toLowerCase().includes(search.toLowerCase()) ||
+        c.party_name.toLowerCase().includes(search.toLowerCase()) ||
+        c.order_ref.toLowerCase().includes(search.toLowerCase())
+      const matchStatus = filterStatus === 'all' || c.status === filterStatus
+      return matchSearch && matchStatus
+    })
+  }, [formattedChallans, search, filterStatus])
 
-  const stats = {
-    total:      DUMMY_CHALLANS.length,
-    delivered:  DUMMY_CHALLANS.filter(c => c.status === 'delivered').length,
-    in_transit: DUMMY_CHALLANS.filter(c => c.status === 'in_transit').length,
-    pending:    DUMMY_CHALLANS.filter(c => c.status === 'pending').length,
-  }
+  const stats = useMemo(() => {
+    return {
+      total:      formattedChallans.length,
+      delivered:  formattedChallans.filter(c => c.status === 'delivered').length,
+      in_transit: formattedChallans.filter(c => c.status === 'in_transit').length,
+      pending:    formattedChallans.filter(c => c.status === 'pending').length,
+    }
+  }, [formattedChallans])
 
   return (
     <div className="animate-in space-y-6">
@@ -554,101 +472,108 @@ export default function ChallansListPage() {
             ))}
           </div>
           <div className="text-xs text-surface-500 font-medium shrink-0">
-            {filtered.length} of {DUMMY_CHALLANS.length}
+            {filtered.length} of {formattedChallans.length}
           </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          {filtered.length === 0 ? (
-            <div className="p-12 text-center">
-              <FileText className="mx-auto h-10 w-10 text-surface-300 dark:text-surface-600 mb-3" />
-              <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No challans found</h3>
-              <p className="text-xs text-surface-500 mt-1">Try adjusting your search or filter.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                  <th className="px-5 py-3.5">Challan ID</th>
-                  <th className="px-5 py-3.5">Date</th>
-                  <th className="px-5 py-3.5">Party</th>
-                  <th className="px-5 py-3.5">Items</th>
-                  <th className="px-5 py-3.5">Dispatched By</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                {filtered.map(c => (
-                  <tr key={c.id} className="table-row-hover">
-                    <td className="px-5 py-4">
-                      <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{c.id}</div>
-                      <div className="text-xs text-surface-400 mt-0.5">{c.order_ref}</div>
-                    </td>
-                    <td className="px-5 py-4 text-xs text-surface-500">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {new Date(c.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{c.party_name}</div>
-                      <div className="text-xs text-surface-400 flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3" /> {c.party_city} · {c.region}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-surface-700 dark:text-surface-300">
-                        <Package className="h-3.5 w-3.5 text-surface-400" />
-                        {c.total_items} SKUs, {c.total_qty} units
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-1.5 text-xs text-surface-600 dark:text-surface-400">
-                        <User className="h-3.5 w-3.5" /> {c.dispatched_by}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={c.status} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={Eye}
-                          onClick={() => setViewChallan(c)}
-                          id={`view-challan-${c.id}`}
-                        >
-                          View
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Download}
-                          onClick={() => downloadChallanHTML(c)}
-                          id={`download-html-${c.id}`}
-                        >
-                          Download
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Printer}
-                          onClick={() => generateChallanPDF(c)}
-                          id={`download-challan-${c.id}`}
-                        >
-                          Print
-                        </Button>
-                      </div>
-                    </td>
+        {loading ? (
+          <div className="p-12 text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-600 mb-3" />
+            <p className="text-xs text-surface-500">Loading challans from database...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            {filtered.length === 0 ? (
+              <div className="p-12 text-center">
+                <FileText className="mx-auto h-10 w-10 text-surface-300 dark:text-surface-600 mb-3" />
+                <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No challans found</h3>
+                <p className="text-xs text-surface-500 mt-1">Try adjusting your search or filter.</p>
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
+                    <th className="px-5 py-3.5">Challan ID</th>
+                    <th className="px-5 py-3.5">Date</th>
+                    <th className="px-5 py-3.5">Party</th>
+                    <th className="px-5 py-3.5">Items</th>
+                    <th className="px-5 py-3.5">Dispatched By</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
+                  {filtered.map(c => (
+                    <tr key={c.id} className="table-row-hover">
+                      <td className="px-5 py-4">
+                        <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{c.id}</div>
+                        <div className="text-xs text-surface-400 mt-0.5">{c.order_ref}</div>
+                      </td>
+                      <td className="px-5 py-4 text-xs text-surface-500">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {new Date(c.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{c.party_name}</div>
+                        <div className="text-xs text-surface-400 flex items-center gap-1 mt-0.5">
+                          <MapPin className="h-3 w-3" /> {c.party_city} · {c.region}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-surface-700 dark:text-surface-300">
+                          <Package className="h-3.5 w-3.5 text-surface-400" />
+                          {c.total_items} SKUs, {c.total_qty} units
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-1.5 text-xs text-surface-600 dark:text-surface-400">
+                          <User className="h-3.5 w-3.5" /> {c.dispatched_by}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusBadge status={c.status} />
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={Eye}
+                            onClick={() => setViewChallan(c)}
+                            id={`view-challan-${c.dbId}`}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Download}
+                            onClick={() => downloadChallanHTML(c)}
+                            id={`download-html-${c.dbId}`}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Printer}
+                            onClick={() => generateChallanPDF(c)}
+                            id={`download-challan-${c.dbId}`}
+                          >
+                            Print
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
       {/* View Detail Modal */}

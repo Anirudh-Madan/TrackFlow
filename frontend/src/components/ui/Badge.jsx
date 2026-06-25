@@ -8,13 +8,13 @@ export default function Badge({
   className,
 }) {
   const variants = {
-    default: 'bg-surface-100 text-surface-700 dark:bg-surface-700 dark:text-surface-300',
-    primary: 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300',
-    success: 'bg-success-100 text-success-700 dark:bg-success-900/40 dark:text-success-300',
-    warning: 'bg-warning-100 text-warning-700 dark:bg-warning-900/40 dark:text-warning-300',
-    danger:  'bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300',
-    purple:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    blue:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    default: 'bg-surface-50 text-surface-700 border-surface-200 dark:bg-surface-800/40 dark:text-surface-300 dark:border-surface-700/50',
+    primary: 'bg-primary-50 text-primary-700 border-primary-100 dark:bg-primary-950/40 dark:text-primary-300 dark:border-primary-800/40',
+    success: 'bg-success-50 text-success-700 border-success-100 dark:bg-success-950/40 dark:text-success-400 dark:border-success-800/40',
+    warning: 'bg-warning-50 text-warning-700 border-warning-100 dark:bg-warning-950/40 dark:text-warning-400 dark:border-warning-800/40',
+    danger:  'bg-danger-50 text-danger-700 border-danger-100 dark:bg-danger-950/40 dark:text-danger-400 dark:border-danger-800/40',
+    purple:  'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800/40',
+    blue:    'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/40',
   }
 
   const dotColors = {
@@ -28,24 +28,33 @@ export default function Badge({
   }
 
   const sizes = {
-    sm: 'text-xs px-1.5 py-0.5 gap-1',
-    md: 'text-xs px-2 py-0.5 gap-1.5',
-    lg: 'text-sm px-2.5 py-1 gap-1.5',
+    sm: 'text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 gap-1.5',
+    md: 'text-xs px-2.5 py-0.5 gap-1.5',
+    lg: 'text-sm px-3 py-1 gap-2',
   }
 
   return (
     <span
       className={cn(
-        'inline-flex items-center font-medium rounded-full',
+        'inline-flex items-center rounded-full whitespace-nowrap border transition-colors duration-150',
         variants[variant],
         sizes[size],
         className
       )}
     >
       {dot && (
-        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dotColors[variant])} />
+        <span className="relative flex h-1.5 w-1.5 shrink-0">
+          {(variant === 'success' || variant === 'warning' || variant === 'danger') && (
+            <span className={cn(
+              'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
+              dotColors[variant]
+            )} />
+          )}
+          <span className={cn('relative inline-flex rounded-full h-1.5 w-1.5', dotColors[variant])} />
+        </span>
       )}
-      {children}
+      <span>{children}</span>
     </span>
   )
 }
+

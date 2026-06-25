@@ -22,6 +22,14 @@ const StockDamaged = require('./StockDamaged');
 const StockTransaction = require('./StockTransaction');
 const InventoryAdjustment = require('./InventoryAdjustment');
 
+const InwardEntry = require('./InwardEntry');
+const InwardItem = require('./InwardItem');
+const Order = require('./Order');
+const OrderItem = require('./OrderItem');
+const OrderStatusHistory = require('./OrderStatusHistory');
+const Challan = require('./Challan');
+const ReorderFlag = require('./ReorderFlag');
+
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
 User.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
@@ -99,6 +107,42 @@ InventoryAdjustment.belongsTo(User, { foreignKey: 'performed_by', as: 'performer
 User.hasMany(InventoryAdjustment, { foreignKey: 'approved_by', as: 'approvedAdjustments' });
 InventoryAdjustment.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 
+// ── Inward Entries ────────────────────────────────────────────────────────────
+InwardEntry.hasMany(InwardItem, { foreignKey: 'inward_entry_id', as: 'items', onDelete: 'CASCADE' });
+InwardItem.belongsTo(InwardEntry, { foreignKey: 'inward_entry_id', as: 'inwardEntry' });
+Product.hasMany(InwardItem, { foreignKey: 'product_id', as: 'inwardItems' });
+InwardItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(InwardEntry, { foreignKey: 'received_by', as: 'receivedInwards' });
+InwardEntry.belongsTo(User, { foreignKey: 'received_by', as: 'receiver' });
+
+// ── Orders & Items ────────────────────────────────────────────────────────────
+Customer.hasMany(Order, { foreignKey: 'party_id', as: 'orders' });
+Order.belongsTo(Customer, { foreignKey: 'party_id', as: 'party' });
+User.hasMany(Order, { foreignKey: 'sales_manager_id', as: 'managedOrders' });
+Order.belongsTo(User, { foreignKey: 'sales_manager_id', as: 'salesManager' });
+Order.hasMany(OrderItem, { foreignKey: 'order_id', as: 'items', onDelete: 'CASCADE' });
+OrderItem.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+Product.hasMany(OrderItem, { foreignKey: 'product_id', as: 'orderItems' });
+OrderItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+Order.hasMany(OrderStatusHistory, { foreignKey: 'order_id', as: 'statusHistory', onDelete: 'CASCADE' });
+OrderStatusHistory.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+User.hasMany(OrderStatusHistory, { foreignKey: 'changed_by', as: 'statusHistoryChanges' });
+OrderStatusHistory.belongsTo(User, { foreignKey: 'changed_by', as: 'changer' });
+
+// ── Challans ──────────────────────────────────────────────────────────────────
+Order.hasOne(Challan, { foreignKey: 'order_id', as: 'challan', onDelete: 'CASCADE' });
+Challan.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+
+// ── Reorders ──────────────────────────────────────────────────────────────────
+Product.hasMany(ReorderFlag, { foreignKey: 'product_id', as: 'reorderFlags', onDelete: 'CASCADE' });
+ReorderFlag.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(ReorderFlag, { foreignKey: 'flagged_by', as: 'flaggedReorders' });
+ReorderFlag.belongsTo(User, { foreignKey: 'flagged_by', as: 'flagger' });
+Customer.hasMany(ReorderFlag, { foreignKey: 'party_id', as: 'reorderFlags' });
+ReorderFlag.belongsTo(Customer, { foreignKey: 'party_id', as: 'party' });
+InwardEntry.hasMany(ReorderFlag, { foreignKey: 'received_via_inward_id', as: 'reordersReceived' });
+ReorderFlag.belongsTo(InwardEntry, { foreignKey: 'received_via_inward_id', as: 'receivedViaInward' });
+
 module.exports = {
   sequelize,
   Role,
@@ -121,4 +165,11 @@ module.exports = {
   StockDamaged,
   StockTransaction,
   InventoryAdjustment,
+  InwardEntry,
+  InwardItem,
+  Order,
+  OrderItem,
+  OrderStatusHistory,
+  Challan,
+  ReorderFlag,
 };

@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useDropzone } from 'react-dropzone'
 import {
   getProducts, createProduct, updateProduct, deleteProduct,
   getCategories, createCategory, updateCategory, deleteCategory,
   getUOM, createUOM, updateUOM, deleteUOM,
   getPricing, createPricing, updatePricing, deletePricing,
+  bulkImportProducts,
 } from '../../../api/endpoints/products.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
@@ -15,6 +17,7 @@ import Badge from '../../../components/ui/Badge'
 import {
   Plus, Search, Package, Tag, Ruler, TrendingUp, AlertCircle,
   Pencil, Trash2, ChevronRight, X, Calendar, Layers,
+  FileSpreadsheet, FileUp, CheckCircle2, Info,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
@@ -53,6 +56,44 @@ const pricingSchema = z.object({
   effective_to:         z.string().optional().or(z.literal('')),
   notes:                z.string().optional().or(z.literal('')),
 })
+
+// ─── Pure JS RFC 4180 Compliant CSV Parser ──────────────────────────────────
+function parseCSV(text) {
+  let p = '', c = '', r = [];
+  let q = false;
+  let row = [''];
+  for (let i = 0; i < text.length; i++) {
+    c = text[i];
+    let next = text[i+1];
+    if (c === '"') {
+      if (q && next === '"') { row[row.length - 1] += '"'; i++; } // Escaped quote
+      else { q = !q; }
+    } else if (c === ',' && !q) {
+      row.push('');
+    } else if ((c === '\r' || c === '\n') && !q) {
+      if (c === '\r' && next === '\n') { i++; }
+      r.push(row);
+      row = [''];
+    } else {
+      row[row.length - 1] += c;
+    }
+  }
+  if (row.length > 1 || row[0] !== '') {
+    r.push(row);
+  }
+  
+  if (r.length === 0) return [];
+  
+  // Extract and normalize headers
+  const headers = r[0].map(h => h.trim().toLowerCase().replace(/[\s_]+/g, '_'));
+  return r.slice(1).map(rowValues => {
+    const obj = {};
+    headers.forEach((header, index) => {
+      obj[header] = rowValues[index] !== undefined ? rowValues[index].trim() : '';
+    });
+    return obj;
+  });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => v != null ? `₹${parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'
@@ -121,6 +162,15 @@ export default function ProductsListPage() {
   const [uoms, setUoms]                 = useState([])
   const [pricing, setPricing]           = useState([])
   const [loading, setLoading]           = useState(true)
+
+  // Import modal state
+  const [isImportOpen, setIsImportOpen]         = useState(false)
+  const [parsedImportData, setParsedImportData] = useState([])
+  const [importFileName, setImportFileName]     = useState('')
+  const [importStockMode, setImportStockMode]   = useState('absolute')
+  const [importEffectiveFrom, setImportEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
+  const [importNotes, setImportNotes]           = useState('')
+  const [importing, setImporting]               = useState(false)
 
   // Filter state
   const [search, setSearch]             = useState('')
@@ -422,6 +472,185 @@ export default function ProductsListPage() {
     }
   }
 
+  // Create lookup dictionary of active products by SKU
+  const productDict = useMemo(() => {
+    const dict = {}
+    products.forEach(p => {
+      dict[p.sku?.toUpperCase()] = p
+    });
+    return dict
+  }, [products])
+
+  const onImportDrop = (acceptedFiles) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+
+    setImportFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result
+        const rawRows = parseCSV(text)
+        
+        // Map headers dynamically to known keys
+        const headerMaps = {
+          sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number'],
+          purchase_price: ['purchase_price', 'purchase price', 'purchase', 'buy_price', 'cost_price', 'cost'],
+          dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price'],
+          selling_price: ['selling_price', 'selling price', 'selling', 'sell_price', 'mrp', 'price'],
+          quantity: ['quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity', 'stock_on_hand', 'on_hand', 'count']
+        }
+
+        const findMappedValue = (row, mappingKeys) => {
+          for (const key of mappingKeys) {
+            const normalizedKey = key.replace(/[\s_]+/g, '_').toLowerCase()
+            for (const rowKey in row) {
+              if (rowKey.replace(/[\s_]+/g, '_').toLowerCase() === normalizedKey) {
+                return row[rowKey]
+              }
+            }
+          }
+          return undefined
+        }
+
+        const normalizedRows = rawRows.map(row => {
+          const sku = findMappedValue(row, headerMaps.sku)
+          const purchase_price = findMappedValue(row, headerMaps.purchase_price)
+          const dealer_landing_price = findMappedValue(row, headerMaps.dealer_landing_price)
+          const selling_price = findMappedValue(row, headerMaps.selling_price)
+          const quantity = findMappedValue(row, headerMaps.quantity)
+
+          return {
+            sku: sku || '',
+            purchase_price: purchase_price !== undefined ? purchase_price : '',
+            dealer_landing_price: dealer_landing_price !== undefined ? dealer_landing_price : '',
+            selling_price: selling_price !== undefined ? selling_price : '',
+            quantity: quantity !== undefined ? quantity : ''
+          }
+        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity)
+
+        setParsedImportData(normalizedRows)
+        toast.success(`Successfully parsed ${normalizedRows.length} rows from file.`)
+      } catch (err) {
+        toast.error('Failed to parse CSV file. Ensure it is a valid CSV format.')
+      }
+    };
+    reader.readAsText(file)
+  }
+
+  const { getRootProps: getImportRootProps, getInputProps: getImportInputProps, isDragActive: isImportDragActive } = useDropzone({
+    onDrop: onImportDrop,
+    accept: { 'text/csv': ['.csv'] },
+    multiple: false
+  })
+
+  // Validate the parsed items against database products list
+  const validatedImportItems = useMemo(() => {
+    return parsedImportData.map((item, index) => {
+      const skuUpper = item.sku?.trim().toUpperCase()
+      const dbProduct = productDict[skuUpper]
+      
+      const errors = []
+      if (!item.sku?.trim()) {
+        errors.push('SKU is missing')
+      } else if (!dbProduct) {
+        errors.push('SKU not found in catalog')
+      }
+
+      const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
+      const hasSelling = item.selling_price !== '' && item.selling_price !== null
+      const hasQty = item.quantity !== '' && item.quantity !== null
+
+      if (hasPurchase && isNaN(parseFloat(item.purchase_price))) {
+        errors.push('Purchase Price must be a number')
+      }
+      if (hasSelling && isNaN(parseFloat(item.selling_price))) {
+        errors.push('Selling Price must be a number')
+      }
+      if (item.dealer_landing_price !== '' && item.dealer_landing_price !== null && isNaN(parseFloat(item.dealer_landing_price))) {
+        errors.push('Dealer Landing Price must be a number')
+      }
+      if (hasQty && isNaN(parseFloat(item.quantity))) {
+        errors.push('Stock Quantity must be a number')
+      }
+
+      if (!hasPurchase && !hasSelling && !hasQty) {
+        errors.push('No prices or stock levels specified for update')
+      }
+
+      return {
+        ...item,
+        id: index,
+        dbProduct,
+        isValid: errors.length === 0,
+        errors
+      }
+    })
+  }, [parsedImportData, productDict])
+
+  // Count items summary
+  const importSummary = useMemo(() => {
+    const total = validatedImportItems.length
+    const valid = validatedImportItems.filter(item => item.isValid).length
+    const invalid = total - valid
+    return { total, valid, invalid }
+  }, [validatedImportItems])
+
+  const downloadImportTemplate = () => {
+    const csvContent = "data:text/csv;charset=utf-8,SKU,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,150.00,165.00,199.00,50\nSKU002,300.00,,399.00,120";
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", "bulk_import_template.csv")
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleImportSubmit = async () => {
+    const validPayloadItems = validatedImportItems
+      .filter(item => item.isValid)
+      .map(item => ({
+        sku: item.sku,
+        purchase_price: item.purchase_price !== '' ? parseFloat(item.purchase_price) : undefined,
+        dealer_landing_price: item.dealer_landing_price !== '' ? parseFloat(item.dealer_landing_price) : undefined,
+        selling_price: item.selling_price !== '' ? parseFloat(item.selling_price) : undefined,
+        quantity: item.quantity !== '' ? parseFloat(item.quantity) : undefined
+      }))
+
+    if (validPayloadItems.length === 0) {
+      toast.error('No valid items to import.')
+      return
+    }
+
+    setImporting(true)
+    try {
+      const res = await bulkImportProducts({
+        items: validPayloadItems,
+        stock_mode: importStockMode,
+        effective_from: importEffectiveFrom,
+        notes: importNotes
+      })
+
+      if (res.success) {
+        toast.success(res.message || 'Bulk import successful!')
+        // Reset state
+        setParsedImportData([])
+        setImportFileName('')
+        setImportNotes('')
+        setIsImportOpen(false)
+        // Refresh products list on screen immediately!
+        fetchAll()
+      } else {
+        toast.error(res.error || 'Import failed')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error occurred during import')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   // ── Category map for display ───────────────────────────────────────────────
   const categoryMap = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories])
 
@@ -489,6 +718,11 @@ export default function ProductsListPage() {
             <Button variant="secondary" size="sm" icon={Ruler} onClick={() => { uomForm.reset({ name: '', code: '', description: '' }); setEditUomId(null); setIsUomOpen(true) }}>
               Units (UOM)
             </Button>
+            {activeTab === 'catalogue' && (
+              <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
+                Import CSV
+              </Button>
+            )}
             {activeTab === 'catalogue' ? (
               <Button icon={Plus} size="md" onClick={openCreateProduct} className="w-full sm:w-auto">
                 Add Product
@@ -601,7 +835,7 @@ export default function ProductsListPage() {
                               {p.available != null ? parseFloat(p.available).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'}
                               <span className="text-xs text-surface-500 font-normal ml-1">{p.uom?.code}</span>
                             </div>
-                            <div>
+                            <div className="flex">
                               {p.available <= 0 ? (
                                 <Badge variant="danger" dot size="sm">Out of Stock</Badge>
                               ) : p.is_low_stock ? (
@@ -1007,6 +1241,231 @@ export default function ProductsListPage() {
           <div className="flex justify-end gap-3 pt-2 border-t border-surface-100 dark:border-surface-700">
             <Button variant="secondary" onClick={() => setIsPricingDelete(false)} disabled={deletingPricing}>Cancel</Button>
             <Button variant="danger" loading={deletingPricing} onClick={confirmDeletePricing} icon={Trash2}>Delete</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Bulk CSV Import Modal ────────────────────────────────────────── */}
+      <Modal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Bulk Import Price Lists & Stock"
+        description="Upload a CSV spreadsheet to update purchase prices, selling prices, and stock quantities in bulk."
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-surface-50 dark:bg-surface-850 p-4 rounded-xl border border-surface-200 dark:border-surface-700 text-xs">
+            {/* Stock Mode Selection */}
+            <div className="space-y-1.5 col-span-1">
+              <label className="text-xs font-semibold text-surface-600 dark:text-surface-400">Stock Update Mode</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setImportStockMode('absolute')}
+                  className={cn(
+                    "py-1.5 rounded-lg border text-[10px] font-medium transition-all text-center",
+                    importStockMode === 'absolute'
+                      ? "border-primary-500 bg-primary-50/50 dark:bg-primary-950/20 text-primary-700 dark:text-primary-300"
+                      : "border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800"
+                  )}
+                >
+                  Set Absolute
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportStockMode('relative')}
+                  className={cn(
+                    "py-1.5 rounded-lg border text-[10px] font-medium transition-all text-center",
+                    importStockMode === 'relative'
+                      ? "border-primary-500 bg-primary-50/50 dark:bg-primary-950/20 text-primary-700 dark:text-primary-300"
+                      : "border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800"
+                  )}
+                >
+                  Add Relative
+                </button>
+              </div>
+            </div>
+
+            {/* Price Effective From Date */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-surface-600 dark:text-surface-400">Price Effective From</label>
+              <input
+                type="date"
+                value={importEffectiveFrom}
+                onChange={e => setImportEffectiveFrom(e.target.value)}
+                className="input-base py-1 px-2.5 text-xs text-surface-800 dark:text-surface-100"
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-surface-600 dark:text-surface-400">Import Notes / Reason</label>
+              <input
+                type="text"
+                placeholder="Reason..."
+                value={importNotes}
+                onChange={e => setImportNotes(e.target.value)}
+                className="input-base py-1 px-2.5 text-xs text-surface-800 dark:text-surface-100"
+              />
+            </div>
+          </div>
+
+          {parsedImportData.length === 0 ? (
+            <div
+              {...getImportRootProps()}
+              className={cn(
+                "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[180px]",
+                isImportDragActive
+                  ? "border-primary-500 bg-primary-50/20 dark:bg-primary-950/10"
+                  : "border-surface-200 dark:border-surface-800 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-surface-50/50 dark:hover:bg-surface-800/10"
+              )}
+            >
+              <input {...getImportInputProps()} />
+              <FileUp className="h-10 w-10 text-surface-400 mb-3 animate-bounce" />
+              <h3 className="text-sm font-bold text-surface-800 dark:text-surface-100">
+                {isImportDragActive ? 'Drop your CSV file here' : 'Drag & drop price list / stock CSV'}
+              </h3>
+              <p className="text-xs text-surface-500 mt-1">
+                or click to browse your local files (only .csv files supported)
+              </p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); downloadImportTemplate(); }}
+                className="text-xs text-primary-600 hover:text-primary-700 underline mt-4 inline-flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Download CSV Template
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 bg-surface-50 dark:bg-surface-800 p-3 rounded-lg border border-surface-200 dark:border-surface-700 text-xs">
+                <div>
+                  <span className="font-semibold text-surface-900 dark:text-surface-50">File: </span>
+                  <span className="font-mono text-primary-600 dark:text-primary-400">{importFileName}</span>
+                  <div className="flex gap-3 text-[10px] text-surface-500 mt-0.5">
+                    <span>Total Rows: <strong>{importSummary.total}</strong></span>
+                    <span className="text-success-600">Valid: <strong>{importSummary.valid}</strong></span>
+                    {importSummary.invalid > 0 && <span className="text-danger-600">Errors: <strong>{importSummary.invalid}</strong></span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setParsedImportData([]); setImportFileName(''); }}
+                  className="text-xs text-danger-600 hover:text-danger-700 hover:underline flex items-center gap-1"
+                >
+                  <X className="h-3.5 w-3.5" /> Clear File
+                </button>
+              </div>
+
+              {importSummary.invalid > 0 && (
+                <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-100 dark:border-danger-900/50 rounded-lg text-[11px] text-danger-700 dark:text-danger-400 flex gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Warning:</strong> {importSummary.invalid} invalid rows will be skipped during import. Please check matching details.
+                  </div>
+                </div>
+              )}
+
+              <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                <table className="w-full text-left border-collapse text-[11px]">
+                  <thead>
+                    <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50 font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider sticky top-0 bg-white dark:bg-surface-900 z-10">
+                      <th className="px-4 py-2">SKU / Match</th>
+                      <th className="px-4 py-2">Pricing</th>
+                      <th className="px-4 py-2">Stock ({importStockMode === 'absolute' ? 'Abs' : 'Rel'})</th>
+                      <th className="px-4 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-surface-700 dark:text-surface-300">
+                    {validatedImportItems.map(item => {
+                      const hasPurchase = item.purchase_price !== '';
+                      const hasSelling = item.selling_price !== '';
+                      const hasQty = item.quantity !== '';
+                      const qtyNum = parseFloat(item.quantity) || 0;
+
+                      return (
+                        <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
+                          <td className="px-4 py-2">
+                            <span className="font-mono font-medium block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
+                            {item.dbProduct && <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>}
+                          </td>
+                          <td className="px-4 py-2">
+                            {item.dbProduct ? (
+                              <div className="space-y-0.5">
+                                {hasPurchase && (
+                                  <div>
+                                    <span className="text-surface-400">Buy: </span>
+                                    <span>{fmt(item.dbProduct.purchase_price)}</span>
+                                    <ChevronRight className="h-2.5 w-2.5 inline mx-1 text-surface-400" />
+                                    <span className="font-semibold text-success-600">{fmt(item.purchase_price)}</span>
+                                  </div>
+                                )}
+                                {hasSelling && (
+                                  <div>
+                                    <span className="text-surface-400">Sell: </span>
+                                    <span>{fmt(item.dbProduct.selling_price)}</span>
+                                    <ChevronRight className="h-2.5 w-2.5 inline mx-1 text-surface-400" />
+                                    <span className="font-semibold text-success-600">{fmt(item.selling_price)}</span>
+                                  </div>
+                                )}
+                                {!hasPurchase && !hasSelling && <span className="text-surface-400 italic">No price change</span>}
+                              </div>
+                            ) : (
+                              <span className="text-surface-400 italic">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {item.dbProduct ? (
+                              hasQty ? (
+                                <div className="flex items-center gap-1">
+                                  <span>{fmtQty(item.dbProduct.available)}</span>
+                                  <ChevronRight className="h-2.5 w-2.5 text-surface-400" />
+                                  <span className="font-semibold text-primary-600 dark:text-primary-400">
+                                    {importStockMode === 'absolute' 
+                                      ? fmtQty(qtyNum)
+                                      : fmtQty(parseFloat(item.dbProduct.available) + qtyNum)
+                                    }
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-surface-400 italic">No stock change</span>
+                              )
+                            ) : (
+                              <span className="text-surface-400 italic">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {item.isValid ? (
+                              <Badge variant="success" size="sm">Ready</Badge>
+                            ) : (
+                              <div className="space-y-0.5">
+                                {item.errors.map((err, i) => (
+                                  <div key={i} className="text-danger-600 dark:text-danger-400 flex items-center gap-1 text-[9px]">
+                                    <AlertCircle className="h-2.5 w-2.5 shrink-0" /> {err}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 dark:border-surface-700">
+            <Button type="button" variant="secondary" onClick={() => setIsImportOpen(false)} disabled={importing}>Cancel</Button>
+            <Button
+              type="button"
+              loading={importing}
+              onClick={handleImportSubmit}
+              disabled={importSummary.valid === 0}
+            >
+              Confirm Import ({importSummary.valid} items)
+            </Button>
           </div>
         </div>
       </Modal>

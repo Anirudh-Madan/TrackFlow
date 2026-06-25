@@ -32,6 +32,8 @@ router.delete('/pricing/:id', c.deletePricing);
 
 // Products
 router.get('/',       c.getProducts);
+router.post('/bulk-import', c.bulkImport);
+router.get('/import-history', c.getImportHistory);
 router.post('/',      c.createProduct);
 router.put('/:id',    c.updateProduct);
 router.delete('/:id', c.deleteProduct);
