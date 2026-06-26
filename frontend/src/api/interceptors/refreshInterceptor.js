@@ -17,7 +17,7 @@ export function attachRefreshInterceptor(client) {
     async (error) => {
       const orig = error.config
 
-      if (error.response?.status !== 401 || orig._retry) {
+      if (error.response?.status !== 401 || orig._retry || orig.url?.includes('/auth/login')) {
         const msg = error.response?.data?.error || error.message || 'Something went wrong'
         return Promise.reject(new Error(msg))
       }
