@@ -4,6 +4,17 @@
 
 ---
 
+## Implementation Status
+> [!NOTE]
+> This document describes the **complete target architecture and vision** for the Enterprise ERP. 
+> 
+> The current actual file structure represents a work-in-progress state. Some planned features, middleware layers (like RBAC/Audit guards), and service/repository abstractions are currently simplified or pending full implementation.
+> 
+> For the accurate, current state of the codebase, please refer to:
+> - `02_Frontend structure.md`
+> - `03_Backend structure.md`
+
+---
 ## 1. High-Level Architecture
 
 ```
