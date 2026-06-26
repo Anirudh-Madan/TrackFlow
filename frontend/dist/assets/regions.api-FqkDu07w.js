@@ -1,0 +1,1 @@
+import{O as e}from"./index-fP-tnhl0.js";var t=()=>e.get(`/regions`),n=t=>e.post(`/regions`,t),r=(t,n)=>e.put(`/regions/${t}`,n),i=t=>e.delete(`/regions/${t}`);export{r as i,i as n,t as r,n as t};
