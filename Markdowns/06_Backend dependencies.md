@@ -1,6 +1,6 @@
 # BACKEND_DEPENDENCIES.md
 ## Enterprise ERP — Backend Package Reference
-### Node.js + Express + Sequelize + MySQL
+### Node.js + Express 5 + Sequelize + MySQL
 
 ---
 
@@ -8,38 +8,40 @@
 
 | Package | Version | Purpose |
 |---|---|---|
-| `express` | ^4.19.0 | HTTP web framework. Route definitions, middleware chain, request/response handling. |
-| `sequelize` | ^6.37.0 | ORM for MySQL. Model definitions, migrations, associations, query builder. |
-| `mysql2` | ^3.10.0 | MySQL driver. Used by Sequelize under the hood. Supports connection pooling and prepared statements. |
-| `jsonwebtoken` | ^9.0.0 | JWT access token signing and verification. Used in auth middleware. |
-| `bcrypt` | ^5.1.0 | Password hashing. All passwords hashed with bcrypt before storage (cost factor 12). |
-| `socket.io` | ^4.7.0 | WebSocket server. Real-time event delivery to role/user rooms. Notifications, order updates, stock alerts. |
-| `multer` | ^1.4.5 | Multipart form data handling. File upload middleware for Excel imports and price list uploads. |
+| `express` | ^5.2.1 | HTTP web framework. Route definitions, middleware chain, request/response handling. |
+| `sequelize` | ^6.37.8 | ORM for MySQL. Model definitions, associations, query builder. |
+| `mysql2` | ^3.22.5 | MySQL driver. Used by Sequelize under the hood. Supports connection pooling and prepared statements. |
+| `jsonwebtoken` | ^9.0.3 | JWT access token signing and verification. Used in auth middleware. |
+| `bcrypt` | ^6.0.0 | Password hashing. All passwords hashed with bcrypt before storage. |
+| `socket.io` | ^4.8.3 | WebSocket server. Real-time event delivery to role/user rooms. Notifications, order updates, stock alerts. |
+| `multer` | ^2.2.0 | Multipart form data handling. File upload middleware for Excel imports and price list uploads. |
 | `exceljs` | ^4.4.0 | Excel file reading and writing. Powers import parsing, export generation, and price list processing. |
-| `pdfkit` | ^0.15.0 | PDF generation. Challan PDFs, dispatch summary, stock reports, audit exports. |
-| `node-cron` | ^3.0.0 | Cron job scheduler. Runs stock alert checks, credit sweeps, session cleanup on schedule. |
-| `express-validator` | ^7.1.0 | Request validation. Validates body, params, query on every incoming request. Returns structured 422 errors. |
-| `helmet` | ^7.1.0 | Security headers middleware. Sets Content-Security-Policy, X-Frame-Options, and other protective headers. |
-| `cors` | ^2.8.5 | CORS middleware. Allows requests from configured frontend origin only. |
-| `express-rate-limit` | ^7.3.0 | Rate limiting. Prevents brute-force attacks on login and API endpoints. |
-| `dotenv` | ^16.4.0 | Environment variable loading from `.env` file into `process.env`. |
-| `uuid` | ^10.0.0 | UUID generation for unique document numbers (challan, dispatch, payment). |
-| `winston` | ^3.13.0 | Application logging. Structured JSON logs with log levels. Transport to console in dev, file in prod. |
-| `morgan` | ^1.10.0 | HTTP request logging middleware. Logs method, URL, status, response time. Feeds into Winston. |
+| `pdfkit` | ^0.19.1 | PDF generation. Challan PDFs, dispatch summary, stock reports, audit exports. |
+| `node-cron` | ^4.5.0 | Cron job scheduler. Runs stock alert checks, credit sweeps, session cleanup on schedule. |
+| `express-validator` | ^7.3.2 | Request validation. Validates body, params, query on every incoming request. Returns structured 422 errors. |
+| `helmet` | ^8.2.0 | Security headers middleware. Sets Content-Security-Policy, X-Frame-Options, and other protective headers. |
+| `cors` | ^2.8.6 | CORS middleware. Allows requests from configured frontend origin only. |
+| `express-rate-limit` | ^8.5.2 | Rate limiting. Prevents brute-force attacks on login and API endpoints. |
+| `dotenv` | ^17.4.2 | Environment variable loading from `.env` file into `process.env`. |
+| `uuid` | ^14.0.1 | UUID generation for unique document numbers (challan, dispatch, payment). |
+| `winston` | ^3.19.0 | Application logging. Structured JSON logs with log levels. Transport to console in dev, file in prod. |
+| `morgan` | ^1.11.0 | HTTP request logging middleware. Logs method, URL, status, response time. Feeds into Winston. |
 
 ---
 
 ## Dev Dependencies
 
-| Package | Purpose |
-|---|---|
-| `nodemon` | ^3.1.0 | Auto-restarts Node server on file changes during development. |
-| `sequelize-cli` | ^6.6.0 | CLI for running migrations and seeders (`db:migrate`, `db:seed`). |
-| `jest` | ^29.7.0 | Test runner for unit and integration tests. |
-| `supertest` | ^7.0.0 | HTTP assertion library for testing Express routes. Works with Jest. |
-| `eslint` | ^9.5.0 | JavaScript linter. Enforces backend code style. |
-| `prettier` | ^3.3.0 | Code formatter. |
-| `cross-env` | ^7.0.0 | Cross-platform environment variable setting. Used in npm scripts (`cross-env NODE_ENV=test`). |
+| Package | Version | Purpose |
+|---|---|---|
+| `nodemon` | ^3.1.14 | Auto-restarts Node server on file changes during development. |
+| `sequelize-cli` | ^6.6.5 | CLI for running migrations and seeders (`db:migrate`, `db:seed`). |
+| `jest` | ^30.4.2 | Test runner for unit and integration tests. |
+| `supertest` | ^7.2.2 | HTTP assertion library for testing Express routes. Works with Jest. |
+| `eslint` | ^10.5.0 | JavaScript linter. Enforces backend code style. |
+| `prettier` | ^3.8.4 | Code formatter. |
+| `cross-env` | ^10.1.0 | Cross-platform environment variable setting. Used in npm scripts (`cross-env NODE_ENV=test`). |
+
+
 
 ---
 

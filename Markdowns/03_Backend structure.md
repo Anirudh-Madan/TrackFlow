@@ -4,254 +4,98 @@
 
 ---
 
+
 ## Complete Folder Tree
 
 ```
-server/
-├── app.js                          # Express app setup (no listen here)
-├── server.js                       # HTTP server + Socket.io mount + listen
+backend/
+├── app.js                          # Express app setup (routes, middleware, no listen)
+├── server.js                       # HTTP server startup, Sequelize sync, seeding
 ├── .env                            # Environment variables (never committed)
 ├── .env.example                    # Template for env vars
 │
 ├── config/
-│   ├── database.js                 # Sequelize connection config (reads env)
-│   ├── jwt.js                      # JWT secret, expiry, refresh config
-│   ├── cors.js                     # CORS origin whitelist config
-│   ├── rateLimit.js                # Express rate limiter config
-│   └── cron.js                     # Cron job schedule strings
+│   └── database.js                 # Sequelize connection config (reads env)
 │
 ├── middleware/
 │   ├── authenticate.js             # JWT verification → req.user
-│   ├── authorize.js                # RBAC guard: checks permission code vs DB
-│   ├── firstLoginGuard.js          # Blocks all routes until password changed
-│   ├── requestValidator.js         # Runs express-validator, returns 422 on fail
-│   ├── auditInterceptor.js         # Wraps service calls, logs before/after state
-│   ├── errorHandler.js             # Central error handler (last middleware)
-│   ├── notFound.js                 # 404 handler for unmatched routes
-│   └── activityTracker.js          # Updates user.last_active_at on each request
-│
-├── modules/                        # Feature modules — one directory per domain
-│   │
-│   ├── auth/
-│   │   ├── auth.routes.js          # /api/v1/auth/* route definitions
-│   │   ├── auth.controller.js      # login, logout, refresh, changePassword
-│   │   ├── auth.service.js         # Business logic: verify password, issue tokens
-│   │   ├── auth.validators.js      # express-validator schemas for auth endpoints
-│   │   └── auth.repository.js      # DB queries: findByLoginId, saveRefreshToken
-│   │
-│   ├── users/
-│   │   ├── users.routes.js
-│   │   ├── users.controller.js
-│   │   ├── users.service.js        # create, edit, deactivate, reset password
-│   │   ├── users.validators.js
-│   │   └── users.repository.js
-│   │
-│   ├── regions/
-│   │   ├── regions.routes.js
-│   │   ├── regions.controller.js
-│   │   ├── regions.service.js
-│   │   ├── regions.validators.js
-│   │   └── regions.repository.js
-│   │
-│   ├── parties/
-│   │   ├── parties.routes.js
-│   │   ├── parties.controller.js
-│   │   ├── parties.service.js      # create, edit, credit check, ledger
-│   │   ├── parties.validators.js
-│   │   └── parties.repository.js
-│   │
-│   ├── products/
-│   │   ├── products.routes.js
-│   │   ├── products.controller.js
-│   │   ├── products.service.js     # CRUD, stock state computation
-│   │   ├── products.validators.js
-│   │   └── products.repository.js
-│   │
-│   ├── inventory/
-│   │   ├── inventory.routes.js
-│   │   ├── inventory.controller.js
-│   │   ├── inventory.service.js    # Stock1/Stock2 read, combined view, split view
-│   │   ├── inventory.validators.js
-│   │   └── inventory.repository.js
-│   │
-│   ├── inward/
-│   │   ├── inward.routes.js
-│   │   ├── inward.controller.js
-│   │   ├── inward.service.js       # Save entry, update stock2, trigger reorder auto-update
-│   │   ├── inward.validators.js
-│   │   └── inward.repository.js
-│   │
-│   ├── orders/
-│   │   ├── orders.routes.js
-│   │   ├── orders.controller.js
-│   │   ├── orders.service.js       # Full order lifecycle: create, approve, flag, cancel, clone
-│   │   ├── orders.validators.js
-│   │   └── orders.repository.js
-│   │
-│   ├── challans/
-│   │   ├── challans.routes.js
-│   │   ├── challans.controller.js
-│   │   ├── challans.service.js
-│   │   ├── challans.validators.js
-│   │   └── challans.repository.js
-│   │
-│   ├── dispatch/
-│   │   ├── dispatch.routes.js
-│   │   ├── dispatch.controller.js
-│   │   ├── dispatch.service.js     # Pick items, mark dispatched, deduct stock
-│   │   ├── dispatch.validators.js
-│   │   └── dispatch.repository.js
-│   │
-│   ├── payments/
-│   │   ├── payments.routes.js
-│   │   ├── payments.controller.js
-│   │   ├── payments.service.js     # Record payment, update outstanding, ageing
-│   │   ├── payments.validators.js
-│   │   └── payments.repository.js
-│   │
-│   ├── prices/
-│   │   ├── prices.routes.js
-│   │   ├── prices.controller.js
-│   │   ├── prices.service.js       # Parse Excel upload, preview, apply, archive old
-│   │   ├── prices.validators.js
-│   │   └── prices.repository.js
-│   │
-│   ├── reorder/
-│   │   ├── reorder.routes.js
-│   │   ├── reorder.controller.js
-│   │   ├── reorder.service.js      # Flag, update status, auto-update on inward
-│   │   ├── reorder.validators.js
-│   │   └── reorder.repository.js
-│   │
-│   ├── suggestions/
-│   │   ├── suggestions.routes.js
-│   │   ├── suggestions.controller.js
-│   │   ├── suggestions.service.js  # Query last 3 dispatched orders, apply filter rules
-│   │   └── suggestions.repository.js
-│   │
-│   ├── notifications/
-│   │   ├── notifications.routes.js
-│   │   ├── notifications.controller.js
-│   │   ├── notifications.service.js  # Create, persist, emit via socket
-│   │   └── notifications.repository.js
-│   │
-│   ├── audit/
-│   │   ├── audit.routes.js
-│   │   ├── audit.controller.js
-│   │   ├── audit.service.js        # Log, query (Admin only), export
-│   │   └── audit.repository.js
-│   │
-│   ├── import/
-│   │   ├── import.routes.js
-│   │   ├── import.controller.js
-│   │   ├── import.service.js       # Parse Excel, validate, preview, confirm
-│   │   └── import.repository.js
-│   │
-│   └── reports/
-│       ├── reports.routes.js
-│       ├── reports.controller.js
-│       └── reports.service.js      # Aggregations for dashboard + report pages
-│
-├── shared/                         # Cross-cutting shared utilities
-│   │
-│   ├── socket/
-│   │   ├── socketServer.js         # Socket.io setup, room management
-│   │   ├── socketAuth.js           # Socket handshake JWT verification
-│   │   └── socketEmitter.js        # Utility: emit to room or user by ID
-│   │
-│   ├── pdf/
-│   │   ├── pdfGenerator.js         # PDFKit wrapper, base layout
-│   │   ├── templates/
-│   │   │   ├── challanPdf.js       # Challan PDF template
-│   │   │   ├── dispatchSummaryPdf.js
-│   │   │   ├── stockReportPdf.js
-│   │   │   └── auditReportPdf.js
-│   │   └── pdfStorage.js           # Save to disk, return file path
-│   │
-│   ├── excel/
-│   │   ├── excelReader.js          # ExcelJS: parse uploaded workbooks
-│   │   ├── excelWriter.js          # ExcelJS: generate export workbooks
-│   │   └── templates/
-│   │       ├── productTemplate.js  # Define columns for product import template
-│   │       ├── partyTemplate.js
-│   │       └── priceListParser.js  # Cummins/Meritor/Lucas Delphi format parser
-│   │
-│   ├── storage/
-│   │   └── fileStorage.js          # Multer config: disk storage, file naming
-│   │
-│   ├── notifications/
-│   │   └── notificationDispatcher.js  # Called by services → creates DB record + socket emit
-│   │
-│   ├── audit/
-│   │   └── auditLogger.js          # Called by auditInterceptor → appends to audit_logs
-│   │
-│   └── errors/
-│       ├── AppError.js             # Base error class with statusCode + errorCode
-│       ├── ValidationError.js
-│       ├── NotFoundError.js
-│       ├── UnauthorizedError.js
-│       ├── ForbiddenError.js
-│       └── BusinessRuleError.js    # e.g. CreditLimitExceeded, OrderLocked
+│   └── errorHandler.js             # Central error handler (last middleware)
 │
 ├── models/                         # Sequelize model definitions
 │   ├── index.js                    # Model registry + association definitions
-│   ├── User.js
-│   ├── Role.js
-│   ├── Permission.js
-│   ├── RolePermission.js
-│   ├── RefreshToken.js
-│   ├── LoginAttempt.js
-│   ├── Region.js
-│   ├── Party.js
-│   ├── PartyRateCard.js
-│   ├── Product.js
-│   ├── ProductCategory.js
-│   ├── ProductCustomField.js
-│   ├── PriceHistory.js
-│   ├── Stock.js                    # Combined: stock1_qty + stock2_qty + dual_tracking_active
-│   ├── StockMovement.js            # Immutable ledger
+│   ├── AuditLog.js
+│   ├── Challan.js                  # 1:1 with Order after approval
+│   ├── CreditLimitHistory.js       # Tracks credit limit changes per party
+│   ├── Customer.js                 # Customer/party master
+│   ├── InventoryAdjustment.js      # Manual stock adjustment records
 │   ├── InwardEntry.js
 │   ├── InwardItem.js
+│   ├── LoginAttempt.js             # Brute-force lockout tracking
 │   ├── Order.js
 │   ├── OrderItem.js
 │   ├── OrderStatusHistory.js
-│   ├── Challan.js                  # 1:1 with Order after approval
-│   ├── Dispatch.js
-│   ├── DispatchItem.js
-│   ├── Payment.js
+│   ├── Pricing.js                  # Per-product/party pricing records
+│   ├── Product.js
+│   ├── ProductCategory.js
+│   ├── RefreshToken.js
+│   ├── Region.js
 │   ├── ReorderFlag.js
-│   ├── Notification.js
-│   ├── NotificationRecipient.js
-│   ├── AuditLog.js
-│   ├── ImportHistory.js
-│   └── GeneratedDocument.js
+│   ├── Role.js
+│   ├── StockDamaged.js             # Damaged/written-off stock tracking
+│   ├── StockOnHand.js              # Live available quantity per product
+│   ├── StockReserved.js            # Quantity reserved for approved orders
+│   ├── StockTransaction.js         # Immutable stock movement ledger
+│   ├── UnitOfMeasure.js
+│   ├── User.js
+│   ├── Vendor.js
+│   ├── VendorContact.js
+│   └── VendorProductMapping.js     # Links vendors to products with purchase price
 │
-├── migrations/                     # Sequelize migrations (ordered, numbered)
-│   ├── 001-create-roles.js
-│   ├── 002-create-permissions.js
-│   ├── 003-create-users.js
-│   ├── 004-create-regions.js
-│   ├── ...
-│   └── 030-create-generated-documents.js
-│
-├── seeders/                        # Sequelize seeders
-│   ├── 001-seed-roles.js
-│   ├── 002-seed-permissions.js     # Seeds full permission matrix
-│   └── 003-seed-admin-user.js      # Seeds default admin account
-│
-├── jobs/                           # Cron job definitions
-│   ├── jobScheduler.js             # node-cron: registers all jobs
-│   ├── stockAlertJob.js            # Every 6h: check low/OOS stock → notify
-│   ├── creditSweepJob.js           # Daily: check all parties for credit breaches
-│   ├── sessionCleanupJob.js        # Hourly: revoke expired refresh tokens
-│   └── suggestionRefreshJob.js     # Hourly: pre-compute suggestion sets (optional cache)
-│
-└── utils/
-    ├── response.js                 # Standard response envelope helpers
-    ├── pagination.js               # Extract page/limit/sort from query params
-    ├── dateUtils.js                # Date formatting, ageing calculation
-    ├── numberUtils.js              # Currency rounding helpers
-    └── constants.js                # Shared string constants (statuses, etc.)
+└── modules/                        # Feature modules — controller + routes per domain
+    │
+    ├── auth/
+    │   ├── auth.routes.js          # /api/v1/auth/*
+    │   └── auth.controller.js      # login, logout, refresh, changePassword
+    │
+    ├── users/
+    │   ├── users.routes.js
+    │   └── users.controller.js
+    │
+    ├── regions/
+    │   ├── regions.routes.js
+    │   └── regions.controller.js
+    │
+    ├── customers/                  # Customer/party module (mapped from parties on frontend)
+    │   ├── customers.routes.js
+    │   └── customers.controller.js
+    │
+    ├── vendors/
+    │   ├── vendors.routes.js
+    │   └── vendors.controller.js
+    │
+    ├── products/
+    │   ├── products.routes.js
+    │   └── products.controller.js
+    │
+    ├── inventory/
+    │   ├── inventory.routes.js
+    │   └── inventory.controller.js
+    │
+    ├── inward/
+    │   ├── inward.routes.js
+    │   └── inward.controller.js
+    │
+    ├── orders/
+    │   ├── orders.routes.js
+    │   └── orders.controller.js
+    │
+    ├── challans/
+    │   ├── challans.routes.js
+    │   └── challans.controller.js
+    │
+    └── reorder/
+        ├── reorder.routes.js
+        └── reorder.controller.js
 ```
 
 ---
