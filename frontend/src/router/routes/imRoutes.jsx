@@ -5,7 +5,7 @@ import { PageLoader } from '../../components/ui/Spinner'
 import IMDashboard from '../../modules/dashboard/im/IMDashboard'
 
 // Lazy
-const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
+const ProductsListPage  = lazy(() => import('../../modules/products/pages/ProductsListPage'))
 const InwardListPage    = lazy(() => import('../../modules/inward/pages/InwardListPage'))
 const InwardNewPage     = lazy(() => import('../../modules/inward/pages/InwardNewPage'))
 const InwardDetailPage  = lazy(() => import('../../modules/inward/pages/InwardDetailPage'))
@@ -24,7 +24,7 @@ const Wrap = ({ children }) => (
 export const imRoutes = [
   { index: true, element: <IMDashboard /> },
   { path: 'dashboard', element: <IMDashboard /> },
-  { path: 'stock', element: <Wrap><StockOverviewPage /></Wrap> },
+  { path: 'products', element: <Wrap><ProductsListPage /></Wrap> },
   { path: 'inward', element: <Wrap><InwardListPage /></Wrap> },
   { path: 'inward/new', element: <Wrap><InwardNewPage /></Wrap> },
   { path: 'inward/:id', element: <Wrap><InwardDetailPage /></Wrap> },

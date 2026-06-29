@@ -16,7 +16,6 @@ const ProductsListPage  = lazy(() => import('../../modules/products/pages/Produc
 const ProductDetailPage = lazy(() => import('../../modules/products/pages/ProductDetailPage'))
 const ProductCreatePage = lazy(() => import('../../modules/products/pages/ProductCreatePage'))
 
-const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
 
 const OrdersListPage   = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
 const DispatchQueuePage = lazy(() => import('../../modules/dispatch/pages/DispatchQueuePage'))
@@ -56,8 +55,7 @@ export const adminRoutes = [
   { path: 'products/new',        element: <Wrap><ProductCreatePage /></Wrap> },
   { path: 'products/:id',        element: <Wrap><ProductDetailPage /></Wrap> },
 
-  // Inventory (unified single page)
-  { path: 'inventory', element: <Wrap><StockOverviewPage /></Wrap> },
+
 
   // Orders & Challans
   { path: 'orders',              element: <Wrap><OrdersListPage /></Wrap> },

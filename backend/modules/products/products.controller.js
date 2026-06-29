@@ -48,7 +48,7 @@ exports.getProducts = async (req, res, next) => {
 
 exports.createProduct = async (req, res, next) => {
   try {
-    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks } = req.body;
+    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks, on_hand } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'Product name is required' });
     if (!sku?.trim()) return res.status(400).json({ success: false, error: 'SKU is required' });
@@ -69,8 +69,21 @@ exports.createProduct = async (req, res, next) => {
     });
 
     // Create initial stock rows
-    await StockOnHand.create({ product_id: product.id, quantity: 0 });
+    const initialQty = parseFloat(on_hand) > 0 ? parseFloat(on_hand) : 0;
+    await StockOnHand.create({ product_id: product.id, quantity: initialQty });
     await StockReserved.create({ product_id: product.id, quantity: 0 });
+
+    if (initialQty > 0) {
+      await StockTransaction.create({
+        product_id: product.id,
+        type: 'stock_in',
+        reference: 'INITIAL-STOCK',
+        quantity_change: initialQty,
+        quantity_after: initialQty,
+        performed_by: req.user.id,
+        notes: 'Initial stock during product creation',
+      });
+    }
 
     await AuditLog.create({
       actor_id: req.user.id, actor_name: req.user.name, actor_role: req.user.role,

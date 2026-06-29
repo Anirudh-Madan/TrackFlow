@@ -8,94 +8,83 @@
 ## Complete Folder Tree
 
 ```
-backend/
-├── app.js                          # Express app setup (routes, middleware, no listen)
-├── server.js                       # HTTP server startup, Sequelize sync, seeding
-├── .env                            # Environment variables (never committed)
-├── .env.example                    # Template for env vars
-│
-├── config/
-│   └── database.js                 # Sequelize connection config (reads env)
-│
-├── middleware/
-│   ├── authenticate.js             # JWT verification → req.user
-│   └── errorHandler.js             # Central error handler (last middleware)
-│
-├── models/                         # Sequelize model definitions
-│   ├── index.js                    # Model registry + association definitions
-│   ├── AuditLog.js
-│   ├── Challan.js                  # 1:1 with Order after approval
-│   ├── CreditLimitHistory.js       # Tracks credit limit changes per party
-│   ├── Customer.js                 # Customer/party master
-│   ├── InventoryAdjustment.js      # Manual stock adjustment records
-│   ├── InwardEntry.js
-│   ├── InwardItem.js
-│   ├── LoginAttempt.js             # Brute-force lockout tracking
-│   ├── Order.js
-│   ├── OrderItem.js
-│   ├── OrderStatusHistory.js
-│   ├── Pricing.js                  # Per-product/party pricing records
-│   ├── Product.js
-│   ├── ProductCategory.js
-│   ├── RefreshToken.js
-│   ├── Region.js
-│   ├── ReorderFlag.js
-│   ├── Role.js
-│   ├── StockDamaged.js             # Damaged/written-off stock tracking
-│   ├── StockOnHand.js              # Live available quantity per product
-│   ├── StockReserved.js            # Quantity reserved for approved orders
-│   ├── StockTransaction.js         # Immutable stock movement ledger
-│   ├── UnitOfMeasure.js
-│   ├── User.js
-│   ├── Vendor.js
-│   ├── VendorContact.js
-│   └── VendorProductMapping.js     # Links vendors to products with purchase price
-│
-└── modules/                        # Feature modules — controller + routes per domain
-    │
-    ├── auth/
-    │   ├── auth.routes.js          # /api/v1/auth/*
-    │   └── auth.controller.js      # login, logout, refresh, changePassword
-    │
-    ├── users/
-    │   ├── users.routes.js
-    │   └── users.controller.js
-    │
-    ├── regions/
-    │   ├── regions.routes.js
-    │   └── regions.controller.js
-    │
-    ├── customers/                  # Customer/party module (mapped from parties on frontend)
-    │   ├── customers.routes.js
-    │   └── customers.controller.js
-    │
-    ├── vendors/
-    │   ├── vendors.routes.js
-    │   └── vendors.controller.js
-    │
-    ├── products/
-    │   ├── products.routes.js
-    │   └── products.controller.js
-    │
-    ├── inventory/
-    │   ├── inventory.routes.js
-    │   └── inventory.controller.js
-    │
-    ├── inward/
-    │   ├── inward.routes.js
-    │   └── inward.controller.js
-    │
-    ├── orders/
-    │   ├── orders.routes.js
-    │   └── orders.controller.js
-    │
-    ├── challans/
-    │   ├── challans.routes.js
-    │   └── challans.controller.js
-    │
-    └── reorder/
-        ├── reorder.routes.js
-        └── reorder.controller.js
+└── backend
+    ├── .env                        # Environment variables (never committed)
+    ├── .env.example                # Template for env vars
+    ├── app.js                      # Express app setup (routes, middleware, no listen)
+    ├── backend_start_output.txt
+    ├── check_challans_temp.js
+    ├── config
+    │   └── database.js             # Sequelize connection config (reads env)
+    ├── middleware
+    │   ├── authenticate.js         # JWT verification → req.user
+    │   └── errorHandler.js         # Central error handler (last middleware)
+    ├── models
+    │   ├── AuditLog.js
+    │   ├── Challan.js              # 1:1 with Order after approval
+    │   ├── CreditLimitHistory.js   # Tracks credit limit changes per party
+    │   ├── Customer.js             # Customer/party master
+    │   ├── index.js                # Model registry + association definitions
+    │   ├── InventoryAdjustment.js  # Manual stock adjustment records
+    │   ├── InwardEntry.js
+    │   ├── InwardItem.js
+    │   ├── LoginAttempt.js         # Brute-force lockout tracking
+    │   ├── Order.js
+    │   ├── OrderItem.js
+    │   ├── OrderStatusHistory.js
+    │   ├── Pricing.js              # Per-product/party pricing records
+    │   ├── Product.js
+    │   ├── ProductCategory.js
+    │   ├── RefreshToken.js
+    │   ├── Region.js
+    │   ├── ReorderFlag.js
+    │   ├── Role.js
+    │   ├── StockDamaged.js         # Damaged/written-off stock tracking
+    │   ├── StockOnHand.js          # Live available quantity per product
+    │   ├── StockReserved.js        # Quantity reserved for approved orders
+    │   ├── StockTransaction.js     # Immutable stock movement ledger
+    │   ├── UnitOfMeasure.js
+    │   ├── User.js
+    │   ├── Vendor.js
+    │   ├── VendorContact.js
+    │   └── VendorProductMapping.js # Links vendors to products with purchase price
+    ├── modules
+    │   ├── auth
+    │   │   ├── auth.controller.js  # login, logout, refresh, changePassword
+    │   │   └── auth.routes.js      # /api/v1/auth/*
+    │   ├── challans
+    │   │   ├── challans.controller.js
+    │   │   └── challans.routes.js
+    │   ├── customers
+    │   │   ├── customers.controller.js
+    │   │   └── customers.routes.js
+    │   ├── inventory
+    │   │   ├── inventory.controller.js
+    │   │   └── inventory.routes.js
+    │   ├── inward
+    │   │   ├── inward.controller.js
+    │   │   └── inward.routes.js
+    │   ├── orders
+    │   │   ├── orders.controller.js
+    │   │   └── orders.routes.js
+    │   ├── products
+    │   │   ├── products.controller.js
+    │   │   └── products.routes.js
+    │   ├── regions
+    │   │   ├── regions.controller.js
+    │   │   └── regions.routes.js
+    │   ├── reorder
+    │   │   ├── reorder.controller.js
+    │   │   └── reorder.routes.js
+    │   ├── users
+    │   │   ├── users.controller.js
+    │   │   └── users.routes.js
+    │   └── vendors
+    │       ├── vendors.controller.js
+    │       └── vendors.routes.js
+    ├── package-lock.json
+    ├── package.json
+    └── server.js                   # HTTP server startup, Sequelize sync, seeding
 ```
 
 ---
