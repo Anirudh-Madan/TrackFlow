@@ -660,6 +660,7 @@ export default function ProductsListPage() {
         // Map headers dynamically to known keys
         const headerMaps = {
           sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number'],
+          name: ['name', 'product_name', 'product name', 'item_name', 'title'],
           purchase_price: ['purchase_price', 'purchase price', 'purchase', 'buy_price', 'cost_price', 'cost'],
           dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price'],
           selling_price: ['selling_price', 'selling price', 'selling', 'sell_price', 'mrp', 'price'],
@@ -680,6 +681,7 @@ export default function ProductsListPage() {
 
         const normalizedRows = rawRows.map(row => {
           const sku = findMappedValue(row, headerMaps.sku)
+          const name = findMappedValue(row, headerMaps.name)
           const purchase_price = findMappedValue(row, headerMaps.purchase_price)
           const dealer_landing_price = findMappedValue(row, headerMaps.dealer_landing_price)
           const selling_price = findMappedValue(row, headerMaps.selling_price)
@@ -687,12 +689,13 @@ export default function ProductsListPage() {
 
           return {
             sku: sku || '',
+            name: name !== undefined ? name : '',
             purchase_price: purchase_price !== undefined ? purchase_price : '',
             dealer_landing_price: dealer_landing_price !== undefined ? dealer_landing_price : '',
             selling_price: selling_price !== undefined ? selling_price : '',
             quantity: quantity !== undefined ? quantity : ''
           }
-        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity)
+        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.name)
 
         setParsedImportData(normalizedRows)
         toast.success(`Successfully parsed ${normalizedRows.length} rows from file.`)
@@ -718,8 +721,8 @@ export default function ProductsListPage() {
       const errors = []
       if (!item.sku?.trim()) {
         errors.push('SKU is missing')
-      } else if (!dbProduct) {
-        errors.push('SKU not found in catalog')
+      } else if (!dbProduct && !item.name?.trim()) {
+        errors.push('New SKUs must include a Product Name')
       }
 
       const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
@@ -762,7 +765,7 @@ export default function ProductsListPage() {
   }, [validatedImportItems])
 
   const downloadImportTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,SKU,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,150.00,165.00,199.00,50\nSKU002,300.00,,399.00,120";
+    const csvContent = "data:text/csv;charset=utf-8,SKU,Product Name,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,,150.00,165.00,199.00,50\nSKU002,New Item,300.00,,399.00,120";
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
@@ -777,6 +780,7 @@ export default function ProductsListPage() {
       .filter(item => item.isValid)
       .map(item => ({
         sku: item.sku,
+        name: item.name !== '' ? item.name?.trim() : undefined,
         purchase_price: item.purchase_price !== '' ? parseFloat(item.purchase_price) : undefined,
         dealer_landing_price: item.dealer_landing_price !== '' ? parseFloat(item.dealer_landing_price) : undefined,
         selling_price: item.selling_price !== '' ? parseFloat(item.selling_price) : undefined,
@@ -797,8 +801,8 @@ export default function ProductsListPage() {
         notes: importNotes
       })
 
-      if (res.success) {
-        toast.success(res.message || 'Bulk import successful!')
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Bulk import successful!')
         // Reset state
         setParsedImportData([])
         setImportFileName('')
@@ -807,10 +811,10 @@ export default function ProductsListPage() {
         // Refresh products list on screen immediately!
         fetchAll()
       } else {
-        toast.error(res.error || 'Import failed')
+        toast.error(res.data?.error || 'Import failed')
       }
     } catch (err) {
-      toast.error(err.message || 'Error occurred during import')
+      toast.error(err.response?.data?.error || err.message || 'Error occurred during import')
     } finally {
       setImporting(false)
     }
@@ -1669,7 +1673,11 @@ export default function ProductsListPage() {
                         <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
                           <td className="px-4 py-2">
                             <span className="font-mono font-medium block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
-                            {item.dbProduct && <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>}
+                            {item.dbProduct ? (
+                              <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>
+                            ) : item.name ? (
+                              <span className="text-[10px] font-semibold text-primary-600 dark:text-primary-400">NEW: {item.name}</span>
+                            ) : null}
                           </td>
                           <td className="px-4 py-2">
                             {item.dbProduct ? (
@@ -1692,6 +1700,15 @@ export default function ProductsListPage() {
                                 )}
                                 {!hasPurchase && !hasSelling && <span className="text-surface-400 italic">No price change</span>}
                               </div>
+                            ) : item.isValid ? (
+                              <div className="space-y-0.5">
+                                {hasPurchase && (
+                                  <div><span className="text-surface-400">Buy: </span><span className="font-semibold text-success-600">{fmt(item.purchase_price)}</span></div>
+                                )}
+                                {hasSelling && (
+                                  <div><span className="text-surface-400">Sell: </span><span className="font-semibold text-success-600">{fmt(item.selling_price)}</span></div>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-surface-400 italic">—</span>
                             )}
@@ -1711,6 +1728,12 @@ export default function ProductsListPage() {
                                 </div>
                               ) : (
                                 <span className="text-surface-400 italic">No stock change</span>
+                              )
+                            ) : item.isValid ? (
+                              hasQty ? (
+                                <span className="font-semibold text-primary-600 dark:text-primary-400">{fmtQty(qtyNum)}</span>
+                              ) : (
+                                <span className="text-surface-400 italic">Initial: 0</span>
                               )
                             ) : (
                               <span className="text-surface-400 italic">—</span>
