@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../../store/authStore'
+import { getLowStock } from '../../../api/endpoints/inventory.api'
 import {
   ShoppingCart, TrendingUp, IndianRupee, Clock, AlertTriangle,
   CreditCard, RefreshCcw, Lightbulb, Users, ArrowUp, ArrowDown,
@@ -253,6 +254,31 @@ function StockStatusBadge({ status }) {
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user)
   const maxRevenue = Math.max(...REVENUE_BARS.map((b) => b.value))
+  const [lowStockItems, setLowStockItems] = useState([])
+  const [kpis, setKpis] = useState(KPI_DATA)
+
+  useEffect(() => {
+    async function fetchLowStock() {
+      try {
+        const res = await getLowStock();
+        if (res.data?.success) {
+          const items = res.data.data.slice(0, 5); // Take top 5
+          setLowStockItems(items);
+          
+          // Update KPI count
+          setKpis(prev => prev.map(kpi => {
+            if (kpi.id === 'low-stock') {
+              return { ...kpi, value: res.data.data.length.toString() };
+            }
+            return kpi;
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch low stock', error);
+      }
+    }
+    fetchLowStock();
+  }, []);
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -286,12 +312,12 @@ export default function AdminDashboard() {
 
       {/* ── KPI Grid ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-        {KPI_DATA.slice(0, 5).map((kpi) => (
+        {kpis.slice(0, 5).map((kpi) => (
           <KPICard key={kpi.id} kpi={kpi} />
         ))}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {KPI_DATA.slice(5).map((kpi) => (
+        {kpis.slice(5).map((kpi) => (
           <KPICard key={kpi.id} kpi={kpi} />
         ))}
       </div>
@@ -422,19 +448,25 @@ export default function AdminDashboard() {
               <thead>
                 <tr className="bg-surface-50 dark:bg-surface-800/50">
                   <th className="text-left px-5 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Product</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Stock 1</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Stock 2</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Reorder Qty</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">On Hand</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Reserved</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Reorder At</th>
                   <th className="text-left px-5 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {LOW_STOCK_ITEMS.map((item, i) => (
+                {lowStockItems.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-5 py-8 text-center text-surface-500 text-sm">
+                      No low stock alerts.
+                    </td>
+                  </tr>
+                ) : lowStockItems.map((item, i) => (
                   <tr
                     key={item.id}
                     className={cn(
                       'table-row-hover',
-                      i < LOW_STOCK_ITEMS.length - 1 && 'border-b border-surface-100 dark:border-surface-700/60'
+                      i < lowStockItems.length - 1 && 'border-b border-surface-100 dark:border-surface-700/60'
                     )}
                   >
                     <td className="px-5 py-3">
@@ -444,24 +476,21 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 text-right">
                       <span className={cn(
                         'text-xs font-semibold tabular-nums',
-                        item.stock1 === 0 ? 'text-danger-600' : item.stock1 < 10 ? 'text-warning-600' : 'text-surface-700 dark:text-surface-300'
+                        item.stockOnHand?.quantity === 0 ? 'text-danger-600' : (item.stockOnHand?.quantity < item.reorder_threshold ? 'text-warning-600' : 'text-surface-700 dark:text-surface-300')
                       )}>
-                        {item.stock1}
+                        {item.stockOnHand?.quantity || 0}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={cn(
-                        'text-xs font-semibold tabular-nums',
-                        item.stock2 === 0 ? 'text-danger-600' : item.stock2 < 5 ? 'text-warning-600' : 'text-surface-700 dark:text-surface-300'
-                      )}>
-                        {item.stock2}
+                      <span className="text-xs text-surface-600 dark:text-surface-400 tabular-nums">
+                        {item.stockReserved?.quantity || 0}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono text-surface-500 dark:text-surface-400 tabular-nums">
-                      {item.reorder}
+                      {item.reorder_threshold}
                     </td>
                     <td className="px-5 py-3">
-                      <StockStatusBadge status={item.status} />
+                      <StockStatusBadge status={item.stockOnHand?.quantity === 0 ? 'out' : (item.stockOnHand?.quantity <= item.reorder_threshold * 0.2 ? 'critical' : 'low')} />
                     </td>
                   </tr>
                 ))}

@@ -10,6 +10,10 @@ import {
   getPricing, createPricing, updatePricing, deletePricing,
   bulkImportProducts,
 } from '../../../api/endpoints/products.api'
+import {
+  getStockSummary, getLowStock, getTransactions,
+  getDamaged, recordDamage, getAdjustments, createAdjustment, placeReorder,
+} from '../../../api/endpoints/inventory.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
@@ -18,6 +22,7 @@ import {
   Plus, Search, Package, Tag, Ruler, TrendingUp, AlertCircle,
   Pencil, Trash2, ChevronRight, X, Calendar, Layers,
   FileSpreadsheet, FileUp, CheckCircle2, Info,
+  Activity, Wrench, ArrowUpCircle, ArrowDownCircle, RotateCcw, ShoppingCart, Boxes, AlertTriangle, Clock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
@@ -32,6 +37,7 @@ const productSchema = z.object({
   dealer_landing_price: z.coerce.number().min(0).optional().or(z.literal('')),
   selling_price:        z.coerce.number().min(0, 'Must be ≥ 0'),
   reorder_threshold:    z.coerce.number().int().min(0).optional(),
+  on_hand:              z.coerce.number().min(0).optional(),
   remarks:              z.string().optional().or(z.literal('')),
 })
 
@@ -97,6 +103,35 @@ function parseCSV(text) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => v != null ? `₹${parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'
+const fmtQty = (v) => v != null ? parseFloat(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'
+const SELECT_CLS = "input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")]"
+
+function StockBar({ available, onHand, threshold }) {
+  if (!onHand || onHand === 0) return <span className="text-surface-400 text-xs">No stock</span>
+  const pct = Math.min(100, (available / onHand) * 100)
+  const color = available <= 0 ? 'bg-danger-500' : available <= threshold ? 'bg-warning-500' : 'bg-success-500'
+  return (
+    <div className="flex items-center gap-2 min-w-[80px]">
+      <div className="flex-1 h-1.5 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${Math.max(0, pct)}%` }} />
+      </div>
+      <span className="text-xs font-mono text-surface-500 w-8 text-right">{Math.round(pct)}%</span>
+    </div>
+  )
+}
+
+function TypeIcon({ type }) {
+  const map = {
+    stock_in:   { Icon: ArrowUpCircle,   cls: 'text-success-500' },
+    dispatch:   { Icon: ArrowDownCircle, cls: 'text-danger-500' },
+    damage:     { Icon: AlertTriangle,   cls: 'text-warning-500' },
+    adjustment: { Icon: Wrench,          cls: 'text-primary-500' },
+    reserved:   { Icon: Clock,           cls: 'text-blue-500' },
+    released:   { Icon: RotateCcw,       cls: 'text-surface-400' },
+  }
+  const { Icon, cls } = map[type] || { Icon: Activity, cls: 'text-surface-400' }
+  return <Icon className={cn('h-4 w-4', cls)} />
+}
 
 function ErrorBanner({ msg }) {
   if (!msg) return null
@@ -178,6 +213,28 @@ export default function ProductsListPage() {
   const [pricingSearch, setPricingSearch] = useState('')
   const [activeTab, setActiveTab]       = useState('catalogue')
 
+  const [txnFilter,   setTxnFilter]   = useState({ product_id: '', type: '' })
+  const [dmgFilter,   setDmgFilter]   = useState('')
+  const [adjFilter,   setAdjFilter]   = useState('')
+
+  // Inventory states
+  const [transactions, setTransactions] = useState([])
+  const [damagedList, setDamagedList]   = useState([])
+  const [adjustments, setAdjustments]   = useState([])
+
+  // Inventory Modals
+  const [reorderOpen,  setReorderOpen]  = useState(false)
+  const [damageOpen,   setDamageOpen]   = useState(false)
+  const [adjOpen,      setAdjOpen]      = useState(false)
+  const [damageForm, setDamageForm] = useState({ product_id: '', quantity: '', damage_reason: '', remarks: '' })
+  const [adjForm,    setAdjForm]    = useState({ product_id: '', new_quantity: '', reason: '', remarks: '' })
+  const [damageErr,  setDamageErr]  = useState(null)
+  const [adjErr,     setAdjErr]     = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  
+  const [reorderQty,        setReorderQty]        = useState({})
+  const [reorderingProduct, setReorderingProduct] = useState(null)
+
   // Product modals
   const [isProdOpen, setIsProdOpen]     = useState(false)
   const [isProdDelete, setIsProdDelete] = useState(false)
@@ -209,7 +266,7 @@ export default function ProductsListPage() {
   // ── Forms ──────────────────────────────────────────────────────────────────
   const prodForm = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '' },
+    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, remarks: '' },
   })
 
   const catForm = useForm({
@@ -231,13 +288,17 @@ export default function ProductsListPage() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [pRes, cRes, uRes, prRes] = await Promise.all([
+      const [pRes, cRes, uRes, prRes, tRes, dRes, aRes] = await Promise.all([
         getProducts(), getCategories(), getUOM(), getPricing(),
+        getTransactions(), getDamaged(), getAdjustments()
       ])
       if (pRes.success)  setProducts(pRes.data)
       if (cRes.success)  setCategories(cRes.data)
       if (uRes.success)  setUoms(uRes.data)
       if (prRes.success) setPricing(prRes.data)
+      if (tRes.data?.success)  setTransactions(tRes.data.data)
+      if (dRes.data?.success)  setDamagedList(dRes.data.data)
+      if (aRes.data?.success)  setAdjustments(aRes.data.data)
     } catch (err) {
       toast.error(err.message || 'Failed to load products data')
     } finally {
@@ -256,6 +317,8 @@ export default function ProductsListPage() {
     return matchSearch && matchCat
   }), [products, search, catFilter])
 
+  const lowStock = useMemo(() => products.filter(p => p.is_low_stock), [products])
+
   const filteredPricing = useMemo(() => pricing.filter(pr => {
     if (!pricingSearch) return true
     const q = pricingSearch.toLowerCase()
@@ -265,11 +328,112 @@ export default function ProductsListPage() {
     )
   }), [pricing, pricingSearch])
 
+  const filteredTxns = useMemo(() => transactions.filter(t => {
+    if (txnFilter.product_id && String(t.product_id) !== txnFilter.product_id) return false
+    if (txnFilter.type && t.type !== txnFilter.type) return false
+    return true
+  }), [transactions, txnFilter])
+
+  const filteredDamaged = useMemo(() => damagedList.filter(d =>
+    !dmgFilter || String(d.product_id) === dmgFilter
+  ), [damagedList, dmgFilter])
+
+  const filteredAdj = useMemo(() => adjustments.filter(a =>
+    !adjFilter || String(a.product_id) === adjFilter
+  ), [adjustments, adjFilter])
+
+  // Summary Stats
+  const stats = useMemo(() => ({
+    totalProducts: products.length,
+    lowStockCount: lowStock.length,
+    totalOnHand:   products.reduce((s, p) => s + (p.on_hand || 0), 0),
+    totalDamaged:  damagedList.reduce((s, d) => s + parseFloat(d.quantity || 0), 0),
+  }), [products, lowStock, damagedList])
+
+  // ── Inventory Handlers ──────────────────────────────────────────────────────
+  const handleRecordDamage = async (e) => {
+    e.preventDefault()
+    setDamageErr(null)
+    if (!damageForm.product_id) return setDamageErr('Select a product')
+    if (!damageForm.quantity || parseFloat(damageForm.quantity) <= 0) return setDamageErr('Enter a valid quantity')
+    if (!damageForm.damage_reason.trim()) return setDamageErr('Damage reason is required')
+    setSubmitting(true)
+    try {
+      const res = await recordDamage({
+        product_id: parseInt(damageForm.product_id),
+        quantity: parseFloat(damageForm.quantity),
+        damage_reason: damageForm.damage_reason,
+        remarks: damageForm.remarks || undefined,
+      })
+      if (res.data?.success) {
+        toast.success('Damage recorded successfully')
+        setDamageOpen(false)
+        setDamageForm({ product_id: '', quantity: '', damage_reason: '', remarks: '' })
+        fetchAll()
+      } else {
+        setDamageErr(res.data?.error || 'Failed to record damage')
+      }
+    } catch (err) {
+      setDamageErr(err.response?.data?.error || 'Failed to record damage')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleAdjustment = async (e) => {
+    e.preventDefault()
+    setAdjErr(null)
+    if (!adjForm.product_id) return setAdjErr('Select a product')
+    if (adjForm.new_quantity === '' || adjForm.new_quantity == null) return setAdjErr('Enter the new quantity')
+    if (!adjForm.reason.trim()) return setAdjErr('Reason is required')
+    setSubmitting(true)
+    try {
+      const res = await createAdjustment({
+        product_id:   parseInt(adjForm.product_id),
+        new_quantity: parseFloat(adjForm.new_quantity),
+        reason:       adjForm.reason,
+        remarks:      adjForm.remarks || undefined,
+      })
+      if (res.data?.success) {
+        toast.success('Adjustment applied successfully')
+        setAdjOpen(false)
+        setAdjForm({ product_id: '', new_quantity: '', reason: '', remarks: '' })
+        fetchAll()
+      } else {
+        setAdjErr(res.data?.error || 'Failed to apply adjustment')
+      }
+    } catch (err) {
+      setAdjErr(err.response?.data?.error || 'Failed to apply adjustment')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleReorder = async (productId) => {
+    const qty = parseFloat(reorderQty[productId] || 0)
+    if (!qty || qty <= 0) return toast.error('Enter a valid quantity to order')
+    setReorderingProduct(productId)
+    try {
+      const res = await placeReorder({ product_id: productId, quantity: qty })
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Reorder placed')
+        setReorderQty(prev => ({ ...prev, [productId]: '' }))
+        fetchAll()
+      } else {
+        toast.error(res.data?.error || 'Reorder failed')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Reorder failed')
+    } finally {
+      setReorderingProduct(null)
+    }
+  }
+
   // ── Product handlers ───────────────────────────────────────────────────────
   const openCreateProduct = () => {
     setEditProduct(null)
     setProdError(null)
-    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '' })
+    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, remarks: '' })
     setIsProdOpen(true)
   }
 
@@ -285,6 +449,7 @@ export default function ProductsListPage() {
       dealer_landing_price: p.dealer_landing_price ? parseFloat(p.dealer_landing_price) : '',
       selling_price:        parseFloat(p.selling_price) || 0,
       reorder_threshold:    p.reorder_threshold || 0,
+      on_hand:              p.on_hand || 0,
       remarks:              p.remarks || '',
     })
     setIsProdOpen(true)
@@ -495,6 +660,7 @@ export default function ProductsListPage() {
         // Map headers dynamically to known keys
         const headerMaps = {
           sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number'],
+          name: ['name', 'product_name', 'product name', 'item_name', 'title'],
           purchase_price: ['purchase_price', 'purchase price', 'purchase', 'buy_price', 'cost_price', 'cost'],
           dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price'],
           selling_price: ['selling_price', 'selling price', 'selling', 'sell_price', 'mrp', 'price'],
@@ -515,6 +681,7 @@ export default function ProductsListPage() {
 
         const normalizedRows = rawRows.map(row => {
           const sku = findMappedValue(row, headerMaps.sku)
+          const name = findMappedValue(row, headerMaps.name)
           const purchase_price = findMappedValue(row, headerMaps.purchase_price)
           const dealer_landing_price = findMappedValue(row, headerMaps.dealer_landing_price)
           const selling_price = findMappedValue(row, headerMaps.selling_price)
@@ -522,12 +689,13 @@ export default function ProductsListPage() {
 
           return {
             sku: sku || '',
+            name: name !== undefined ? name : '',
             purchase_price: purchase_price !== undefined ? purchase_price : '',
             dealer_landing_price: dealer_landing_price !== undefined ? dealer_landing_price : '',
             selling_price: selling_price !== undefined ? selling_price : '',
             quantity: quantity !== undefined ? quantity : ''
           }
-        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity)
+        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.name)
 
         setParsedImportData(normalizedRows)
         toast.success(`Successfully parsed ${normalizedRows.length} rows from file.`)
@@ -553,8 +721,8 @@ export default function ProductsListPage() {
       const errors = []
       if (!item.sku?.trim()) {
         errors.push('SKU is missing')
-      } else if (!dbProduct) {
-        errors.push('SKU not found in catalog')
+      } else if (!dbProduct && !item.name?.trim()) {
+        errors.push('New SKUs must include a Product Name')
       }
 
       const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
@@ -597,7 +765,7 @@ export default function ProductsListPage() {
   }, [validatedImportItems])
 
   const downloadImportTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,SKU,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,150.00,165.00,199.00,50\nSKU002,300.00,,399.00,120";
+    const csvContent = "data:text/csv;charset=utf-8,SKU,Product Name,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,,150.00,165.00,199.00,50\nSKU002,New Item,300.00,,399.00,120";
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
@@ -612,6 +780,7 @@ export default function ProductsListPage() {
       .filter(item => item.isValid)
       .map(item => ({
         sku: item.sku,
+        name: item.name !== '' ? item.name?.trim() : undefined,
         purchase_price: item.purchase_price !== '' ? parseFloat(item.purchase_price) : undefined,
         dealer_landing_price: item.dealer_landing_price !== '' ? parseFloat(item.dealer_landing_price) : undefined,
         selling_price: item.selling_price !== '' ? parseFloat(item.selling_price) : undefined,
@@ -632,8 +801,8 @@ export default function ProductsListPage() {
         notes: importNotes
       })
 
-      if (res.success) {
-        toast.success(res.message || 'Bulk import successful!')
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Bulk import successful!')
         // Reset state
         setParsedImportData([])
         setImportFileName('')
@@ -642,10 +811,10 @@ export default function ProductsListPage() {
         // Refresh products list on screen immediately!
         fetchAll()
       } else {
-        toast.error(res.error || 'Import failed')
+        toast.error(res.data?.error || 'Import failed')
       }
     } catch (err) {
-      toast.error(err.message || 'Error occurred during import')
+      toast.error(err.response?.data?.error || err.message || 'Error occurred during import')
     } finally {
       setImporting(false)
     }
@@ -665,6 +834,51 @@ export default function ProductsListPage() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-6">
+
+      {/* ── Top Level Stats ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card p-4 flex flex-col justify-center relative overflow-hidden group">
+          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Boxes className="h-12 w-12 text-primary-500" />
+          </div>
+          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider">Total Products</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-surface-900 dark:text-surface-50">{stats.totalProducts}</span>
+          </div>
+        </div>
+
+        <div className="card p-4 flex flex-col justify-center relative overflow-hidden group">
+          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <AlertTriangle className={cn("h-12 w-12", stats.lowStockCount > 0 ? "text-danger-500" : "text-surface-500")} />
+          </div>
+          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider">Low Stock Alerts</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className={cn("text-2xl font-bold", stats.lowStockCount > 0 ? "text-danger-600 dark:text-danger-400" : "text-surface-900 dark:text-surface-50")}>
+              {stats.lowStockCount}
+            </span>
+          </div>
+        </div>
+
+        <div className="card p-4 flex flex-col justify-center relative overflow-hidden group">
+          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Package className="h-12 w-12 text-success-500" />
+          </div>
+          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider">Total On Hand</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-surface-900 dark:text-surface-50">{fmtQty(stats.totalOnHand)}</span>
+          </div>
+        </div>
+
+        <div className="card p-4 flex flex-col justify-center relative overflow-hidden group">
+          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Activity className="h-12 w-12 text-warning-500" />
+          </div>
+          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider">Total Damaged</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-surface-900 dark:text-surface-50">{fmtQty(stats.totalDamaged)}</span>
+          </div>
+        </div>
+      </div>
 
       {/* ── Products Tabs ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-6">
@@ -697,39 +911,106 @@ export default function ProductsListPage() {
             <TrendingUp className="h-4 w-4" />
             Pricing
           </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('transactions'); setSearch(''); }}
+            className={cn(
+              'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+              activeTab === 'transactions'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+            )}
+            id="transactions-tab"
+          >
+            <Activity className="h-4 w-4" />
+            Transactions
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('damaged'); setSearch(''); }}
+            className={cn(
+              'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+              activeTab === 'damaged'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+            )}
+            id="damaged-tab"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            Damaged Stock
+            {damagedList.length > 0 && (
+              <span className="ml-0.5 bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {damagedList.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('adjustments'); setSearch(''); }}
+            className={cn(
+              'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+              activeTab === 'adjustments'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+            )}
+            id="adjustments-tab"
+          >
+            <Wrench className="h-4 w-4" />
+            Adjustments
+          </button>
         </div>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
-              {activeTab === 'catalogue' ? 'Product Catalogue' : 'Pricing Versions'}
+              {activeTab === 'catalogue' && 'Product Catalogue'}
+              {activeTab === 'pricing' && 'Pricing Versions'}
+              {activeTab === 'transactions' && 'Stock Transactions Ledger'}
+              {activeTab === 'damaged' && 'Damaged Stock Returns'}
+              {activeTab === 'adjustments' && 'Stock Adjustments'}
             </h1>
             <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-              {activeTab === 'catalogue'
-                ? 'Browse and manage the product catalogue, categories, and reorder levels.'
-                : 'Versioned price records with effective dates for each product.'}
+              {activeTab === 'catalogue' && 'Browse and manage the product catalogue, categories, and reorder levels.'}
+              {activeTab === 'pricing' && 'Versioned price records with effective dates for each product.'}
+              {activeTab === 'transactions' && 'Complete audit trail of all inventory movements.'}
+              {activeTab === 'damaged' && 'Track and manage damaged goods.'}
+              {activeTab === 'adjustments' && 'Manual stock adjustments and cycle counts.'}
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            <Button variant="secondary" size="sm" icon={Layers} onClick={() => { catForm.reset({ name: '', parent_id: '', description: '' }); setEditCatId(null); setIsCatOpen(true) }}>
-              Categories
-            </Button>
-            <Button variant="secondary" size="sm" icon={Ruler} onClick={() => { uomForm.reset({ name: '', code: '', description: '' }); setEditUomId(null); setIsUomOpen(true) }}>
-              Units (UOM)
-            </Button>
             {activeTab === 'catalogue' && (
-              <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
-                Import CSV
-              </Button>
+              <>
+                <Button variant="secondary" size="sm" icon={Layers} onClick={() => { catForm.reset({ name: '', parent_id: '', description: '' }); setEditCatId(null); setIsCatOpen(true) }}>
+                  Categories
+                </Button>
+                <Button variant="secondary" size="sm" icon={Ruler} onClick={() => { uomForm.reset({ name: '', code: '', description: '' }); setEditUomId(null); setIsUomOpen(true) }}>
+                  Units (UOM)
+                </Button>
+                <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
+                  Import CSV
+                </Button>
+                <Button icon={Plus} size="md" onClick={openCreateProduct} className="w-full sm:w-auto">
+                  Add Product
+                </Button>
+              </>
             )}
-            {activeTab === 'catalogue' ? (
-              <Button icon={Plus} size="md" onClick={openCreateProduct} className="w-full sm:w-auto">
-                Add Product
-              </Button>
-            ) : (
+            
+            {activeTab === 'pricing' && (
               <Button icon={Plus} size="md" onClick={() => openCreatePricing()} className="w-full sm:w-auto">
                 Add Pricing
+              </Button>
+            )}
+
+            {activeTab === 'damaged' && (
+              <Button icon={AlertTriangle} size="md" variant="danger" onClick={() => { setDamageForm({ product_id: '', quantity: '', damage_reason: '', remarks: '' }); setDamageOpen(true) }}>
+                Record Damage
+              </Button>
+            )}
+
+            {activeTab === 'adjustments' && (
+              <Button icon={Wrench} size="md" onClick={() => { setAdjForm({ product_id: '', new_quantity: '', reason: '', remarks: '' }); setAdjOpen(true) }}>
+                Manual Adjustment
               </Button>
             )}
           </div>
@@ -1050,7 +1331,12 @@ export default function ProductsListPage() {
             <Input {...prodForm.register('selling_price')} label="Selling Price (₹)" type="number" step="0.01" required error={prodForm.formState.errors.selling_price?.message} />
           </div>
 
-          <Input {...prodForm.register('reorder_threshold')} label="Reorder Threshold (units)" type="number" placeholder="e.g. 50" error={prodForm.formState.errors.reorder_threshold?.message} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input {...prodForm.register('reorder_threshold')} label="Reorder Threshold (units)" type="number" placeholder="e.g. 50" error={prodForm.formState.errors.reorder_threshold?.message} />
+            {!editProduct && (
+              <Input {...prodForm.register('on_hand')} label="Initial Stock (On Hand)" type="number" placeholder="e.g. 100" error={prodForm.formState.errors.on_hand?.message} />
+            )}
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Remarks</label>
@@ -1387,7 +1673,11 @@ export default function ProductsListPage() {
                         <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
                           <td className="px-4 py-2">
                             <span className="font-mono font-medium block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
-                            {item.dbProduct && <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>}
+                            {item.dbProduct ? (
+                              <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>
+                            ) : item.name ? (
+                              <span className="text-[10px] font-semibold text-primary-600 dark:text-primary-400">NEW: {item.name}</span>
+                            ) : null}
                           </td>
                           <td className="px-4 py-2">
                             {item.dbProduct ? (
@@ -1410,6 +1700,15 @@ export default function ProductsListPage() {
                                 )}
                                 {!hasPurchase && !hasSelling && <span className="text-surface-400 italic">No price change</span>}
                               </div>
+                            ) : item.isValid ? (
+                              <div className="space-y-0.5">
+                                {hasPurchase && (
+                                  <div><span className="text-surface-400">Buy: </span><span className="font-semibold text-success-600">{fmt(item.purchase_price)}</span></div>
+                                )}
+                                {hasSelling && (
+                                  <div><span className="text-surface-400">Sell: </span><span className="font-semibold text-success-600">{fmt(item.selling_price)}</span></div>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-surface-400 italic">—</span>
                             )}
@@ -1429,6 +1728,12 @@ export default function ProductsListPage() {
                                 </div>
                               ) : (
                                 <span className="text-surface-400 italic">No stock change</span>
+                              )
+                            ) : item.isValid ? (
+                              hasQty ? (
+                                <span className="font-semibold text-primary-600 dark:text-primary-400">{fmtQty(qtyNum)}</span>
+                              ) : (
+                                <span className="text-surface-400 italic">Initial: 0</span>
                               )
                             ) : (
                               <span className="text-surface-400 italic">—</span>

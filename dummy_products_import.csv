@@ -1,0 +1,5 @@
+sku,name,purchase_price,selling_price,dealer_landing_price,quantity
+SK-004,Existing SK4,110.00,160.00,130.00,75
+SKU-NEW-1,New Hammer,50.00,100.00,75.00,2
+SKU-NEW-2,Wrench Set,150.00,250.00,200.00,0
+SKU-NEW-3,Nails Pack,10.00,30.00,20.00,500

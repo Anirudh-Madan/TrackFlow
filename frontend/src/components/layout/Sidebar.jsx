@@ -63,7 +63,7 @@ export default function Sidebar() {
 
           {/* Operations */}
           <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
-            <SidebarItem to="/im/stock" icon={Warehouse} label="Stock Overview" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/products" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
             <CollapsibleGroup label="Inward Entries" icon={FileUp} collapsed={sidebarCollapsed} defaultOpen>
               <SidebarItem to="/im/inward/new" icon={Plus} label="New Inward" collapsed={sidebarCollapsed} />
               <SidebarItem to="/im/inward" icon={History} label="Inward History" collapsed={sidebarCollapsed} />
@@ -127,8 +127,7 @@ export default function Sidebar() {
         <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
           <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/products" icon={Package} label="Products" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/inventory" icon={Warehouse} label="Inventory" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Fulfilment */}
