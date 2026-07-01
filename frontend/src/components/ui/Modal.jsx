@@ -60,7 +60,7 @@ export default function Modal({
               >
                 {/* Header */}
                 {(title || !hideClose) && (
-                  <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-surface-100 dark:border-surface-700 shrink-0">
+                  <div className="flex items-start justify-between px-4 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-surface-100 dark:border-surface-700 shrink-0">
                     <div>
                       {title && (
                         <Dialog.Title className="text-base font-semibold text-surface-900 dark:text-surface-100">
@@ -87,11 +87,11 @@ export default function Modal({
                 )}
 
                 {/* Body */}
-                <div className="px-6 py-5 overflow-y-auto flex-1">{children}</div>
+                <div className="px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto flex-1">{children}</div>
 
                 {/* Footer */}
                 {footer && (
-                  <div className="px-6 py-4 border-t border-surface-100 dark:border-surface-700 flex items-center justify-end gap-3 shrink-0 bg-surface-50/50 dark:bg-surface-800/50 rounded-b-2xl">
+                  <div className="px-4 sm:px-6 py-4 border-t border-surface-100 dark:border-surface-700 flex items-center justify-end gap-3 shrink-0 bg-surface-50/50 dark:bg-surface-800/50 rounded-b-2xl">
                     {footer}
                   </div>
                 )}

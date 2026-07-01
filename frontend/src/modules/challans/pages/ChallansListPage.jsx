@@ -27,111 +27,121 @@ function getChallanHTML(challan) {
       <meta charset="UTF-8" />
       <title>Delivery Challan — ${challan.id}</title>
       <style>
-        body { font-family: Arial, sans-serif; font-size: 12px; margin: 0; padding: 24px; color: #1e293b; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 16px; }
-        .logo { font-size: 22px; font-weight: 800; color: #4f46e5; letter-spacing: -0.5px; }
-        .logo span { color: #1e293b; }
-        .challan-title { text-align: right; }
-        .challan-title h2 { margin: 0; font-size: 16px; color: #4f46e5; }
-        .challan-title p { margin: 2px 0; color: #64748b; }
-        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-        .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
-        .meta-box h4 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; }
-        .meta-box p { margin: 3px 0; font-size: 12px; }
-        .meta-box .label { color: #64748b; font-size: 11px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-        thead tr { background: #4f46e5; color: white; }
-        th { padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
-        tr:nth-child(even) td { background: #f8fafc; }
-        .total-row td { font-weight: bold; background: #eef2ff; border-top: 2px solid #4f46e5; }
-        .footer { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
-        .sign-box { text-align: center; }
-        .sign-box .line { border-bottom: 1px solid #334155; margin-bottom: 6px; height: 40px; }
-        .sign-box p { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 600; }
-        .badge.delivered { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
-        .badge.in_transit { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; }
-        .badge.pending { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
-        .badge.cancelled { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .print-note { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 16px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; font-size: 13px; margin: 0; padding: 40px; color: #0f172a; }
+        
+        .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+        .company-info h1 { font-size: 22px; font-weight: 700; color: #1e3a8a; margin: 0 0 8px 0; letter-spacing: 0.5px; }
+        .company-info p { font-size: 12px; color: #334155; margin: 4px 0; font-weight: 500; }
+        
+        .challan-meta { text-align: right; }
+        .challan-number-box { border: 1.5px solid #1e293b; border-radius: 6px; padding: 6px 14px; display: inline-block; margin-bottom: 12px; }
+        .challan-number-box span:first-child { font-weight: 700; font-size: 13px; color: #1e3a8a; margin-right: 6px; }
+        .challan-number-box span:last-child { font-weight: 700; font-size: 15px; color: #0f172a; }
+        .challan-date { font-size: 12px; color: #475569; font-weight: 500; }
+        
+        .divider { border-top: 1px solid #1e293b; border-bottom: 2px solid #1e293b; height: 3px; margin: 20px 0; }
+        
+        .title-section { text-align: center; margin: 24px 0 32px 0; }
+        .title-section h2 { font-size: 14px; font-weight: 600; letter-spacing: 2.5px; color: #1e293b; margin: 0; }
+        
+        .customer-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
+        .customer-block h4 { font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .customer-block p { font-size: 14px; font-weight: 500; color: #1e3a8a; margin: 0; }
+        .customer-right { text-align: right; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+        th { text-align: left; font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+        th.text-right { text-align: right; }
+        th.text-center { text-align: center; }
+        td { padding: 16px 0; font-size: 13px; color: #0f172a; }
+        td.text-right { text-align: right; }
+        td.text-center { text-align: center; }
+        td.font-medium { font-weight: 500; color: #1e3a8a; }
+        
+        .summary-section { display: flex; justify-content: space-between; margin-bottom: 100px; }
+        .salesman-block { font-size: 12px; color: #475569; }
+        .salesman-block span { display: block; font-size: 15px; font-weight: 600; color: #1e3a8a; margin-top: 4px; }
+        .total-block { text-align: right; font-size: 12px; color: #475569; }
+        .total-block span { display: block; font-size: 16px; font-weight: 700; color: #1e3a8a; margin-top: 4px; }
+        
+        .footer-sig { text-align: right; margin-top: 60px; }
+        .footer-sig .line { border-top: 1px solid #0f172a; width: 220px; margin-left: auto; margin-bottom: 8px; }
+        .footer-sig p { font-size: 11px; color: #475569; margin: 0; }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div>
-          <div class="logo">Track<span>Flow</span></div>
-          <p style="margin:4px 0 0;color:#64748b;font-size:11px;">Enterprise Distribution Management</p>
+      <div class="header-container">
+        <div class="company-info">
+          <h1>SHREE RAMDEV MOTORS</h1>
+          <p>OLD POWER HOUSE ROAD, BIKANER</p>
+          <p>GSTIN: 08ALDPD3168N1ZW</p>
         </div>
-        <div class="challan-title">
-          <h2>DELIVERY CHALLAN</h2>
-          <p><strong>${challan.id}</strong></p>
-          <p>Date: ${challan.date}</p>
-          <p>Generated: ${now}</p>
-          <p><span class="badge ${challan.status}">${STATUS_CONFIG[challan.status]?.label || challan.status}</span></p>
+        <div class="challan-meta">
+          <div class="challan-number-box">
+            <span>No.</span><span>${challan.id.replace('CHN-', '')}</span>
+          </div>
+          <div class="challan-date">Date: ${new Date(challan.date).toLocaleDateString('en-IN').replace(/\//g, '-')}</div>
         </div>
       </div>
 
-      <div class="meta-grid">
-        <div class="meta-box">
-          <h4>Party Details</h4>
-          <p><strong>${challan.party_name}</strong></p>
-          <p><span class="label">City:</span> ${challan.party_city}</p>
-          <p><span class="label">Region:</span> ${challan.region}</p>
+      <div class="divider"></div>
+
+      <div class="title-section">
+        <h2>DELIVERY CHALLAN</h2>
+      </div>
+
+      <div class="customer-section">
+        <div class="customer-block">
+          <h4>CUSTOMER NAME</h4>
+          <p>${challan.party_name}</p>
         </div>
-        <div class="meta-box">
-          <h4>Dispatch Info</h4>
-          <p><span class="label">Order Ref:</span> <strong>${challan.order_ref}</strong></p>
-          <p><span class="label">Dispatched By:</span> ${challan.dispatched_by}</p>
-          <p><span class="label">Vehicle No:</span> ${challan.vehicle_no}</p>
-          <p><span class="label">Driver:</span> ${challan.driver}</p>
+        <div class="customer-block customer-right">
+          <h4>CUSTOMER COMPANY</h4>
+          <p>—</p>
         </div>
       </div>
 
       <table>
         <thead>
           <tr>
-            <th>#</th>
-            <th>SKU</th>
-            <th>Item Name</th>
-            <th>Quantity</th>
-            <th>Unit</th>
+            <th>SR</th>
+            <th>PART NUMBER</th>
+            <th>DESCRIPTION</th>
+            <th class="text-right">QTY</th>
+            <th class="text-right">PRICE/UNIT</th>
+            <th class="text-right">TOTAL</th>
           </tr>
         </thead>
         <tbody>
           ${challan.items.map((item, i) => `
             <tr>
               <td>${i + 1}</td>
-              <td>${item.sku}</td>
+              <td class="font-medium">${item.sku}</td>
               <td>${item.name}</td>
-              <td>${item.qty}</td>
-              <td>${item.unit}</td>
+              <td class="text-right font-medium">${item.qty}</td>
+              <td class="text-right font-medium">₹${item.price.toFixed(2)}</td>
+              <td class="text-right font-medium">₹${item.total.toFixed(2)}</td>
             </tr>
           `).join('')}
-          <tr class="total-row">
-            <td colspan="3">Total</td>
-            <td>${challan.total_qty}</td>
-            <td></td>
-          </tr>
         </tbody>
       </table>
 
-      <div class="footer">
-        <div class="sign-box">
-          <div class="line"></div>
-          <p>Prepared By</p>
+      <div class="summary-section">
+        <div class="salesman-block">
+          Salesman
+          <span>${challan.dispatched_by}</span>
         </div>
-        <div class="sign-box">
-          <div class="line"></div>
-          <p>Checked By</p>
-        </div>
-        <div class="sign-box">
-          <div class="line"></div>
-          <p>Receiver's Signature</p>
+        <div class="total-block">
+          Total Amount
+          <span>₹${challan.grand_total ? challan.grand_total.toFixed(2) : '0.00'}</span>
         </div>
       </div>
 
-      <p class="print-note">This is a computer-generated delivery challan. No signature required.</p>
+      <div class="footer-sig">
+        <div class="line"></div>
+        <p>Authorized Signature</p>
+      </div>
     </body>
     </html>
   `
@@ -185,10 +195,10 @@ export default function ChallansListPage() {
     setLoading(true)
     try {
       const res = await getChallans()
-      if (res.data?.success) {
-        setChallans(res.data.data)
+      if (res.success) {
+        setChallans(res.data)
       } else {
-        toast.error(res.data?.error || 'Failed to fetch challans')
+        toast.error(res.error || 'Failed to fetch challans')
       }
     } catch (err) {
       toast.error('Failed to load challans list')
@@ -213,7 +223,9 @@ export default function ChallansListPage() {
         sku: item.product?.sku || 'N/A',
         name: item.product?.name || 'N/A',
         qty: item.quantity,
-        unit: 'pcs'
+        unit: 'pcs',
+        price: parseFloat(item.sm_price || 0),
+        total: parseFloat(item.line_total || 0)
       }))
 
       const totalQty = items.reduce((sum, item) => sum + item.quantity, 0)
@@ -225,6 +237,9 @@ export default function ChallansListPage() {
       if (dbStatus === 'cancelled') status = 'cancelled'
       if (dbStatus === 'approved') status = 'in_transit'
 
+      const uniqueSuppliers = Array.from(new Set(items.map(i => i.product?.supplier).filter(Boolean)))
+      const supplierStr = uniqueSuppliers.length > 0 ? uniqueSuppliers.join(', ') : '—'
+
       return {
         id: c.challan_number,
         dbId: c.id,
@@ -234,9 +249,11 @@ export default function ChallansListPage() {
         party_city: region.name || 'N/A',
         region: region.name || 'N/A',
         dispatched_by: salesManager.name || 'N/A',
+        supplier: supplierStr,
         items: mappedItems,
         total_items: items.length,
         total_qty: totalQty,
+        grand_total: parseFloat(order.grand_total || 0),
         status,
         vehicle_no: '—',
         driver: '—',
@@ -317,16 +334,17 @@ export default function ChallansListPage() {
     }
 
     const headers = [
-      'Challan ID',
+      'Challan NO',
       'Order Ref',
       'Date',
-      'Party Name',
-      'Party City',
+      'CUSTOMER',
+      'COMPANY',
       'Region',
-      'Dispatched By',
+      'Salesman',
+      'Supplier',
       'Vehicle No',
       'Driver',
-      'SKU',
+      'Part No',
       'Item Name',
       'Quantity',
       'Unit'
@@ -343,6 +361,7 @@ export default function ChallansListPage() {
           c.party_city,
           c.region,
           c.dispatched_by,
+          c.supplier,
           c.vehicle_no,
           c.driver,
           item.sku,
@@ -491,16 +510,17 @@ export default function ChallansListPage() {
                 <p className="text-xs text-surface-500 mt-1">Try adjusting your search or filter.</p>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[1000px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                    <th className="px-5 py-3.5">Challan ID</th>
-                    <th className="px-5 py-3.5">Date</th>
-                    <th className="px-5 py-3.5">Party</th>
-                    <th className="px-5 py-3.5">Items</th>
-                    <th className="px-5 py-3.5">Dispatched By</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5 text-right">Actions</th>
+                    <th className="px-5 py-3.5">CHALLAN NO</th>
+                    <th className="px-5 py-3.5">DATE</th>
+                    <th className="px-5 py-3.5">CUSTOMER</th>
+                    <th className="px-5 py-3.5">COMPANY</th>
+                    <th className="px-5 py-3.5">SALESMAN</th>
+                    <th className="px-5 py-3.5">SUPPLIER</th>
+                    <th className="px-5 py-3.5">ITEMS</th>
+                    <th className="px-5 py-3.5 text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
@@ -517,16 +537,13 @@ export default function ChallansListPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
+                        <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">—</div>
+                      </td>
+                      <td className="px-5 py-4">
                         <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{c.party_name}</div>
                         <div className="text-xs text-surface-400 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3" /> {c.party_city} · {c.region}
                         </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-surface-700 dark:text-surface-300">
-                          <Package className="h-3.5 w-3.5 text-surface-400" />
-                          {c.total_items} SKUs, {c.total_qty} units
-                        </span>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5 text-xs text-surface-600 dark:text-surface-400">
@@ -534,7 +551,15 @@ export default function ChallansListPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <StatusBadge status={c.status} />
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300">
+                          {c.supplier}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-surface-700 dark:text-surface-300">
+                          <Package className="h-3.5 w-3.5 text-surface-400" />
+                          {c.total_items} SKUs, {c.total_qty} units
+                        </span>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
@@ -622,12 +647,12 @@ export default function ChallansListPage() {
             {/* Items Table */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Dispatched Items</p>
-              <div className="rounded-xl border border-surface-200 dark:border-surface-700 overflow-hidden">
-                <table className="w-full text-sm text-left border-collapse">
+              <div className="overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700">
+                <table className="w-full min-w-[600px] text-sm text-left border-collapse">
                   <thead className="bg-surface-50 dark:bg-surface-700/50">
                     <tr className="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">
                       <th className="px-4 py-2.5">#</th>
-                      <th className="px-4 py-2.5">SKU</th>
+                      <th className="px-4 py-2.5">Part No</th>
                       <th className="px-4 py-2.5">Item</th>
                       <th className="px-4 py-2.5 text-right">Qty</th>
                       <th className="px-4 py-2.5">Unit</th>

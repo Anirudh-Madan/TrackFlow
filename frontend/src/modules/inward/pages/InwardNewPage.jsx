@@ -22,8 +22,8 @@ export default function InwardNewPage() {
     async function loadProducts() {
       try {
         const res = await getProducts();
-        if (res.data?.success) {
-          setProducts(res.data.data);
+        if (res.success) {
+          setProducts(res.data);
         }
       } catch (error) {
         toast.error('Failed to load products catalogue');
@@ -74,11 +74,11 @@ export default function InwardNewPage() {
         })),
       });
 
-      if (res.data?.success) {
+      if (res.success) {
         toast.success('Inward entry recorded successfully!');
         navigate('/im/inward');
       } else {
-        toast.error(res.data?.error || 'Failed to create inward entry');
+        toast.error(res.error || 'Failed to create inward entry');
       }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create inward entry');

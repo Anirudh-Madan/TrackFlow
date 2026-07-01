@@ -48,7 +48,7 @@ exports.getProducts = async (req, res, next) => {
 
 exports.createProduct = async (req, res, next) => {
   try {
-    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks, on_hand } = req.body;
+    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, supplier, remarks, on_hand } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'Product name is required' });
     if (!sku?.trim()) return res.status(400).json({ success: false, error: 'SKU is required' });
@@ -65,6 +65,7 @@ exports.createProduct = async (req, res, next) => {
       dealer_landing_price: dealer_landing_price ? parseFloat(dealer_landing_price) : null,
       selling_price: parseFloat(selling_price) || 0,
       reorder_threshold: parseInt(reorder_threshold) || 0,
+      supplier: supplier || null,
       remarks: remarks || null,
     });
 
@@ -125,7 +126,7 @@ exports.updateProduct = async (req, res, next) => {
     const product = await Product.findByPk(req.params.id);
     if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
 
-    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks } = req.body;
+    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, supplier, remarks } = req.body;
 
     if (sku && sku.trim().toUpperCase() !== product.sku) {
       const existing = await Product.findOne({ where: { sku: sku.trim().toUpperCase() } });
@@ -140,6 +141,7 @@ exports.updateProduct = async (req, res, next) => {
     if (dealer_landing_price !== undefined) product.dealer_landing_price = dealer_landing_price ? parseFloat(dealer_landing_price) : null;
     if (selling_price !== undefined) product.selling_price = parseFloat(selling_price) || 0;
     if (reorder_threshold !== undefined) product.reorder_threshold = parseInt(reorder_threshold) || 0;
+    if (supplier !== undefined) product.supplier = supplier || null;
     if (remarks !== undefined) product.remarks = remarks || null;
 
     await product.save();

@@ -26,7 +26,7 @@ exports.getChallans = async (req, res, next) => {
               include: [{ model: Region, as: 'region', attributes: ['id', 'name', 'code'] }]
             },
             { model: User, as: 'salesManager', attributes: ['id', 'name'] },
-            { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
+            { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'supplier'] }] },
           ],
         },
       ],

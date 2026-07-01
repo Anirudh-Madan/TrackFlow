@@ -13,8 +13,8 @@ export default function InwardListPage() {
     async function loadInwards() {
       try {
         const res = await getInwards({ search });
-        if (res.data?.success) {
-          setEntries(res.data.data);
+        if (res.success) {
+          setEntries(res.data);
         }
       } catch (error) {
         toast.error('Failed to load inward entries list');
@@ -75,7 +75,7 @@ export default function InwardListPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full min-w-[1000px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/50 text-xs font-bold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
                   <th className="px-6 py-3.5">Entry Number</th>

@@ -13,8 +13,8 @@ export default function InwardDetailPage() {
     async function loadInwardDetails() {
       try {
         const res = await getInwardDetails(id);
-        if (res.data?.success) {
-          setEntry(res.data.data);
+        if (res.success) {
+          setEntry(res.data);
         } else {
           toast.error('Inward receipt details not found');
         }

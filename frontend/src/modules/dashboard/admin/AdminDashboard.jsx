@@ -261,14 +261,14 @@ export default function AdminDashboard() {
     async function fetchLowStock() {
       try {
         const res = await getLowStock();
-        if (res.data?.success) {
-          const items = res.data.data.slice(0, 5); // Take top 5
+        if (res.success) {
+          const items = res.data.slice(0, 5); // Take top 5
           setLowStockItems(items);
           
           // Update KPI count
           setKpis(prev => prev.map(kpi => {
             if (kpi.id === 'low-stock') {
-              return { ...kpi, value: res.data.data.length.toString() };
+              return { ...kpi, value: res.data.length.toString() };
             }
             return kpi;
           }));
@@ -291,7 +291,7 @@ export default function AdminDashboard() {
     <div className="space-y-6 animate-in pb-4">
 
       {/* ── Page header ── */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-2 mb-6">
         <div>
           <h1 className="text-xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
             {greeting()}, {user?.name?.split(' ')[0] || 'Admin'} 👋
@@ -311,12 +311,12 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── KPI Grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {kpis.slice(0, 5).map((kpi) => (
           <KPICard key={kpi.id} kpi={kpi} />
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {kpis.slice(5).map((kpi) => (
           <KPICard key={kpi.id} kpi={kpi} />
         ))}
@@ -444,7 +444,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" id="low-stock-table">
+            <table className="w-full text-sm min-w-[600px]" id="low-stock-table">
               <thead>
                 <tr className="bg-surface-50 dark:bg-surface-800/50">
                   <th className="text-left px-5 py-2.5 text-xs font-semibold text-surface-500 dark:text-surface-400">Product</th>

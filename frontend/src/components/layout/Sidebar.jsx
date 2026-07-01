@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore()
   const { unreadCount } = useNotificationStore()
   const { user } = useAuthStore()
 
@@ -164,15 +164,28 @@ export default function Sidebar() {
   };
 
   return (
-    <aside
-      id="admin-sidebar"
-      className={cn(
-        'flex flex-col h-full bg-white dark:bg-surface-900',
-        'border-r border-surface-200 dark:border-surface-800',
-        'sidebar-transition overflow-hidden shrink-0',
-        sidebarCollapsed ? 'w-16' : 'w-60'
+    <>
+      {/* Mobile Backdrop */}
+      {mobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-surface-900/50 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
       )}
-    >
+      
+      <aside
+        id="admin-sidebar"
+        className={cn(
+          'flex flex-col h-full bg-white dark:bg-surface-900',
+          'border-r border-surface-200 dark:border-surface-800',
+          'sidebar-transition overflow-hidden shrink-0',
+          // Mobile: fixed offcanvas
+          'fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out md:relative md:transform-none md:flex',
+          mobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0',
+          // Desktop: collapsible width
+          sidebarCollapsed ? 'md:w-16' : 'md:w-60'
+        )}
+      >
       {/* ── Logo ── */}
       <div
         className={cn(
@@ -233,6 +246,7 @@ export default function Sidebar() {
         </div>
       )}
     </aside>
+    </>
   )
 }
 
