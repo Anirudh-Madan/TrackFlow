@@ -39,6 +39,7 @@ const productSchema = z.object({
   reorder_threshold:    z.coerce.number().int().min(0).optional(),
   on_hand:              z.coerce.number().min(0).optional(),
   remarks:              z.string().optional().or(z.literal('')),
+  supplier:             z.string().optional().or(z.literal('')),
 })
 
 const categorySchema = z.object({
@@ -210,6 +211,7 @@ export default function ProductsListPage() {
   // Filter state
   const [search, setSearch]             = useState('')
   const [catFilter, setCatFilter]       = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')
   const [pricingSearch, setPricingSearch] = useState('')
   const [activeTab, setActiveTab]       = useState('catalogue')
 
@@ -266,7 +268,7 @@ export default function ProductsListPage() {
   // ── Forms ──────────────────────────────────────────────────────────────────
   const prodForm = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, remarks: '' },
+    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, supplier: '', remarks: '' },
   })
 
   const catForm = useForm({
@@ -314,8 +316,9 @@ export default function ProductsListPage() {
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase())
     const matchCat = !catFilter || String(p.category_id) === catFilter
-    return matchSearch && matchCat
-  }), [products, search, catFilter])
+    const matchSupplier = !supplierFilter || p.supplier === supplierFilter
+    return matchSearch && matchCat && matchSupplier
+  }), [products, search, catFilter, supplierFilter])
 
   const lowStock = useMemo(() => products.filter(p => p.is_low_stock), [products])
 
@@ -365,13 +368,13 @@ export default function ProductsListPage() {
         damage_reason: damageForm.damage_reason,
         remarks: damageForm.remarks || undefined,
       })
-      if (res.data?.success) {
+      if (res.success) {
         toast.success('Damage recorded successfully')
         setDamageOpen(false)
         setDamageForm({ product_id: '', quantity: '', damage_reason: '', remarks: '' })
         fetchAll()
       } else {
-        setDamageErr(res.data?.error || 'Failed to record damage')
+        setDamageErr(res.error || 'Failed to record damage')
       }
     } catch (err) {
       setDamageErr(err.response?.data?.error || 'Failed to record damage')
@@ -394,13 +397,13 @@ export default function ProductsListPage() {
         reason:       adjForm.reason,
         remarks:      adjForm.remarks || undefined,
       })
-      if (res.data?.success) {
+      if (res.success) {
         toast.success('Adjustment applied successfully')
         setAdjOpen(false)
         setAdjForm({ product_id: '', new_quantity: '', reason: '', remarks: '' })
         fetchAll()
       } else {
-        setAdjErr(res.data?.error || 'Failed to apply adjustment')
+        setAdjErr(res.error || 'Failed to apply adjustment')
       }
     } catch (err) {
       setAdjErr(err.response?.data?.error || 'Failed to apply adjustment')
@@ -415,12 +418,12 @@ export default function ProductsListPage() {
     setReorderingProduct(productId)
     try {
       const res = await placeReorder({ product_id: productId, quantity: qty })
-      if (res.data?.success) {
+      if (res.success) {
         toast.success(res.data.message || 'Reorder placed')
         setReorderQty(prev => ({ ...prev, [productId]: '' }))
         fetchAll()
       } else {
-        toast.error(res.data?.error || 'Reorder failed')
+        toast.error(res.error || 'Reorder failed')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Reorder failed')
@@ -433,7 +436,7 @@ export default function ProductsListPage() {
   const openCreateProduct = () => {
     setEditProduct(null)
     setProdError(null)
-    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, remarks: '' })
+    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, on_hand: 0, supplier: '', remarks: '' })
     setIsProdOpen(true)
   }
 
@@ -450,6 +453,7 @@ export default function ProductsListPage() {
       selling_price:        parseFloat(p.selling_price) || 0,
       reorder_threshold:    p.reorder_threshold || 0,
       on_hand:              p.on_hand || 0,
+      supplier:             p.supplier || '',
       remarks:              p.remarks || '',
     })
     setIsProdOpen(true)
@@ -463,6 +467,7 @@ export default function ProductsListPage() {
         category_id:          data.category_id ? parseInt(data.category_id) : null,
         uom_id:               data.uom_id ? parseInt(data.uom_id) : null,
         dealer_landing_price: data.dealer_landing_price !== '' ? data.dealer_landing_price : null,
+        supplier:             data.supplier !== '' ? data.supplier : null,
       }
       const res = editProduct
         ? await updateProduct(editProduct.id, payload)
@@ -801,7 +806,7 @@ export default function ProductsListPage() {
         notes: importNotes
       })
 
-      if (res.data?.success) {
+      if (res.success) {
         toast.success(res.data.message || 'Bulk import successful!')
         // Reset state
         setParsedImportData([])
@@ -811,7 +816,7 @@ export default function ProductsListPage() {
         // Refresh products list on screen immediately!
         fetchAll()
       } else {
-        toast.error(res.data?.error || 'Import failed')
+        toast.error(res.error || 'Import failed')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Error occurred during import')
@@ -882,7 +887,7 @@ export default function ProductsListPage() {
 
       {/* ── Products Tabs ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-6">
-        <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6">
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-surface-200 dark:border-surface-700 gap-6">
           <button
             type="button"
             onClick={() => { setActiveTab('catalogue'); setSearch(''); setPricingSearch('') }}
@@ -1026,7 +1031,7 @@ export default function ProductsListPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search by name or SKU..."
+                  placeholder="Search by name or Part No..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="input-base pl-9 py-1.5"
@@ -1047,9 +1052,22 @@ export default function ProductsListPage() {
                 </select>
               </div>
 
-              {catFilter && (
-                <button onClick={() => setCatFilter('')} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
-                  <X className="h-3.5 w-3.5" /> Clear filter
+              <div className="relative w-full sm:w-48">
+                <select
+                  value={supplierFilter}
+                  onChange={e => setSupplierFilter(e.target.value)}
+                  className={`input-base py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+                >
+                  <option value="">All Suppliers</option>
+                  {['Cummins', 'Lucas', 'Meritor', 'CCC', 'CTT', 'ZF', 'WEBCO'].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(catFilter || supplierFilter) && (
+                <button onClick={() => { setCatFilter(''); setSupplierFilter(''); }} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
+                  <X className="h-3.5 w-3.5" /> Clear filters
                 </button>
               )}
 
@@ -1073,11 +1091,12 @@ export default function ProductsListPage() {
                   </p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[1000px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                      <th className="px-6 py-3.5">SKU</th>
+                      <th className="px-6 py-3.5">Part No</th>
                       <th className="px-6 py-3.5">Product Name</th>
+                      <th className="px-6 py-3.5">Supplier</th>
                       <th className="px-6 py-3.5">Category</th>
                       <th className="px-6 py-3.5">UOM</th>
                       <th className="px-6 py-3.5">Stock</th>
@@ -1094,6 +1113,13 @@ export default function ProductsListPage() {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-surface-900 dark:text-surface-50">{p.name}</div>
                           {p.remarks && <div className="text-xs text-surface-400 mt-0.5 line-clamp-1 italic">{p.remarks}</div>}
+                        </td>
+                        <td className="px-6 py-4">
+                          {p.supplier ? (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300">
+                              {p.supplier}
+                            </span>
+                          ) : <span className="text-surface-400">—</span>}
                         </td>
                         <td className="px-6 py-4">
                           {p.category ? (
@@ -1186,7 +1212,7 @@ export default function ProductsListPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search by product name or SKU..."
+                  placeholder="Search by product name or Part No..."
                   value={pricingSearch}
                   onChange={e => setPricingSearch(e.target.value)}
                   className="input-base pl-9 py-1.5"
@@ -1209,7 +1235,7 @@ export default function ProductsListPage() {
                   <p className="text-xs text-surface-500 mt-1">Add a pricing version from the Products tab or click "Add Pricing".</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[1000px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
                       <th className="px-6 py-3.5">Product</th>
@@ -1292,7 +1318,7 @@ export default function ProductsListPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input {...prodForm.register('name')} label="Product Name" placeholder="e.g. Copper Wire 1.5mm" required error={prodForm.formState.errors.name?.message} icon={Package} />
-            <Input {...prodForm.register('sku')} label="SKU Code" placeholder="e.g. CW-1.5-RED" required error={prodForm.formState.errors.sku?.message} />
+            <Input {...prodForm.register('sku')} label="Part No" placeholder="e.g. CW-1.5-RED" required error={prodForm.formState.errors.sku?.message} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1321,6 +1347,21 @@ export default function ProductsListPage() {
               >
                 <option value="">— No UOM —</option>
                 {uoms.map(u => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-surface-700 dark:text-surface-300 flex items-center gap-1">
+                Supplier
+              </label>
+              <select
+                {...prodForm.register('supplier')}
+                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+              >
+                <option value="">— Select Supplier —</option>
+                {['Cummins', 'Lucas', 'Meritor', 'CCC', 'CTT', 'ZF', 'WEBCO'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
@@ -1653,10 +1694,10 @@ export default function ProductsListPage() {
               )}
 
               <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-                <table className="w-full text-left border-collapse text-[11px]">
+                <table className="w-full min-w-[1000px] text-left border-collapse text-[11px]">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50 font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider sticky top-0 bg-white dark:bg-surface-900 z-10">
-                      <th className="px-4 py-2">SKU / Match</th>
+                      <th className="px-4 py-2">Part No / Match</th>
                       <th className="px-4 py-2">Pricing</th>
                       <th className="px-4 py-2">Stock ({importStockMode === 'absolute' ? 'Abs' : 'Rel'})</th>
                       <th className="px-4 py-2">Status</th>

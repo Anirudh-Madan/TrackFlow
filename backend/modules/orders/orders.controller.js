@@ -169,6 +169,7 @@ exports.getOrders = async (req, res, next) => {
         { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit'] },
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
+        { model: Challan, as: 'challan', attributes: ['id', 'challan_number'] },
       ],
       order: [['created_at', 'DESC']],
     });
@@ -190,6 +191,7 @@ exports.getOrderById = async (req, res, next) => {
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'selling_price'] }] },
         { model: OrderStatusHistory, as: 'statusHistory', include: [{ model: User, as: 'changer', attributes: ['id', 'name'] }] },
+        { model: Challan, as: 'challan', attributes: ['id', 'challan_number', 'pdf_path'] },
       ],
     });
 

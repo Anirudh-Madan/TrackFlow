@@ -5,6 +5,7 @@ export const useUIStore = create(
   persist(
     (set) => ({
       sidebarCollapsed: false,
+      mobileSidebarOpen: false,
       theme: 'light',         // 'light' | 'dark'
       globalLoading: false,
 
@@ -12,6 +13,11 @@ export const useUIStore = create(
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+      toggleMobileSidebar: () =>
+        set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
+
+      setMobileSidebarOpen: (isOpen) => set({ mobileSidebarOpen: isOpen }),
 
       toggleTheme: () =>
         set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),

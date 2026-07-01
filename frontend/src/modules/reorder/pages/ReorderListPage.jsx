@@ -36,10 +36,10 @@ export default function ReorderListPage() {
     setLoading(true)
     try {
       const res = await getReorders()
-      if (res.data?.success) {
-        setReorders(res.data.data)
+      if (res.success) {
+        setReorders(res.data)
       } else {
-        toast.error(res.data?.error || 'Failed to fetch reorder flags')
+        toast.error(res.error || 'Failed to fetch reorder flags')
       }
     } catch (err) {
       toast.error('Failed to load reorders list')
@@ -56,12 +56,12 @@ export default function ReorderListPage() {
     setSubmittingId(id)
     try {
       const res = await updateReorderStatus(id, newStatus)
-      if (res.data?.success) {
+      if (res.success) {
         toast.success(`Reorder flag status updated to ${newStatus}`)
         // Refresh list
         fetchReorders()
       } else {
-        toast.error(res.data?.error || 'Failed to update reorder flag')
+        toast.error(res.error || 'Failed to update reorder flag')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to update reorder flag')
@@ -232,7 +232,7 @@ export default function ReorderListPage() {
                 <p className="text-xs text-surface-500 mt-1">Everything looks stocked or no flags match criteria.</p>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[1000px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
                     <th className="px-5 py-3.5">Product SKU</th>

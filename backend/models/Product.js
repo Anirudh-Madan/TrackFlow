@@ -11,6 +11,7 @@ const Product = sequelize.define('Product', {
   dealer_landing_price: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
   selling_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0.00 },
   reorder_threshold: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, defaultValue: 0 },
+  supplier: { type: DataTypes.ENUM('Cummins', 'Lucas', 'Meritor', 'CCC', 'CTT', 'ZF', 'WEBCO'), allowNull: true },
   remarks: { type: DataTypes.TEXT, allowNull: true },
 }, {
   tableName: 'product',

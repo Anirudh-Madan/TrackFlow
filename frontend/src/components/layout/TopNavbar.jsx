@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Menu } from 'lucide-react'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
 import ProfileMenu from './ProfileMenu'
 import GlobalSearch from './GlobalSearch'
 import { cn } from '../../utils/cn'
+import { useUIStore } from '../../store/uiStore'
 
 export default function TopNavbar({ className }) {
   const [searchOpen, setSearchOpen] = useState(false)
+  const { toggleMobileSidebar } = useUIStore()
 
   // Cmd/Ctrl + K to open search
   useEffect(() => {
@@ -25,15 +27,24 @@ export default function TopNavbar({ className }) {
     <>
       <header
         className={cn(
-          'h-14 flex items-center px-5 gap-4 shrink-0',
+          'h-14 flex items-center px-4 sm:px-5 gap-3 sm:gap-4 shrink-0',
           'bg-white/80 dark:bg-surface-900/80 backdrop-blur-md',
           'border-b border-surface-200 dark:border-surface-800',
           'sticky top-0 z-30',
           className
         )}
       >
+        {/* Mobile menu toggle */}
+        <button
+          onClick={toggleMobileSidebar}
+          className="md:hidden p-1.5 -ml-1.5 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
         {/* Breadcrumb */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 hidden sm:block">
           <Breadcrumb />
         </div>
 

@@ -17,7 +17,7 @@ export default function IMLayout() {
         {/* Page content */}
         <main
           id="im-main-content"
-          className="flex-1 overflow-y-auto px-6 py-6"
+          className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6"
         >
           <Outlet />
         </main>

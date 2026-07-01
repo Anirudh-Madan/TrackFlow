@@ -43,8 +43,8 @@ export default function OrdersListPage() {
       // If user is IM, show pending orders by default or restrict view
       const params = isIM ? { status: 'PENDING' } : {}
       const res = await getOrders(params)
-      if (res.data?.success) {
-        setOrders(res.data.data)
+      if (res.success) {
+        setOrders(res.data)
       }
     } catch (err) {
       toast.error('Failed to load orders list')
@@ -82,12 +82,12 @@ export default function OrdersListPage() {
     setSubmittingAction(true)
     try {
       const res = await approveOrder(orderId)
-      if (res.data?.success) {
-        toast.success(`Order approved successfully. Challan generated: ${res.data.data.challan_number}`)
+      if (res.success) {
+        toast.success(`Order approved successfully. Challan generated: ${res.data.challan_number}`)
         setViewOrder(null)
         fetchOrdersList()
       } else {
-        toast.error(res.data?.error || 'Failed to approve order')
+        toast.error(res.error || 'Failed to approve order')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to approve order')
@@ -101,14 +101,14 @@ export default function OrdersListPage() {
     setSubmittingAction(true)
     try {
       const res = await flagOrder(orderId, flagReason)
-      if (res.data?.success) {
+      if (res.success) {
         toast.success('Order flagged back to Sales Manager')
         setViewOrder(null)
         setShowFlagInput(false)
         setFlagReason('')
         fetchOrdersList()
       } else {
-        toast.error(res.data?.error || 'Failed to flag order')
+        toast.error(res.error || 'Failed to flag order')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to flag order')
@@ -231,7 +231,7 @@ export default function OrdersListPage() {
                   <p className="text-xs">Try adjusting your search filters or check back later.</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[1000px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50 text-xs font-bold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
                       <th className="px-5 py-3.5">Order Number</th>
@@ -252,6 +252,11 @@ export default function OrdersListPage() {
                         <tr key={o.id} className="table-row-hover">
                           <td className="px-5 py-4">
                             <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{o.order_number}</div>
+                            {o.challan?.challan_number && (
+                              <div className="text-[10px] text-surface-500 font-mono mt-1 flex items-center gap-1">
+                                <FileText className="h-3 w-3" /> {o.challan.challan_number}
+                              </div>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-xs text-surface-500">
                             <div className="flex items-center gap-1.5">
@@ -329,6 +334,11 @@ export default function OrdersListPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Order Information</p>
                 <p className="text-sm font-semibold text-surface-800 dark:text-surface-100">Sales rep: {viewOrder.salesManager?.name}</p>
                 <p className="text-xs text-surface-500">Submitted: {new Date(viewOrder.created_at || new Date()).toLocaleString('en-IN')}</p>
+                {viewOrder.challan?.challan_number && (
+                  <p className="text-xs font-mono text-primary-600 dark:text-primary-400 mt-1 flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> {viewOrder.challan.challan_number}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -344,8 +354,8 @@ export default function OrdersListPage() {
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Order Items</p>
-              <div className="rounded-xl border border-surface-200 dark:border-surface-700 overflow-hidden">
-                <table className="w-full text-sm text-left border-collapse">
+              <div className="overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700">
+                <table className="w-full min-w-[600px] text-sm text-left border-collapse">
                   <thead className="bg-surface-50 dark:bg-surface-700/50">
                     <tr className="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">
                       <th className="px-4 py-2.5">#</th>
