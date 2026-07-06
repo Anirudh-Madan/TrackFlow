@@ -281,9 +281,9 @@
     │   │   │   │   └── useOrders.js
     │   │   │   └── pages
     │   │   │       ├── OrderDetailPage.jsx # View + actions (approve/flag/dispatch)
-    │   │   │       ├── OrderHistoryPage.jsx # SM: own past orders, clone action
-    │   │   │       ├── OrderNewPage.jsx # SM: full order builder
-    │   │   │       └── OrdersListPage.jsx # All orders (Admin/IM) or own (SM)
+    │   │   │       ├── OrderHistoryPage.jsx # SM: own past orders, clone action (also rendered as tab)
+    │   │   │       ├── OrderNewPage.jsx # SM: full order builder (also supports modal rendering)
+    │   │   │       └── OrdersListPage.jsx # All orders (Admin/IM) or own (SM) (with tabs and modal integration)
     │   │   ├── parties
     │   │   │   ├── components
     │   │   │   │   ├── CreditLimitBanner.jsx # Inline credit warning during order
@@ -308,8 +308,8 @@
     │   │   │   │   └── usePayments.js
     │   │   │   └── pages
     │   │   │       ├── PartyLedgerPage.jsx
-    │   │   │       ├── PaymentNewPage.jsx
-    │   │   │       └── PaymentsListPage.jsx
+    │   │   │       ├── PaymentNewPage.jsx # SM: log payment form (also supports modal rendering)
+    │   │   │       └── PaymentsListPage.jsx # Payments history (with modal integration)
     │   │   ├── prices
     │   │   │   ├── components
     │   │   │   │   ├── PriceHistoryTable.jsx

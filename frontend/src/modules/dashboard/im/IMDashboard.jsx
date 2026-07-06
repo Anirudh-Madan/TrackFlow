@@ -42,27 +42,27 @@ export default function IMDashboard() {
           getInwards(),
         ]);
 
-        if (ordersRes.data?.success) {
-          const pending = ordersRes.data.data;
+        if (ordersRes.success) {
+          const pending = ordersRes.data;
           setPendingOrders(pending.slice(0, 5));
           setStats(prev => ({ ...prev, pendingOrdersCount: pending.length }));
         }
 
-        if (lowStockRes.data?.success) {
-          const low = lowStockRes.data.data;
+        if (lowStockRes.success) {
+          const low = lowStockRes.data;
           setLowStockItems(low.slice(0, 5));
           setStats(prev => ({ ...prev, lowStockCount: low.length }));
         }
 
-        if (reordersRes.data?.success) {
-          const reorders = reordersRes.data.data;
+        if (reordersRes.success) {
+          const reorders = reordersRes.data;
           const open = reorders.filter(r => r.status === 'OPEN');
           setOpenReorders(open.slice(0, 5));
           setStats(prev => ({ ...prev, openReordersCount: open.length }));
         }
 
-        if (inwardsRes.data?.success) {
-          const inwards = inwardsRes.data.data;
+        if (inwardsRes.success) {
+          const inwards = inwardsRes.data;
           // Filter inwards received today
           const today = new Date().toISOString().split('T')[0];
           const todayInwards = inwards.filter(i => {

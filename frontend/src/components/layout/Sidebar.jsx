@@ -29,6 +29,8 @@ import {
   Zap,
   Plus,
   FileText,
+  GitBranch,
+  Send,
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -99,6 +101,73 @@ export default function Sidebar() {
       );
     }
 
+    if (roleName === 'sales_manager') {
+      return (
+        <>
+          {/* Overview */}
+          <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
+            <SidebarItem
+              to="/sm/dashboard"
+              icon={LayoutDashboard}
+              label="Dashboard"
+              collapsed={sidebarCollapsed}
+            />
+          </SidebarGroup>
+
+          {/* Sales */}
+          <SidebarGroup label="Sales" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/parties" icon={Building2} label="My Parties" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/orders" icon={ShoppingCart} label="Orders" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Finance */}
+          <SidebarGroup label="Finance" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/payments" icon={CreditCard} label="Payments" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Fulfilment */}
+          <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/pipeline" icon={GitBranch} label="My Pipeline" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/requests" icon={Send} label="Part Requests" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Operations */}
+          <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/reorder-flags" icon={RefreshCcw} label="Reorder Flags" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* System */}
+          <SidebarGroup label="System" collapsed={sidebarCollapsed}>
+            <SidebarItem
+              to="/sm/notifications"
+              icon={Bell}
+              label="Notifications"
+              badge={unreadCount}
+              collapsed={sidebarCollapsed}
+            />
+          </SidebarGroup>
+        </>
+      );
+    }
+
+    if (roleName === 'dispatch_worker') {
+      return (
+        <>
+          <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          <SidebarGroup label="Deliveries" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/pipeline" icon={Truck} label="My Deliveries" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          <SidebarGroup label="System" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/notifications" icon={Bell} label="Notifications" badge={unreadCount} collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+        </>
+      );
+    }
+
     // Default: Admin menu
     return (
       <>
@@ -133,6 +202,7 @@ export default function Sidebar() {
         {/* Fulfilment */}
         <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
           <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders & Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/dispatch" icon={Truck} label="Dispatch" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Finance" collapsed={sidebarCollapsed} />
         </SidebarGroup>

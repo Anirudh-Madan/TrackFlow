@@ -30,6 +30,14 @@ const OrderStatusHistory = require('./OrderStatusHistory');
 const Challan = require('./Challan');
 const ReorderFlag = require('./ReorderFlag');
 
+// ── Fulfilment pipeline (replaces the old Dispatch tables) ────────────────────
+const FulfillmentOrder = require('./FulfillmentOrder');
+const PipelineTracking = require('./PipelineTracking');
+const PipelineItem = require('./PipelineItem');
+const PipelineStageHistory = require('./PipelineStageHistory');
+const Notification = require('./Notification');
+const PartRequest = require('./PartRequest');
+
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
 User.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
@@ -143,6 +151,52 @@ ReorderFlag.belongsTo(Customer, { foreignKey: 'party_id', as: 'party' });
 InwardEntry.hasMany(ReorderFlag, { foreignKey: 'received_via_inward_id', as: 'reordersReceived' });
 ReorderFlag.belongsTo(InwardEntry, { foreignKey: 'received_via_inward_id', as: 'receivedViaInward' });
 
+// ── Fulfilment pipeline ───────────────────────────────────────────────────────
+// Master ledger (one per order)
+Order.hasOne(FulfillmentOrder, { foreignKey: 'order_id', as: 'fulfillment' });
+FulfillmentOrder.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+
+// Pipeline tracking (one per order that entered the pipeline)
+Order.hasOne(PipelineTracking, { foreignKey: 'order_id', as: 'pipeline' });
+PipelineTracking.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+FulfillmentOrder.hasOne(PipelineTracking, { foreignKey: 'fulfillment_order_id', as: 'pipeline' });
+PipelineTracking.belongsTo(FulfillmentOrder, { foreignKey: 'fulfillment_order_id', as: 'fulfillment' });
+
+// Pipeline items
+PipelineTracking.hasMany(PipelineItem, { foreignKey: 'pipeline_id', as: 'items', onDelete: 'CASCADE' });
+PipelineItem.belongsTo(PipelineTracking, { foreignKey: 'pipeline_id', as: 'pipeline' });
+Product.hasMany(PipelineItem, { foreignKey: 'product_id', as: 'pipelineItems' });
+PipelineItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+// Stage history
+PipelineTracking.hasMany(PipelineStageHistory, { foreignKey: 'pipeline_id', as: 'stageHistory', onDelete: 'CASCADE' });
+PipelineStageHistory.belongsTo(PipelineTracking, { foreignKey: 'pipeline_id', as: 'pipeline' });
+User.hasMany(PipelineStageHistory, { foreignKey: 'changed_by', as: 'pipelineStageChanges' });
+PipelineStageHistory.belongsTo(User, { foreignKey: 'changed_by', as: 'changer' });
+
+// Pipeline actor associations (distinct aliases for eager-loading names)
+PipelineTracking.belongsTo(User, { foreignKey: 'admin_approved_by', as: 'adminApprover' });
+PipelineTracking.belongsTo(User, { foreignKey: 'im_approved_by',    as: 'imApprover' });
+PipelineTracking.belongsTo(User, { foreignKey: 'dw_id',             as: 'dispatchWorker' });
+PipelineTracking.belongsTo(User, { foreignKey: 'sales_manager_id',  as: 'salesManager' });
+PipelineTracking.belongsTo(User, { foreignKey: 'fulfilled_by',      as: 'fulfiller' });
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+User.hasMany(Notification, { foreignKey: 'recipient_id', as: 'notifications' });
+Notification.belongsTo(User, { foreignKey: 'recipient_id', as: 'recipient' });
+Notification.belongsTo(User, { foreignKey: 'sender_id', as: 'sender' });
+
+// ── Part requests (SM → IM) ───────────────────────────────────────────────────
+User.hasMany(PartRequest, { foreignKey: 'requested_by', as: 'partRequests' });
+PartRequest.belongsTo(User, { foreignKey: 'requested_by', as: 'requester' });
+PartRequest.belongsTo(User, { foreignKey: 'assigned_im_id', as: 'assignedIM' });
+Product.hasMany(PartRequest, { foreignKey: 'product_id', as: 'partRequests' });
+PartRequest.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+Order.hasMany(PartRequest, { foreignKey: 'linked_order_id', as: 'partRequests' });
+PartRequest.belongsTo(Order, { foreignKey: 'linked_order_id', as: 'order' });
+Customer.hasMany(PartRequest, { foreignKey: 'customer_id', as: 'partRequests' });
+PartRequest.belongsTo(Customer, { foreignKey: 'customer_id', as: 'customer' });
+
 module.exports = {
   sequelize,
   Role,
@@ -172,4 +226,10 @@ module.exports = {
   OrderStatusHistory,
   Challan,
   ReorderFlag,
+  FulfillmentOrder,
+  PipelineTracking,
+  PipelineItem,
+  PipelineStageHistory,
+  Notification,
+  PartRequest,
 };

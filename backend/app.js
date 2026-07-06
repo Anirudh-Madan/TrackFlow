@@ -15,6 +15,10 @@ const inwardRoutes    = require('./modules/inward/inward.routes');
 const ordersRoutes    = require('./modules/orders/orders.routes');
 const challansRoutes  = require('./modules/challans/challans.routes');
 const reorderRoutes   = require('./modules/reorder/reorder.routes');
+const pipelineRoutes  = require('./modules/pipeline/pipeline.routes');
+const notificationsRoutes = require('./modules/notifications/notifications.routes');
+const partRequestsRoutes  = require('./modules/partRequests/partRequests.routes');
+const analyticsRoutes = require('./modules/analytics/analytics.routes');
 
 const app = express();
 
@@ -39,6 +43,10 @@ app.use('/api/v1/inward',     inwardRoutes);
 app.use('/api/v1/orders',     ordersRoutes);
 app.use('/api/v1/challans',   challansRoutes);
 app.use('/api/v1/reorder',    reorderRoutes);
+app.use('/api/v1/pipeline',   pipelineRoutes);
+app.use('/api/v1/notifications', notificationsRoutes);
+app.use('/api/v1/part-requests', partRequestsRoutes);
+app.use('/api/v1/analytics',  analyticsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

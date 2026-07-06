@@ -1,4 +1,5 @@
-const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, AuditLog, sequelize } = require('../../models');
+const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
+const { notify } = require('../../services/notification.service');
 
 // Helper to generate sequential order number: ORD-YYYYMM-XXXX
 function generateOrderNumber() {
@@ -107,6 +108,44 @@ exports.createOrder = async (req, res, next) => {
       reason: 'Order submitted by Sales Manager',
     }, { transaction: t });
 
+    // Enter the fulfilment pipeline immediately at IM approval (no admin gate).
+    // The order now awaits the Inventory Manager to approve + assign a worker.
+    const fulfillment = await FulfillmentOrder.create({
+      order_id: order.id, state: 'INCOMPLETE',
+    }, { transaction: t });
+
+    const pipeline = await PipelineTracking.create({
+      order_id: order.id,
+      fulfillment_order_id: fulfillment.id,
+      stage: 'IM_APPROVAL',
+      sales_manager_id: req.user.id,
+    }, { transaction: t });
+
+    await PipelineStageHistory.create({
+      pipeline_id: pipeline.id,
+      order_id: order.id,
+      from_stage: null,
+      to_stage: 'IM_APPROVAL',
+      changed_by: req.user.id,
+      changed_by_role: req.user.role,
+      note: `Order placed by ${req.user.name} — awaiting IM approval`,
+    }, { transaction: t });
+
+    // Notify all active Inventory Managers.
+    const ims = await User.findAll({
+      where: { is_active: true },
+      include: [{ model: Role, as: 'role', attributes: [], where: { name: 'inventory_manager' } }],
+      attributes: ['id'], transaction: t,
+    });
+    for (const im of ims) {
+      await notify({
+        recipient_id: im.id, recipient_role: 'inventory_manager', sender_id: req.user.id,
+        type: 'PIPELINE_ADVANCED', title: 'New order awaiting approval',
+        body: `Order ${order_number} was placed and needs your approval & a worker.`,
+        link: '/im/pipeline', entity_type: 'pipeline_tracking', entity_id: pipeline.id,
+      }, t);
+    }
+
     // Create Audit Log
     await AuditLog.create({
       actor_id: req.user.id,
@@ -169,7 +208,6 @@ exports.getOrders = async (req, res, next) => {
         { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit'] },
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
-        { model: Challan, as: 'challan', attributes: ['id', 'challan_number'] },
       ],
       order: [['created_at', 'DESC']],
     });
@@ -191,7 +229,6 @@ exports.getOrderById = async (req, res, next) => {
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'selling_price'] }] },
         { model: OrderStatusHistory, as: 'statusHistory', include: [{ model: User, as: 'changer', attributes: ['id', 'name'] }] },
-        { model: Challan, as: 'challan', attributes: ['id', 'challan_number', 'pdf_path'] },
       ],
     });
 

@@ -48,7 +48,7 @@ exports.getProducts = async (req, res, next) => {
 
 exports.createProduct = async (req, res, next) => {
   try {
-    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, supplier, remarks, on_hand } = req.body;
+    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'Product name is required' });
     if (!sku?.trim()) return res.status(400).json({ success: false, error: 'SKU is required' });
@@ -65,26 +65,12 @@ exports.createProduct = async (req, res, next) => {
       dealer_landing_price: dealer_landing_price ? parseFloat(dealer_landing_price) : null,
       selling_price: parseFloat(selling_price) || 0,
       reorder_threshold: parseInt(reorder_threshold) || 0,
-      supplier: supplier || null,
       remarks: remarks || null,
     });
 
     // Create initial stock rows
-    const initialQty = parseFloat(on_hand) > 0 ? parseFloat(on_hand) : 0;
-    await StockOnHand.create({ product_id: product.id, quantity: initialQty });
+    await StockOnHand.create({ product_id: product.id, quantity: 0 });
     await StockReserved.create({ product_id: product.id, quantity: 0 });
-
-    if (initialQty > 0) {
-      await StockTransaction.create({
-        product_id: product.id,
-        type: 'stock_in',
-        reference: 'INITIAL-STOCK',
-        quantity_change: initialQty,
-        quantity_after: initialQty,
-        performed_by: req.user.id,
-        notes: 'Initial stock during product creation',
-      });
-    }
 
     await AuditLog.create({
       actor_id: req.user.id, actor_name: req.user.name, actor_role: req.user.role,
@@ -126,7 +112,7 @@ exports.updateProduct = async (req, res, next) => {
     const product = await Product.findByPk(req.params.id);
     if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
 
-    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, supplier, remarks } = req.body;
+    const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks } = req.body;
 
     if (sku && sku.trim().toUpperCase() !== product.sku) {
       const existing = await Product.findOne({ where: { sku: sku.trim().toUpperCase() } });
@@ -141,7 +127,6 @@ exports.updateProduct = async (req, res, next) => {
     if (dealer_landing_price !== undefined) product.dealer_landing_price = dealer_landing_price ? parseFloat(dealer_landing_price) : null;
     if (selling_price !== undefined) product.selling_price = parseFloat(selling_price) || 0;
     if (reorder_threshold !== undefined) product.reorder_threshold = parseInt(reorder_threshold) || 0;
-    if (supplier !== undefined) product.supplier = supplier || null;
     if (remarks !== undefined) product.remarks = remarks || null;
 
     await product.save();
@@ -467,7 +452,6 @@ exports.bulkImport = async (req, res, next) => {
 
     const existingProducts = await Product.findAll({
       where: { sku: uniqueSkus },
-      paranoid: false,
       transaction: t
     });
 
@@ -478,43 +462,11 @@ exports.bulkImport = async (req, res, next) => {
 
     const missingSkus = uniqueSkus.filter(sku => !productMap[sku]);
     if (missingSkus.length > 0) {
-      for (const sku of missingSkus) {
-        const item = items.find(i => i.sku?.trim().toUpperCase() === sku);
-        if (!item || !item.name?.trim()) {
-          await t.rollback();
-          return res.status(400).json({
-            success: false,
-            error: `Import aborted. SKU ${sku} is missing from the database and no Product Name was provided to create it.`
-          });
-        }
-
-        const newProduct = await Product.create({
-          name: item.name.trim(),
-          sku: sku,
-          category_id: null,
-          uom_id: null,
-          purchase_price: item.purchase_price !== undefined && item.purchase_price !== '' ? parseFloat(item.purchase_price) : 0,
-          dealer_landing_price: item.dealer_landing_price !== undefined && item.dealer_landing_price !== '' ? parseFloat(item.dealer_landing_price) : null,
-          selling_price: item.selling_price !== undefined && item.selling_price !== '' ? parseFloat(item.selling_price) : 0,
-          reorder_threshold: 0,
-          remarks: 'Created via Bulk Import'
-        }, { transaction: t });
-
-        productMap[sku] = newProduct;
-
-        await AuditLog.create({
-          actor_id: req.user.id,
-          actor_name: req.user.name,
-          actor_role: req.user.role,
-          action_type: 'create',
-          module: 'products',
-          entity_type: 'product',
-          entity_id: newProduct.id,
-          after_state: { id: newProduct.id, sku: newProduct.sku, name: newProduct.name },
-          ip_address: req.ip,
-          user_agent: req.headers['user-agent']
-        }, { transaction: t });
-      }
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Import aborted. The following SKUs were not found in the database: ${missingSkus.join(', ')}`
+      });
     }
 
     const importDetails = [];
@@ -524,13 +476,6 @@ exports.bulkImport = async (req, res, next) => {
     for (const item of items) {
       const sku = item.sku.trim().toUpperCase();
       const product = productMap[sku];
-      
-      if (product.deleted_at) {
-        await product.restore({ transaction: t });
-        if (item.name && item.name.trim() !== '') {
-          product.name = item.name.trim();
-        }
-      }
       
       let priceUpdated = false;
       let stockUpdated = false;
