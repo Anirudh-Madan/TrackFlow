@@ -1,1 +1,0 @@
-import{c as e,t}from"./index-fP-tnhl0.js";function n(n){return e(t,n)}export{n as t};

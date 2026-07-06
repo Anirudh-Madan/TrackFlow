@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+import PaymentNewPage from './PaymentNewPage'
 import {
   Banknote,
   CalendarDays,
@@ -105,6 +107,18 @@ export default function PaymentsListPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_PAYMENT)
+
+  const [preselectedPartyId, setPreselectedPartyId] = useState(null)
+  const location = useLocation()
+
+  useEffect(() => {
+    if (location.state?.openNewPayment) {
+      setPreselectedPartyId(location.state.partyId || null)
+      setIsModalOpen(true)
+      // clear state so it doesn't open again on page refresh
+      window.history.replaceState({}, document.title)
+    }
+  }, [location])
 
   const filteredPayments = useMemo(() => {
     return payments.filter((payment) => {
@@ -314,67 +328,43 @@ export default function PaymentsListPage() {
 
       <Modal
         open={isModalOpen}
-        onClose={closeModal}
+        onClose={() => {
+          setIsModalOpen(false)
+          setPreselectedPartyId(null)
+        }}
         title="Record Payment"
         description="Capture a payment record with its mode, reference, status, and notes."
         size="lg"
-        footer={(
-          <>
-            <Button variant="secondary" onClick={closeModal} id="payment-modal-cancel">
-              Cancel
-            </Button>
-            <Button onClick={submitPayment} id="payment-modal-save">
-              Save Payment
-            </Button>
-          </>
-        )}
       >
-        <form className="space-y-4" onSubmit={submitPayment}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Customer Name</span>
-              <input className="input-base w-full" value={form.customer_name} onChange={(event) => setForm((prev) => ({ ...prev, customer_name: event.target.value }))} placeholder="Customer / Party" required />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Customer ID</span>
-              <input className="input-base w-full" value={form.customer_id} onChange={(event) => setForm((prev) => ({ ...prev, customer_id: event.target.value }))} placeholder="CUST-1004" required />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Amount</span>
-              <input type="number" min="0" className="input-base w-full" value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="0" required />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Payment Date</span>
-              <input type="date" className="input-base w-full" value={form.payment_date} onChange={(event) => setForm((prev) => ({ ...prev, payment_date: event.target.value }))} />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Mode</span>
-              <select className="input-base w-full" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))}>
-                {MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Status</span>
-              <select className="input-base w-full" value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}>
-                <option value="received">Received</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
-              </select>
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Reference Number</span>
-              <input className="input-base w-full" value={form.reference_number} onChange={(event) => setForm((prev) => ({ ...prev, reference_number: event.target.value }))} placeholder="UPI-123456" />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
-              <span>Received By</span>
-              <input className="input-base w-full" value={form.received_by} onChange={(event) => setForm((prev) => ({ ...prev, received_by: event.target.value }))} placeholder="Collector name" />
-            </label>
-            <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200 md:col-span-2">
-              <span>Remarks</span>
-              <textarea className="input-base min-h-[90px] w-full" value={form.remarks} onChange={(event) => setForm((prev) => ({ ...prev, remarks: event.target.value }))} placeholder="Any notes for this payment" />
-            </label>
-          </div>
-        </form>
+        <PaymentNewPage
+          isModal={true}
+          preselectedPartyId={preselectedPartyId}
+          onClose={() => {
+            setIsModalOpen(false)
+            setPreselectedPartyId(null)
+          }}
+          onSuccess={(newPayment) => {
+            setIsModalOpen(false)
+            setPreselectedPartyId(null)
+            if (newPayment) {
+              setPayments(prev => [
+                {
+                  id: newPayment.payment_number || `PAY-${String(payments.length + 1).padStart(3, '0')}`,
+                  customer_name: newPayment.party?.company_name || 'Customer',
+                  customer_id: newPayment.party_id || 'CUST-1004',
+                  payment_date: newPayment.payment_date || new Date().toISOString().slice(0, 10),
+                  mode: newPayment.payment_mode || 'UPI',
+                  reference_number: newPayment.reference_number || '',
+                  status: 'received',
+                  received_by: newPayment.received_by || 'Collector',
+                  remarks: newPayment.remarks || '',
+                  amount: Number(newPayment.amount || 0)
+                },
+                ...prev
+              ])
+            }
+          }}
+        />
       </Modal>
     </div>
   )

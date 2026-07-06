@@ -589,14 +589,14 @@ Notifications
 /sm/dashboard
 /sm/parties
 /sm/parties/:id
-/sm/orders/new
-/sm/orders
+/sm/orders          # Unified View (Tabs: My Orders, Order History; Modal: New Order)
 /sm/orders/:id
-/sm/payments/new
-/sm/payments
+/sm/payments        # Unified View (History; Modal: Log Payment)
 /sm/ledger/:partyId
 /sm/reorder-flags
 /sm/notifications
+/sm/orders/new      # (Legacy/Redirect to /sm/orders with openNewOrder state)
+/sm/payments/new    # (Legacy/Redirect to /sm/payments with openNewPayment state)
 ```
 
 ### Inventory Manager Routes

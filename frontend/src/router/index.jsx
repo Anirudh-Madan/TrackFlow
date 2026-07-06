@@ -4,8 +4,10 @@ import RoleGuard from './guards/RoleGuard'
 import FirstLoginGuard from './guards/FirstLoginGuard'
 import AdminLayout from '../layouts/AdminLayout'
 import IMLayout from '../layouts/IMLayout'
+import SMLayout from '../layouts/SMLayout'
 import { adminRoutes } from './routes/adminRoutes'
 import { imRoutes } from './routes/imRoutes'
+import { smRoutes } from './routes/smRoutes'
 
 // Auth pages (eagerly loaded — small)
 import LoginPage from '../modules/auth/pages/LoginPage'
@@ -63,10 +65,13 @@ const router = createBrowserRouter([
     element: (
       <AuthGuard>
         <RoleGuard role="sales_manager">
-          <RolePlaceholderPage />
+          <FirstLoginGuard>
+            <SMLayout />
+          </FirstLoginGuard>
         </RoleGuard>
       </AuthGuard>
     ),
+    children: smRoutes,
   },
 
   // Inventory Manager

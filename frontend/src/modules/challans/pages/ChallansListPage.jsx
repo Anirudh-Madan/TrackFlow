@@ -225,7 +225,8 @@ export default function ChallansListPage() {
         qty: item.quantity,
         unit: 'pcs',
         price: parseFloat(item.sm_price || 0),
-        total: parseFloat(item.line_total || 0)
+        total: parseFloat(item.line_total || 0),
+        supplier: item.product?.supplier || ''
       }))
 
       const totalQty = items.reduce((sum, item) => sum + item.quantity, 0)
@@ -353,7 +354,7 @@ export default function ChallansListPage() {
     const rows = []
     filtered.forEach(c => {
       c.items.forEach(item => {
-        rows.push([
+        const rawRow = [
           c.id,
           c.order_ref,
           c.date,
@@ -361,14 +362,23 @@ export default function ChallansListPage() {
           c.party_city,
           c.region,
           c.dispatched_by,
-          c.supplier,
+          item.supplier || c.supplier,
           c.vehicle_no,
           c.driver,
           item.sku,
           item.name,
           String(item.qty),
           item.unit
-        ])
+        ]
+        
+        const finalRow = rawRow.map(val => {
+          if (val === null || val === undefined || val === '' || val === '—' || val === 'N/A') {
+            return 'NIL'
+          }
+          return String(val)
+        })
+        
+        rows.push(finalRow)
       })
     })
 

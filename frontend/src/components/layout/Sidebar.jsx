@@ -99,6 +99,49 @@ export default function Sidebar() {
       );
     }
 
+    if (roleName === 'sales_manager') {
+      return (
+        <>
+          {/* Overview */}
+          <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
+            <SidebarItem
+              to="/sm/dashboard"
+              icon={LayoutDashboard}
+              label="Dashboard"
+              collapsed={sidebarCollapsed}
+            />
+          </SidebarGroup>
+
+          {/* Sales */}
+          <SidebarGroup label="Sales" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/parties" icon={Building2} label="My Parties" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/orders" icon={ShoppingCart} label="Orders" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Finance */}
+          <SidebarGroup label="Finance" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/payments" icon={CreditCard} label="Payments" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Operations */}
+          <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/reorder-flags" icon={RefreshCcw} label="Reorder Flags" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* System */}
+          <SidebarGroup label="System" collapsed={sidebarCollapsed}>
+            <SidebarItem
+              to="/sm/notifications"
+              icon={Bell}
+              label="Notifications"
+              badge={unreadCount}
+              collapsed={sidebarCollapsed}
+            />
+          </SidebarGroup>
+        </>
+      );
+    }
+
     // Default: Admin menu
     return (
       <>
