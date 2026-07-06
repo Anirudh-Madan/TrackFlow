@@ -232,7 +232,7 @@ export default function ReorderListPage() {
                 <p className="text-xs text-surface-500 mt-1">Everything looks stocked or no flags match criteria.</p>
               </div>
             ) : (
-              <table className="w-full min-w-[1000px] text-left border-collapse">
+              <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
                     <th className="px-5 py-3.5">Product SKU</th>

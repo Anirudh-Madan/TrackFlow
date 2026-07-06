@@ -19,6 +19,8 @@ const PaymentsListPage  = lazy(() => import('../../modules/payments/pages/Paymen
 const PartyLedgerPage   = lazy(() => import('../../modules/payments/pages/PartyLedgerPage'))
 
 const MyReorderFlagsPage = lazy(() => import('../../modules/reorder/pages/MyReorderFlagsPage'))
+const SMPipelinePage    = lazy(() => import('../../modules/pipeline/pages/SMPipelinePage'))
+const SMRequestsPage    = lazy(() => import('../../modules/pipeline/pages/SMRequestsPage'))
 
 const NotificationsPage  = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
 
@@ -47,6 +49,11 @@ export const smRoutes = [
 
   // Reorder Flags
   { path: 'reorder-flags',         element: <Wrap><MyReorderFlagsPage /></Wrap> },
+
+  // Fulfilment
+  { path: 'pipeline',              element: <Wrap><SMPipelinePage /></Wrap> },
+  { path: 'dispatches',            element: <Wrap><SMPipelinePage /></Wrap> },
+  { path: 'requests',              element: <Wrap><SMRequestsPage /></Wrap> },
 
   // Notifications
   { path: 'notifications',         element: <Wrap><NotificationsPage /></Wrap> },

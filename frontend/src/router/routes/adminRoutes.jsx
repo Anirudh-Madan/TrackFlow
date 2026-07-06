@@ -3,10 +3,10 @@ import { PageLoader } from '../../components/ui/Spinner'
 
 // Eager — always needed
 import AdminDashboard from '../../modules/dashboard/admin/AdminDashboard'
+import RouteRetired from '../RouteRetired'
 
 // Lazy — code-split by module
 const UsersListPage   = lazy(() => import('../../modules/users/pages/UsersListPage'))
-
 const RegionsPage     = lazy(() => import('../../modules/regions/pages/RegionsPage'))
 
 const PartiesListPage = lazy(() => import('../../modules/parties/pages/PartiesListPage'))
@@ -16,22 +16,18 @@ const ProductsListPage  = lazy(() => import('../../modules/products/pages/Produc
 const ProductDetailPage = lazy(() => import('../../modules/products/pages/ProductDetailPage'))
 const ProductCreatePage = lazy(() => import('../../modules/products/pages/ProductCreatePage'))
 
+const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
 
 const OrdersListPage   = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
-const DispatchQueuePage = lazy(() => import('../../modules/dispatch/pages/DispatchQueuePage'))
 
-const PaymentsListPage = lazy(() => import('../../modules/payments/pages/PaymentsListPage'))
-const PartyLedgerPage  = lazy(() => import('../../modules/payments/pages/PartyLedgerPage'))
+// Pipeline (replaces dispatch)
+const AdminPipelinePage = lazy(() => import('../../modules/pipeline/pages/AdminPipelinePage'))
 
 const SalesReportPage      = lazy(() => import('../../modules/reports/pages/SalesReportPage'))
 const StockReportPage      = lazy(() => import('../../modules/reports/pages/StockReportPage'))
 const AuditLogPage         = lazy(() => import('../../modules/audit/pages/AuditLogPage'))
-const ImportHistoryPage    = lazy(() => import('../../modules/reports/pages/ImportHistoryPage'))
-const SuggestionConversionPage = lazy(() => import('../../modules/reports/pages/SuggestionConversionPage'))
 
 const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
-
-const PriceHistoryPage = lazy(() => import('../../modules/prices/pages/PriceHistoryPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
@@ -40,7 +36,7 @@ const Wrap = ({ children }) => (
 export const adminRoutes = [
   { index: true,                  element: <AdminDashboard /> },
 
-  // Users & Roles (combined page with tabs)
+  // Users & Roles
   { path: 'users', element: <Wrap><UsersListPage /></Wrap> },
 
   // Regions
@@ -55,27 +51,27 @@ export const adminRoutes = [
   { path: 'products/new',        element: <Wrap><ProductCreatePage /></Wrap> },
   { path: 'products/:id',        element: <Wrap><ProductDetailPage /></Wrap> },
 
+  // Inventory
+  { path: 'inventory', element: <Wrap><StockOverviewPage /></Wrap> },
 
-
-  // Orders & Challans
+  // Orders
   { path: 'orders',              element: <Wrap><OrdersListPage /></Wrap> },
 
-  // Dispatch
-  { path: 'dispatch',            element: <Wrap><DispatchQueuePage /></Wrap> },
+  // Pipeline (was: dispatch)
+  { path: 'pipeline',            element: <Wrap><AdminPipelinePage /></Wrap> },
+  { path: 'dispatch',            element: <Wrap><AdminPipelinePage /></Wrap> }, // legacy alias
 
-  // Payments & Ledger
-  { path: 'payments',            element: <Wrap><PaymentsListPage /></Wrap> },
-  { path: 'payments/ledger/:id', element: <Wrap><PartyLedgerPage /></Wrap> },
-
-  // Reports
+  // Reports (kept)
   { path: 'reports/sales',       element: <Wrap><SalesReportPage /></Wrap> },
   { path: 'reports/stock',       element: <Wrap><StockReportPage /></Wrap> },
   { path: 'reports/audit',       element: <Wrap><AuditLogPage /></Wrap> },
-  { path: 'reports/imports',     element: <Wrap><ImportHistoryPage /></Wrap> },
-  { path: 'reports/suggestions', element: <Wrap><SuggestionConversionPage /></Wrap> },
 
-  // Price History
-  { path: 'prices/history',      element: <Wrap><PriceHistoryPage /></Wrap> },
+  // Retired per pipeline rebuild — redirect + logout
+  { path: 'payments',            element: <RouteRetired /> },
+  { path: 'payments/ledger/:id', element: <RouteRetired /> },
+  { path: 'reports/imports',     element: <RouteRetired /> },
+  { path: 'reports/suggestions', element: <RouteRetired /> },
+  { path: 'prices/history',      element: <RouteRetired /> },
 
   // Notifications
   { path: 'notifications',       element: <Wrap><NotificationsPage /></Wrap> },

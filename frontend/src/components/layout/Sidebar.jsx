@@ -29,6 +29,8 @@ import {
   Zap,
   Plus,
   FileText,
+  GitBranch,
+  Send,
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -121,6 +123,12 @@ export default function Sidebar() {
           {/* Finance */}
           <SidebarGroup label="Finance" collapsed={sidebarCollapsed}>
             <SidebarItem to="/sm/payments" icon={CreditCard} label="Payments" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          {/* Fulfilment */}
+          <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/pipeline" icon={GitBranch} label="My Pipeline" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/requests" icon={Send} label="Part Requests" collapsed={sidebarCollapsed} />
           </SidebarGroup>
 
           {/* Operations */}
