@@ -150,6 +150,24 @@ export default function Sidebar() {
       );
     }
 
+    if (roleName === 'dispatch_worker') {
+      return (
+        <>
+          <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          <SidebarGroup label="Deliveries" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/pipeline" icon={Truck} label="My Deliveries" collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+
+          <SidebarGroup label="System" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/dw/notifications" icon={Bell} label="Notifications" badge={unreadCount} collapsed={sidebarCollapsed} />
+          </SidebarGroup>
+        </>
+      );
+    }
+
     // Default: Admin menu
     return (
       <>
@@ -184,6 +202,7 @@ export default function Sidebar() {
         {/* Fulfilment */}
         <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
           <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders & Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/dispatch" icon={Truck} label="Dispatch" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Finance" collapsed={sidebarCollapsed} />
         </SidebarGroup>
