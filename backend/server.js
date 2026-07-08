@@ -87,7 +87,7 @@ async function startServer() {
 
     // Sync models with database
     console.log('Syncing database schema...');
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('Database schema synchronized.');
 
     // Seed data
