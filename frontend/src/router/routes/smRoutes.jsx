@@ -20,9 +20,9 @@ const PartyLedgerPage   = lazy(() => import('../../modules/payments/pages/PartyL
 
 const MyReorderFlagsPage = lazy(() => import('../../modules/reorder/pages/MyReorderFlagsPage'))
 const SMPipelinePage    = lazy(() => import('../../modules/pipeline/pages/SMPipelinePage'))
-const SMRequestsPage    = lazy(() => import('../../modules/pipeline/pages/SMRequestsPage'))
 
 const NotificationsPage  = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+const PartRequestsPage   = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
@@ -53,7 +53,8 @@ export const smRoutes = [
   // Fulfilment
   { path: 'pipeline',              element: <Wrap><SMPipelinePage /></Wrap> },
   { path: 'dispatches',            element: <Wrap><SMPipelinePage /></Wrap> },
-  { path: 'requests',              element: <Wrap><SMRequestsPage /></Wrap> },
+  { path: 'requests',              element: <Wrap><PartRequestsPage /></Wrap> },
+  { path: 'purchase-requests',     element: <Navigate to="/sm/requests" replace /> },
 
   // Notifications
   { path: 'notifications',         element: <Wrap><NotificationsPage /></Wrap> },

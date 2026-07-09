@@ -1,19 +1,19 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const OrderItem = sequelize.define('OrderItem', {
+const PurchaseOrderItem = sequelize.define('PurchaseOrderItem', {
   id: {
     type: DataTypes.BIGINT.UNSIGNED,
     primaryKey: true,
     autoIncrement: true,
   },
-  order_id: {
+  purchase_order_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
   product_id: {
     type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: true,
+    allowNull: true,  // null for new/unknown products
   },
   part_number: {
     type: DataTypes.STRING(100),
@@ -23,40 +23,26 @@ const OrderItem = sequelize.define('OrderItem', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
-  dl_price: {
+  unit_price: {
     type: DataTypes.DECIMAL(12, 2),
-    allowNull: true,
+    allowNull: false,
+    defaultValue: 0,
   },
   quantity: {
     type: DataTypes.INTEGER.UNSIGNED,
     allowNull: false,
+    defaultValue: 1,
   },
-  base_price: {
-    type: DataTypes.DECIMAL(12, 4),
+  total: {
+    type: DataTypes.DECIMAL(14, 2),
     allowNull: false,
-  },
-  sm_price: {
-    type: DataTypes.DECIMAL(12, 4),
-    allowNull: false,
-  },
-  gst_percent: {
-    type: DataTypes.DECIMAL(5, 2),
-    allowNull: false,
-  },
-  line_total: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  suggestion_added: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false,
+    defaultValue: 0,
   },
 }, {
-  tableName: 'order_item',
+  tableName: 'purchase_order_item',
   timestamps: true,
-  updatedAt: false, // Order items are created-only
+  updatedAt: false,
   underscored: true,
 });
 
-module.exports = OrderItem;
+module.exports = PurchaseOrderItem;

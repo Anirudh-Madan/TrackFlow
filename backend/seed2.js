@@ -432,12 +432,17 @@ async function seed() {
     for (const item of group) {
       const existing = await OrderItem.count({ where: { order_id: orders[item.oi].id, product_id: products[item.pi].id } });
       if (existing === 0) {
-        const basePrice = parseFloat(products[item.pi].selling_price);
+        const p         = products[item.pi];
+        const basePrice = parseFloat(p.selling_price);
         const smPrice   = +(basePrice * 1.02).toFixed(4); // 2% markup
         const lineTotal = +(item.qty * smPrice).toFixed(2);
+        const dlPrice   = parseFloat(p.dealer_landing_price || 0);
         const row = await OrderItem.create({
           order_id:         orders[item.oi].id,
-          product_id:       products[item.pi].id,
+          product_id:       p.id,
+          part_number:      p.sku || null,
+          description:      p.name || null,
+          dl_price:         dlPrice,
           quantity:         item.qty,
           base_price:       basePrice,
           sm_price:         smPrice,

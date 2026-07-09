@@ -276,23 +276,69 @@ export default function OrderDetailPage() {
       </div>
 
       {/* Party info */}
-      <div className="bg-white dark:bg-surface-900 rounded-2xl border border-surface-200 dark:border-surface-800 p-5">
-        <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-3">Party Details</h3>
-        <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-          <div className="flex items-center gap-2 text-surface-600 dark:text-surface-300">
-            <Building2 className="h-4 w-4 text-surface-400" />
-            <span className="font-medium">{order.party?.company_name || '—'}</span>
-          </div>
-          {order.party?.region && (
-            <div className="flex items-center gap-2 text-surface-500">
-              <MapPin className="h-3.5 w-3.5" />
-              <span>{order.party.region.name}</span>
+      <div className="bg-white dark:bg-surface-900 rounded-2xl border border-surface-200 dark:border-surface-800 p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 border-b pb-2">Order & Customer Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+          {/* Supplier */}
+          {order.supplier && (
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-surface-400 block uppercase">Supplier</span>
+              <span className="font-medium text-surface-700 dark:text-surface-300">{order.supplier}</span>
             </div>
           )}
-          {order.created_by && (
-            <div className="flex items-center gap-2 text-surface-500">
-              <User className="h-3.5 w-3.5" />
-              <span>{order.created_by.name || order.created_by}</span>
+
+          {/* Challan Number */}
+          {(order.challan_number || order.challan?.challan_number) && (
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-surface-400 block uppercase">Challan Number</span>
+              <span className="font-mono font-medium text-primary-600 dark:text-primary-400">{order.challan_number || order.challan?.challan_number}</span>
+            </div>
+          )}
+
+          {/* Date */}
+          <div className="space-y-1">
+            <span className="text-xs font-semibold text-surface-400 block uppercase">Date</span>
+            <span className="font-medium text-surface-700 dark:text-surface-300">
+              {new Date(order.order_date).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+            </span>
+          </div>
+
+          {/* Customer Name */}
+          {order.customer_name && (
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-surface-400 block uppercase">Customer Name</span>
+              <span className="font-medium text-surface-700 dark:text-surface-300">{order.customer_name}</span>
+            </div>
+          )}
+
+          {/* Company Name */}
+          {order.company_name && (
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-surface-400 block uppercase">Company Name</span>
+              <span className="font-medium text-surface-700 dark:text-surface-300">{order.company_name}</span>
+            </div>
+          )}
+
+          {/* Customer Company */}
+          <div className="space-y-1">
+            <span className="text-xs font-semibold text-surface-400 block uppercase">Customer Company</span>
+            <span className="font-medium text-surface-700 dark:text-surface-300">
+              {order.customer_company || order.party?.company_name || '—'}
+            </span>
+          </div>
+
+          {/* Sales Manager */}
+          <div className="space-y-1">
+            <span className="text-xs font-semibold text-surface-400 block uppercase">Sales Manager</span>
+            <span className="font-medium text-surface-700 dark:text-surface-300">
+              {order.salesManager?.name || order.created_by?.name || '—'}
+            </span>
+          </div>
+
+          {order.party?.region && (
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-surface-400 block uppercase">Region</span>
+              <span className="font-medium text-surface-700 dark:text-surface-300">{order.party.region.name}</span>
             </div>
           )}
         </div>

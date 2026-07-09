@@ -14,21 +14,29 @@ function generateOrderNumber() {
 exports.createOrder = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { party_id, items } = req.body; // items: [{ product_id, quantity, sm_price }]
+    const {
+      party_id,
+      items,
+      supplier,
+      challan_number,
+      order_date,
+      customer_name,
+      company_name,
+      customer_company
+    } = req.body; // items: [{ product_id, quantity, sm_price }]
 
-    if (!party_id) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'Party ID is required' });
-    }
     if (!items || !Array.isArray(items) || items.length === 0) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Items list is required' });
     }
 
-    const customer = await Customer.findByPk(party_id, { transaction: t });
-    if (!customer) {
-      await t.rollback();
-      return res.status(404).json({ success: false, error: 'Customer (Party) not found' });
+    let customer = null;
+    if (party_id) {
+      customer = await Customer.findByPk(party_id, { transaction: t });
+      if (!customer) {
+        await t.rollback();
+        return res.status(404).json({ success: false, error: 'Customer (Party) not found' });
+      }
     }
 
     const order_number = generateOrderNumber();
@@ -36,29 +44,40 @@ exports.createOrder = async (req, res, next) => {
     const itemsToCreate = [];
 
     for (const item of items) {
-      const { product_id, quantity, sm_price } = item;
+      const { product_id, quantity, sm_price, part_number, description, dl_price } = item;
       const qty = parseInt(quantity);
       const price = parseFloat(sm_price);
 
-      if (!product_id || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
+      if ((!product_id && !part_number) || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
         await t.rollback();
-        return res.status(400).json({ success: false, error: 'Invalid product, quantity, or selling price' });
+        return res.status(400).json({ success: false, error: 'Each item needs a Part Number or product selection, valid quantity, and selling price' });
       }
 
-      const product = await Product.findByPk(product_id, { transaction: t });
-      if (!product) {
-        await t.rollback();
-        return res.status(404).json({ success: false, error: `Product with ID ${product_id} not found` });
+      let base_price = 0;
+      let productName = description || part_number || 'Custom Item';
+      let snapshotDlPrice = dl_price != null ? parseFloat(dl_price) : 0;
+
+      if (product_id) {
+        const product = await Product.findByPk(product_id, { transaction: t });
+        if (!product) {
+          await t.rollback();
+          return res.status(404).json({ success: false, error: `Product with ID ${product_id} not found` });
+        }
+        base_price = parseFloat(product.selling_price || 0);
+        productName = description || product.name;
+        if (dl_price == null) snapshotDlPrice = parseFloat(product.dealer_landing_price || 0);
       }
 
       // Snapshot base price & GST
-      const base_price = parseFloat(product.selling_price || 0);
       const gst_percent = 18.00; // Default GST 18%
       const line_total = qty * price;
       subtotal += line_total;
 
       itemsToCreate.push({
-        product_id,
+        product_id: product_id || null,
+        part_number: part_number || null,
+        description: productName,
+        dl_price: snapshotDlPrice,
         quantity: qty,
         base_price,
         sm_price: price,
@@ -71,15 +90,20 @@ exports.createOrder = async (req, res, next) => {
     const grand_total = subtotal + gst_amount;
 
     // Check credit hold: if grand_total + current party outstanding > credit_limit
-    // (Here we just set credit_hold = false or basic check)
-    const credit_hold = grand_total > parseFloat(customer.credit_limit || 0);
+    const credit_hold = customer ? (grand_total > parseFloat(customer.credit_limit || 0)) : false;
+    const finalOrderDate = order_date ? new Date(order_date) : new Date();
 
     const order = await Order.create({
       order_number,
-      party_id,
+      party_id: party_id || null,
+      supplier: supplier || null,
+      challan_number: challan_number || null,
+      customer_name: customer_name || null,
+      company_name: company_name || null,
+      customer_company: customer_company || null,
       sales_manager_id: req.user.id, // Or logged-in SM
       status: 'PENDING',
-      order_date: new Date(),
+      order_date: finalOrderDate,
       subtotal,
       gst_amount,
       grand_total,

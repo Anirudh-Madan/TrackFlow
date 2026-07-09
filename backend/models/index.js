@@ -37,6 +37,8 @@ const PipelineItem = require('./PipelineItem');
 const PipelineStageHistory = require('./PipelineStageHistory');
 const Notification = require('./Notification');
 const PartRequest = require('./PartRequest');
+const PurchaseOrder = require('./PurchaseOrder');
+const PurchaseOrderItem = require('./PurchaseOrderItem');
 
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
@@ -197,6 +199,17 @@ PartRequest.belongsTo(Order, { foreignKey: 'linked_order_id', as: 'order' });
 Customer.hasMany(PartRequest, { foreignKey: 'customer_id', as: 'partRequests' });
 PartRequest.belongsTo(Customer, { foreignKey: 'customer_id', as: 'customer' });
 
+// ── Purchase Orders (SM → Vendor) ─────────────────────────────────────────────
+User.hasMany(PurchaseOrder, { foreignKey: 'created_by', as: 'purchaseOrders' });
+PurchaseOrder.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+Vendor.hasMany(PurchaseOrder, { foreignKey: 'vendor_id', as: 'purchaseOrders' });
+PurchaseOrder.belongsTo(Vendor, { foreignKey: 'vendor_id', as: 'vendor' });
+PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });
+PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder' });
+Product.hasMany(PurchaseOrderItem, { foreignKey: 'product_id', as: 'purchaseOrderItems' });
+PurchaseOrderItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+
 module.exports = {
   sequelize,
   Role,
@@ -232,4 +245,6 @@ module.exports = {
   PipelineStageHistory,
   Notification,
   PartRequest,
+  PurchaseOrder,
+  PurchaseOrderItem,
 };

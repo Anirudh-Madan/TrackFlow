@@ -14,7 +14,27 @@ const Order = sequelize.define('Order', {
   },
   party_id: {
     type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: false,
+    allowNull: true,
+  },
+  supplier: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  challan_number: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  customer_name: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  company_name: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  customer_company: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
   },
   sales_manager_id: {
     type: DataTypes.BIGINT.UNSIGNED,
