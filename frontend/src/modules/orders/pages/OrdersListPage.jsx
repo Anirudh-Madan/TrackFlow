@@ -29,7 +29,7 @@ export default function OrdersListPage() {
   const isIM = roleName === 'inventory_manager';
   const isSM = roleName === 'sales_manager';
 
-  const [activeTab, setActiveTab]       = useState(isSM ? 'my-orders' : 'orders') // 'orders' | 'challans' | 'my-orders' | 'order-history'
+  const [activeTab, setActiveTab]       = useState(isSM ? 'new-challan' : 'orders') // 'orders' | 'challans' | 'my-orders' | 'order-history' | 'new-challan'
   const [search, setSearch]             = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [viewOrder, setViewOrder]       = useState(null)
@@ -51,19 +51,23 @@ export default function OrdersListPage() {
   useEffect(() => {
     if (location.state?.openNewOrder) {
       setPreselectedPartyId(location.state.partyId || null)
-      setIsNewOrderOpen(true)
+      if (isSM) {
+        setActiveTab('new-challan')
+      } else {
+        setIsNewOrderOpen(true)
+      }
       // clear state so it doesn't open again on page refresh
       window.history.replaceState({}, document.title)
     } else if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab)
       window.history.replaceState({}, document.title)
     }
-  }, [location])
+  }, [location, isSM])
 
   // Safeguard activeTab default
   useEffect(() => {
     if (isSM) {
-      setActiveTab(prev => prev === 'orders' || prev === 'challans' ? 'my-orders' : prev)
+      setActiveTab(prev => prev === 'orders' || prev === 'challans' ? 'new-challan' : prev)
     }
   }, [isSM])
 
@@ -91,7 +95,10 @@ export default function OrdersListPage() {
     return orders.filter(o => {
       const matchSearch =
         o.order_number.toLowerCase().includes(search.toLowerCase()) ||
-        o.party?.company_name.toLowerCase().includes(search.toLowerCase())
+        (o.party?.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_company || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_name || '').toLowerCase().includes(search.toLowerCase())
       
       const statusKey = o.status.toLowerCase()
       const matchStatus = filterStatus === 'all' || statusKey === filterStatus
@@ -158,6 +165,19 @@ export default function OrdersListPage() {
         {isSM ? (
           <>
             <button
+              onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                activeTab === 'new-challan'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="new-challan-tab-btn"
+            >
+              <Plus className="h-4 w-4" />
+              New Challan
+            </button>
+            <button
               onClick={() => { setActiveTab('my-orders'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
                 'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
@@ -220,6 +240,17 @@ export default function OrdersListPage() {
         <OrderHistoryPage isTab={true} />
       ) : activeTab === 'challans' ? (
         <ChallansListPage />
+      ) : activeTab === 'new-challan' ? (
+        <div className="pt-6">
+          <OrderNewPage
+            isModal={false}
+            preselectedPartyId={preselectedPartyId}
+            onSuccess={() => {
+              setActiveTab('my-orders');
+              fetchOrdersList();
+            }}
+          />
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Header */}
@@ -233,8 +264,8 @@ export default function OrdersListPage() {
               </p>
             </div>
             {isSM && (
-              <Button size="sm" icon={Plus} onClick={() => setIsNewOrderOpen(true)} id="new-order-modal-btn">
-                New Order
+              <Button size="sm" icon={Plus} onClick={() => setActiveTab('new-challan')} id="new-order-modal-btn">
+                New Challan
               </Button>
             )}
           </div>
@@ -324,11 +355,15 @@ export default function OrdersListPage() {
                         <tr key={o.id} className="table-row-hover">
                           <td className="px-5 py-4">
                             <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{o.order_number}</div>
-                            {o.challan?.challan_number && (
+                            {o.challan_number ? (
+                              <div className="text-[10px] text-surface-500 font-mono mt-1 flex items-center gap-1">
+                                <FileText className="h-3 w-3" /> {o.challan_number}
+                              </div>
+                            ) : o.challan?.challan_number ? (
                               <div className="text-[10px] text-surface-500 font-mono mt-1 flex items-center gap-1">
                                 <FileText className="h-3 w-3" /> {o.challan.challan_number}
                               </div>
-                            )}
+                            ) : null}
                           </td>
                           <td className="px-5 py-4 text-xs text-surface-500">
                             <div className="flex items-center gap-1.5">
@@ -337,7 +372,7 @@ export default function OrdersListPage() {
                             </div>
                           </td>
                           <td className="px-5 py-4">
-                            <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{o.party?.company_name}</div>
+                            <div className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{o.customer_company || o.party?.company_name || '—'}</div>
                             <div className="text-xs text-surface-400 flex items-center gap-1 mt-0.5">
                               <MapPin className="h-3 w-3" /> Regional Outstanding check active
                             </div>
@@ -395,18 +430,23 @@ export default function OrdersListPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 p-4 space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Party Details</p>
-                <p className="font-semibold text-surface-900 dark:text-surface-50 text-sm">{viewOrder.party?.company_name}</p>
-                <p className="text-xs text-surface-500">Credit Limit: {formatCurrency(viewOrder.party?.credit_limit || 0)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Party & Customer Details</p>
+                <p className="font-semibold text-surface-900 dark:text-surface-50 text-sm">
+                  Company: {viewOrder.customer_company || viewOrder.party?.company_name || '—'}
+                </p>
+                {viewOrder.company_name && <p className="text-xs text-surface-600 dark:text-surface-300">Name: {viewOrder.company_name}</p>}
+                {viewOrder.customer_name && <p className="text-xs text-surface-600 dark:text-surface-300">Contact: {viewOrder.customer_name}</p>}
+                {viewOrder.supplier && <p className="text-xs text-surface-500">Supplier: {viewOrder.supplier}</p>}
+                {viewOrder.party && <p className="text-xs text-surface-400">Credit Limit: {formatCurrency(viewOrder.party?.credit_limit || 0)}</p>}
               </div>
 
               <div className="rounded-xl bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 p-4 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Order Information</p>
                 <p className="text-sm font-semibold text-surface-800 dark:text-surface-100">Sales rep: {viewOrder.salesManager?.name}</p>
                 <p className="text-xs text-surface-500">Submitted: {new Date(viewOrder.created_at || new Date()).toLocaleString('en-IN')}</p>
-                {viewOrder.challan?.challan_number && (
+                {(viewOrder.challan_number || viewOrder.challan?.challan_number) && (
                   <p className="text-xs font-mono text-primary-600 dark:text-primary-400 mt-1 flex items-center gap-1">
-                    <FileText className="h-3 w-3" /> {viewOrder.challan.challan_number}
+                    <FileText className="h-3 w-3" /> {viewOrder.challan_number || viewOrder.challan?.challan_number}
                   </p>
                 )}
               </div>

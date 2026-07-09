@@ -68,7 +68,10 @@ export default function OrderHistoryPage({ isTab = false }) {
     return orders.filter(o => {
       const searchMatch =
         (o.order_number || '').toLowerCase().includes(search.toLowerCase()) ||
-        (o.party?.company_name || '').toLowerCase().includes(search.toLowerCase())
+        (o.party?.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_company || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_name || '').toLowerCase().includes(search.toLowerCase())
       const statusMatch = filterStatus === 'all' || o.status?.toLowerCase() === filterStatus
       let dateMatch = true
       if (dateFrom) dateMatch = dateMatch && new Date(o.created_at) >= new Date(dateFrom)
@@ -212,12 +215,14 @@ export default function OrderHistoryPage({ isTab = false }) {
                       <p className="font-mono font-medium text-surface-900 dark:text-surface-100">
                         {order.order_number || `ORD-${order.id}`}
                       </p>
-                      {order.challan_number && (
+                      {order.challan_number ? (
                         <p className="text-xs text-surface-400 font-mono mt-0.5">#{order.challan_number}</p>
-                      )}
+                      ) : order.challan?.challan_number ? (
+                        <p className="text-xs text-surface-400 font-mono mt-0.5">#{order.challan.challan_number}</p>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3.5 text-surface-700 dark:text-surface-300">
-                      {order.party?.company_name || '—'}
+                      {order.customer_company || order.party?.company_name || '—'}
                     </td>
                     <td className="px-4 py-3.5 text-surface-500 whitespace-nowrap">
                       {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}

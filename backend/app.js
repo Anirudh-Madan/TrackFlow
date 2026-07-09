@@ -19,6 +19,7 @@ const pipelineRoutes  = require('./modules/pipeline/pipeline.routes');
 const notificationsRoutes = require('./modules/notifications/notifications.routes');
 const partRequestsRoutes  = require('./modules/partRequests/partRequests.routes');
 const analyticsRoutes = require('./modules/analytics/analytics.routes');
+const purchaseOrdersRoutes = require('./modules/purchaseOrders/purchaseOrders.routes');
 
 const app = express();
 
@@ -46,7 +47,8 @@ app.use('/api/v1/reorder',    reorderRoutes);
 app.use('/api/v1/pipeline',   pipelineRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/part-requests', partRequestsRoutes);
-app.use('/api/v1/analytics',  analyticsRoutes);
+app.use('/api/v1/analytics',       analyticsRoutes);
+app.use('/api/v1/purchase-orders', purchaseOrdersRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
