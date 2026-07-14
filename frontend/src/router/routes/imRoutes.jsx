@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { Navigate } from 'react-router-dom'
 import { PageLoader } from '../../components/ui/Spinner'
 
 // Eager
@@ -9,6 +10,7 @@ const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/Stock
 const InwardListPage    = lazy(() => import('../../modules/inward/pages/InwardListPage'))
 const InwardNewPage     = lazy(() => import('../../modules/inward/pages/InwardNewPage'))
 const InwardDetailPage  = lazy(() => import('../../modules/inward/pages/InwardDetailPage'))
+const PriceListPage     = lazy(() => import('../../modules/prices/pages/PriceListPage'))
 
 const OrdersPendingPage = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
 const ChallansPage      = lazy(() => import('../../modules/challans/pages/ChallansListPage'))
@@ -28,6 +30,8 @@ export const imRoutes = [
   { index: true, element: <IMDashboard /> },
   { path: 'dashboard', element: <IMDashboard /> },
   { path: 'stock', element: <Wrap><StockOverviewPage /></Wrap> },
+  { path: 'products', element: <Navigate to="/im/stock" replace /> },
+  { path: 'prices', element: <Wrap><PriceListPage /></Wrap> },
   { path: 'inward', element: <Wrap><InwardListPage /></Wrap> },
   { path: 'inward/new', element: <Wrap><InwardNewPage /></Wrap> },
   { path: 'inward/:id', element: <Wrap><InwardDetailPage /></Wrap> },

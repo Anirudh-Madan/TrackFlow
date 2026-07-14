@@ -31,6 +31,7 @@ import {
   FileText,
   GitBranch,
   Send,
+  AlertTriangle,
 } from 'lucide-react'
 
 export default function Sidebar() {
@@ -65,7 +66,8 @@ export default function Sidebar() {
 
           {/* Operations */}
           <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
-            <SidebarItem to="/im/products" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/stock" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
             <CollapsibleGroup label="Inward Entries" icon={FileUp} collapsed={sidebarCollapsed} defaultOpen>
               <SidebarItem to="/im/inward/new" icon={Plus} label="New Inward" collapsed={sidebarCollapsed} />
               <SidebarItem to="/im/inward" icon={History} label="Inward History" collapsed={sidebarCollapsed} />
@@ -197,6 +199,7 @@ export default function Sidebar() {
           <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Fulfilment */}
@@ -211,6 +214,7 @@ export default function Sidebar() {
         <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
           <CollapsibleGroup label="Reports" icon={BarChart3} collapsed={sidebarCollapsed} defaultOpen>
             <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/imports" icon={FileUp} label="Import History" collapsed={sidebarCollapsed} />
