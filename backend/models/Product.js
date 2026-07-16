@@ -12,6 +12,10 @@ const Product = sequelize.define('Product', {
   selling_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0.00 },
   reorder_threshold: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, defaultValue: 0 },
   remarks: { type: DataTypes.TEXT, allowNull: true },
+  planner: { type: DataTypes.STRING(100), allowNull: true },
+  location: { type: DataTypes.STRING(100), allowNull: true },
+  supplier: { type: DataTypes.STRING(100), allowNull: true },
+  gst_rate: { type: DataTypes.DECIMAL(5, 2), allowNull: true, defaultValue: 18.00 },
 }, {
   tableName: 'product',
   timestamps: true,

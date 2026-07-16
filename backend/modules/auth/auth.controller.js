@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { User, Role, RefreshToken, LoginAttempt } = require('../../models');
+const { User, Role, Permission, RefreshToken, LoginAttempt } = require('../../models');
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -17,6 +17,17 @@ const generateRefreshToken = (user) => {
     { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' }
   );
 };
+
+/**
+ * Fetch the permission keys for a given role_id.
+ */
+async function getPermissionKeys(roleId) {
+  const role = await Role.findByPk(roleId, {
+    include: [{ model: Permission, as: 'permissions', attributes: ['permission_key'] }],
+  });
+  if (!role) return [];
+  return role.permissions.map((p) => p.permission_key);
+}
 
 exports.login = async (req, res, next) => {
   try {
@@ -56,9 +67,7 @@ exports.login = async (req, res, next) => {
     }
 
     // Reset Login Attempts
-    if (attempt) {
-      await attempt.destroy();
-    }
+    if (attempt) await attempt.destroy();
 
     // Update timestamps
     user.last_login_at = new Date();
@@ -71,14 +80,17 @@ exports.login = async (req, res, next) => {
 
     // Save refresh token to DB
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     await RefreshToken.create({
       user_id: user.id,
-      token_hash: bcrypt.hashSync(refreshToken, 10), // secure hash
+      token_hash: bcrypt.hashSync(refreshToken, 10),
       expires_at: expiresAt,
       ip_address: ip,
     });
+
+    // Fetch permissions for this role from DB
+    const permissions = await getPermissionKeys(user.role_id);
 
     res.json({
       success: true,
@@ -90,7 +102,9 @@ exports.login = async (req, res, next) => {
           name: user.name,
           login_id: user.login_id,
           role: user.role.name,
+          role_id: user.role_id,
           must_change_password: user.must_change_password,
+          permissions, // ← array of permission key strings
         },
       },
     });
@@ -113,7 +127,7 @@ const handleFailedAttempt = async (login_id, ip) => {
     attempt.last_attempt_at = new Date();
     if (attempt.attempt_count >= 5) {
       const lockUntil = new Date();
-      lockUntil.setMinutes(lockUntil.getMinutes() + 15); // 15 mins lock
+      lockUntil.setMinutes(lockUntil.getMinutes() + 15);
       attempt.locked_until = lockUntil;
     }
     await attempt.save();
@@ -122,11 +136,8 @@ const handleFailedAttempt = async (login_id, ip) => {
 
 exports.logout = async (req, res, next) => {
   try {
-    const { token } = req.body; // client passes the refresh token to revoke
+    const { token } = req.body;
     if (token) {
-      // Find and delete/revoke all active refresh tokens for the user or specific token
-      // For simplicity, let's delete it so it can't be used again
-      // We hash the incoming token or compare
       const tokens = await RefreshToken.findAll({ where: { user_id: req.user.id } });
       for (const t of tokens) {
         const isMatch = await bcrypt.compare(token, t.token_hash).catch(() => false);
@@ -190,9 +201,16 @@ exports.refreshToken = async (req, res, next) => {
       ip_address: req.ip,
     });
 
+    // Also refresh the permissions snapshot
+    const permissions = await getPermissionKeys(user.role_id);
+
     res.json({
       success: true,
-      data: { accessToken: newAccessToken, refreshToken: newRefreshToken },
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        permissions, // ← refreshed permissions on token rotation
+      },
     });
   } catch (error) {
     next(error);
@@ -213,12 +231,45 @@ exports.changePassword = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Incorrect current password' });
     }
 
-    // Hash and update
     user.password_hash = await bcrypt.hash(newPassword, 10);
     user.must_change_password = false;
     await user.save();
 
     res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/auth/me
+ * Returns the current user profile with a fresh copy of their permissions.
+ * Useful for refreshing permissions after an admin changes them.
+ */
+exports.getMe = async (req, res, next) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      include: [{ model: Role, as: 'role' }],
+    });
+
+    if (!user || !user.is_active) {
+      return res.status(401).json({ success: false, error: 'User not found or inactive' });
+    }
+
+    const permissions = await getPermissionKeys(user.role_id);
+
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        login_id: user.login_id,
+        role: user.role.name,
+        role_id: user.role_id,
+        must_change_password: user.must_change_password,
+        permissions,
+      },
+    });
   } catch (error) {
     next(error);
   }

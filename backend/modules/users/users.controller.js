@@ -87,7 +87,7 @@ exports.createUser = async (req, res, next) => {
 exports.updateUser = async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const { name, phone, region_id, is_active } = req.body;
+    const { name, phone, region_id, is_active, role_id } = req.body;
 
     const user = await User.findByPk(userId, {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
@@ -97,18 +97,32 @@ exports.updateUser = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
+    // Prevent self-demotion
+    if (role_id !== undefined && String(req.user.id) === String(userId) && parseInt(role_id) !== user.role_id) {
+      return res.status(400).json({ success: false, error: 'You cannot change your own role.' });
+    }
+
     // Capture before state for audit
     const beforeState = {
       name:      user.name,
       phone:     user.phone,
       region_id: user.region_id,
       is_active: user.is_active,
+      role_id:   user.role_id,
     };
 
     if (name      !== undefined) user.name      = name;
     if (phone     !== undefined) user.phone     = phone || null;
     if (region_id !== undefined) user.region_id = region_id || null;
     if (is_active !== undefined) user.is_active = is_active;
+
+    if (role_id !== undefined) {
+      const roleExists = await Role.findByPk(role_id);
+      if (!roleExists) {
+        return res.status(400).json({ success: false, error: 'Invalid role ID' });
+      }
+      user.role_id = role_id;
+    }
 
     await user.save();
 
@@ -121,7 +135,7 @@ exports.updateUser = async (req, res, next) => {
       entity_type:  'user',
       entity_id:    user.id,
       before_state: beforeState,
-      after_state:  { name: user.name, phone: user.phone, region_id: user.region_id, is_active: user.is_active },
+      after_state:  { name: user.name, phone: user.phone, region_id: user.region_id, is_active: user.is_active, role_id: user.role_id },
       ip_address:   req.ip,
       user_agent:   req.headers['user-agent'],
     });

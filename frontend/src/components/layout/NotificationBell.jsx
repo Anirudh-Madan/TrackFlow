@@ -5,6 +5,8 @@ import { useNotificationStore } from '../../store/notificationStore'
 import { useAuthStore } from '../../store/authStore'
 import { getUnreadCount } from '../../api/endpoints/notifications.api'
 import { cn } from '../../utils/cn'
+import { io } from 'socket.io-client'
+import toast from 'react-hot-toast'
 
 // Map role → its notifications route (each role has its own routed page).
 const ROLE_PATH = {
@@ -15,7 +17,7 @@ const ROLE_PATH = {
 }
 
 export default function NotificationBell({ className }) {
-  const { unreadCount, setUnreadCount } = useNotificationStore()
+  const { unreadCount, setUnreadCount, incrementUnread } = useNotificationStore()
   const { user, isAuthenticated } = useAuthStore()
   const role = typeof user?.role === 'object' ? user?.role?.name : user?.role
   const to = ROLE_PATH[role] || '/admin/notifications'
@@ -33,6 +35,38 @@ export default function NotificationBell({ className }) {
     const id = setInterval(poll, 30000) // refresh every 30s
     return () => clearInterval(id)
   }, [isAuthenticated, poll])
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || !role) return
+
+    const socket = io('http://localhost:3000', {
+      withCredentials: true,
+    })
+
+    socket.on('connect', () => {
+      console.log('Socket connected, joining room:', role)
+      socket.emit('join', role)
+    })
+
+    socket.on('new-notification', (notif) => {
+      console.log('New notification received via socket:', notif)
+      incrementUnread()
+
+      toast((t) => (
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold text-xs text-surface-900">{notif.title}</p>
+          <p className="text-[11px] text-surface-500 line-clamp-2">{notif.body}</p>
+        </div>
+      ), {
+        icon: '🔔',
+        duration: 5000,
+      })
+    })
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [isAuthenticated, user, role, incrementUnread])
 
   return (
     <Link

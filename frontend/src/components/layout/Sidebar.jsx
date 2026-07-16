@@ -7,6 +7,7 @@ import { SidebarItem, SidebarGroup as CollapsibleGroup } from './SidebarItem'
 import {
   LayoutDashboard,
   Users,
+  User,
   ShieldCheck,
   MapPin,
   Building2,
@@ -31,12 +32,16 @@ import {
   FileText,
   GitBranch,
   Send,
+  AlertTriangle,
 } from 'lucide-react'
 
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore()
   const { unreadCount } = useNotificationStore()
   const { user } = useAuthStore()
+  const hasPermission = useAuthStore((s) => s.hasPermission)
+  const canManagePermissions = hasPermission('settings.manage')
+
 
   const getPortalLabel = () => {
     if (!user) return 'Portal'
@@ -65,7 +70,8 @@ export default function Sidebar() {
 
           {/* Operations */}
           <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
-            <SidebarItem to="/im/products" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/stock" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
             <CollapsibleGroup label="Inward Entries" icon={FileUp} collapsed={sidebarCollapsed} defaultOpen>
               <SidebarItem to="/im/inward/new" icon={Plus} label="New Inward" collapsed={sidebarCollapsed} />
               <SidebarItem to="/im/inward" icon={History} label="Inward History" collapsed={sidebarCollapsed} />
@@ -77,6 +83,7 @@ export default function Sidebar() {
             <SidebarItem to="/im/orders/pending" icon={ShoppingCart} label="Pending Orders" collapsed={sidebarCollapsed} />
             <SidebarItem to="/im/challans" icon={FileText} label="Challans" collapsed={sidebarCollapsed} />
             <SidebarItem to="/im/reorder" icon={ClipboardList} label="Reorder List" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/im/purchase-requests" icon={Send} label="Purchase Orders" collapsed={sidebarCollapsed} />
           </SidebarGroup>
 
           {/* Intelligence */}
@@ -116,8 +123,10 @@ export default function Sidebar() {
 
           {/* Sales */}
           <SidebarGroup label="Sales" collapsed={sidebarCollapsed}>
+            <SidebarItem to="/sm/customers" icon={User} label="Customers" collapsed={sidebarCollapsed} />
             <SidebarItem to="/sm/parties" icon={Building2} label="My Parties" collapsed={sidebarCollapsed} />
             <SidebarItem to="/sm/orders" icon={ShoppingCart} label="Orders" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/stock" icon={Package} label="Stock Overview" collapsed={sidebarCollapsed} />
           </SidebarGroup>
 
           {/* Finance */}
@@ -195,8 +204,10 @@ export default function Sidebar() {
         {/* Operations */}
         <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
           <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/customers" icon={User} label="Customers" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Fulfilment */}
@@ -211,6 +222,7 @@ export default function Sidebar() {
         <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
           <CollapsibleGroup label="Reports" icon={BarChart3} collapsed={sidebarCollapsed} defaultOpen>
             <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/imports" icon={FileUp} label="Import History" collapsed={sidebarCollapsed} />

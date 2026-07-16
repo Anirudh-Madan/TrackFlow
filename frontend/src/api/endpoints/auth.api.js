@@ -11,3 +11,8 @@ export const logout = (refreshToken) => {
 export const changePassword = (currentPassword, newPassword) => {
   return client.post('/auth/change-password', { currentPassword, newPassword })
 }
+
+export const getMe = () => {
+  return client.get('/auth/me')
+}
+

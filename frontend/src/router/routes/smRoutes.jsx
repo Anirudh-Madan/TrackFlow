@@ -8,6 +8,7 @@ import SMDashboard from '../../modules/dashboard/sm/SMDashboard'
 // Lazy — code-split by module
 const PartiesListPage   = lazy(() => import('../../modules/parties/pages/PartiesListPage'))
 const PartyDetailPage   = lazy(() => import('../../modules/parties/pages/PartyDetailPage'))
+const CustomersPage     = lazy(() => import('../../modules/parties/pages/CustomersPage'))
 
 const OrderNewPage      = lazy(() => import('../../modules/orders/pages/OrderNewPage'))
 const OrdersListPage    = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
@@ -23,6 +24,7 @@ const SMPipelinePage    = lazy(() => import('../../modules/pipeline/pages/SMPipe
 
 const NotificationsPage  = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
 const PartRequestsPage   = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
+const StockOverviewPage  = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
@@ -31,6 +33,9 @@ const Wrap = ({ children }) => (
 export const smRoutes = [
   { index: true,                   element: <SMDashboard /> },
   { path: 'dashboard',             element: <SMDashboard /> },
+
+  // Customers
+  { path: 'customers',             element: <Wrap><CustomersPage /></Wrap> },
 
   // Parties
   { path: 'parties',               element: <Wrap><PartiesListPage /></Wrap> },
@@ -55,6 +60,7 @@ export const smRoutes = [
   { path: 'dispatches',            element: <Wrap><SMPipelinePage /></Wrap> },
   { path: 'requests',              element: <Wrap><PartRequestsPage /></Wrap> },
   { path: 'purchase-requests',     element: <Navigate to="/sm/requests" replace /> },
+  { path: 'stock',                 element: <Wrap><StockOverviewPage /></Wrap> },
 
   // Notifications
   { path: 'notifications',         element: <Wrap><NotificationsPage /></Wrap> },

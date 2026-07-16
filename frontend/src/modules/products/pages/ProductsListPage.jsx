@@ -17,15 +17,16 @@ import Badge from '../../../components/ui/Badge'
 import {
   Plus, Search, Package, Tag, Ruler, TrendingUp, AlertCircle,
   Pencil, Trash2, ChevronRight, X, Calendar, Layers,
-  FileSpreadsheet, FileUp, CheckCircle2, Info,
+  FileSpreadsheet, FileUp, CheckCircle2, Info, Truck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import * as XLSX from 'xlsx'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const productSchema = z.object({
-  name:                 z.string().min(1, 'Product name is required').max(150),
-  sku:                  z.string().min(1, 'SKU is required').max(50),
+  name:                 z.string().min(1, 'Product name/description is required').max(150),
+  sku:                  z.string().min(1, 'Part Number/SKU is required').max(50),
   category_id:          z.string().optional().or(z.literal('')),
   uom_id:               z.string().optional().or(z.literal('')),
   purchase_price:       z.coerce.number().min(0, 'Must be ≥ 0'),
@@ -33,6 +34,10 @@ const productSchema = z.object({
   selling_price:        z.coerce.number().min(0, 'Must be ≥ 0'),
   reorder_threshold:    z.coerce.number().int().min(0).optional(),
   remarks:              z.string().optional().or(z.literal('')),
+  planner:              z.string().optional().or(z.literal('')),
+  location:             z.string().optional().or(z.literal('')),
+  supplier:             z.string().optional().or(z.literal('')),
+  gst_rate:             z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 })
 
 const categorySchema = z.object({
@@ -59,6 +64,22 @@ const pricingSchema = z.object({
 
 // ─── Pure JS RFC 4180 Compliant CSV Parser ──────────────────────────────────
 function parseCSV(text) {
+  if (text.startsWith('\uFEFF')) {
+    text = text.substring(1);
+  }
+  
+  // Simple delimiter detection (comma, semicolon, or tab)
+  let delimiter = ',';
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  if (semiCount > commaCount && semiCount > tabCount) {
+    delimiter = ';';
+  } else if (tabCount > commaCount && tabCount > semiCount) {
+    delimiter = '\t';
+  }
+
   let p = '', c = '', r = [];
   let q = false;
   let row = [''];
@@ -68,7 +89,7 @@ function parseCSV(text) {
     if (c === '"') {
       if (q && next === '"') { row[row.length - 1] += '"'; i++; } // Escaped quote
       else { q = !q; }
-    } else if (c === ',' && !q) {
+    } else if (c === delimiter && !q) {
       row.push('');
     } else if ((c === '\r' || c === '\n') && !q) {
       if (c === '\r' && next === '\n') { i++; }
@@ -84,8 +105,8 @@ function parseCSV(text) {
   
   if (r.length === 0) return [];
   
-  // Extract and normalize headers
-  const headers = r[0].map(h => h.trim().toLowerCase().replace(/[\s_]+/g, '_'));
+  // Extract and normalize headers, stripping BOM character if present
+  const headers = r[0].map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_]+/g, '_'));
   return r.slice(1).map(rowValues => {
     const obj = {};
     headers.forEach((header, index) => {
@@ -97,6 +118,7 @@ function parseCSV(text) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => v != null ? `₹${parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'
+const fmtQty = (v) => v != null ? parseFloat(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'
 
 function ErrorBanner({ msg }) {
   if (!msg) return null
@@ -175,6 +197,7 @@ export default function ProductsListPage() {
   // Filter state
   const [search, setSearch]             = useState('')
   const [catFilter, setCatFilter]       = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')
   const [pricingSearch, setPricingSearch] = useState('')
   const [activeTab, setActiveTab]       = useState('catalogue')
 
@@ -209,7 +232,7 @@ export default function ProductsListPage() {
   // ── Forms ──────────────────────────────────────────────────────────────────
   const prodForm = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '' },
+    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 },
   })
 
   const catForm = useForm({
@@ -249,12 +272,16 @@ export default function ProductsListPage() {
 
   // ── Filtered lists ─────────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => products.filter(p => {
+    const q = search.toLowerCase()
     const matchSearch = !search ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.sku && p.sku.toLowerCase().includes(q)) ||
+      (p.planner && p.planner.toLowerCase().includes(q)) ||
+      (p.location && p.location.toLowerCase().includes(q))
     const matchCat = !catFilter || String(p.category_id) === catFilter
-    return matchSearch && matchCat
-  }), [products, search, catFilter])
+    const matchSupplier = !supplierFilter || p.supplier === supplierFilter
+    return matchSearch && matchCat && matchSupplier
+  }), [products, search, catFilter, supplierFilter])
 
   const filteredPricing = useMemo(() => pricing.filter(pr => {
     if (!pricingSearch) return true
@@ -269,7 +296,7 @@ export default function ProductsListPage() {
   const openCreateProduct = () => {
     setEditProduct(null)
     setProdError(null)
-    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '' })
+    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 })
     setIsProdOpen(true)
   }
 
@@ -286,6 +313,10 @@ export default function ProductsListPage() {
       selling_price:        parseFloat(p.selling_price) || 0,
       reorder_threshold:    p.reorder_threshold || 0,
       remarks:              p.remarks || '',
+      planner:              p.planner || '',
+      location:             p.location || '',
+      supplier:             p.supplier || '',
+      gst_rate:             p.gst_rate != null ? parseFloat(p.gst_rate) : 18.00,
     })
     setIsProdOpen(true)
   }
@@ -298,6 +329,7 @@ export default function ProductsListPage() {
         category_id:          data.category_id ? parseInt(data.category_id) : null,
         uom_id:               data.uom_id ? parseInt(data.uom_id) : null,
         dealer_landing_price: data.dealer_landing_price !== '' ? data.dealer_landing_price : null,
+        gst_rate:             data.gst_rate !== '' ? parseFloat(data.gst_rate) : null,
       }
       const res = editProduct
         ? await updateProduct(editProduct.id, payload)
@@ -486,26 +518,62 @@ export default function ProductsListPage() {
     if (!file) return
 
     setImportFileName(file.name)
+    const fileExtension = file.name.split('.').pop().toLowerCase()
+    const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls'
+
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const text = e.target.result
-        const rawRows = parseCSV(text)
-        
+        let rawRows = []
+        if (isExcel) {
+          const data = new Uint8Array(e.target.result)
+          const workbook = XLSX.read(data, { type: 'array' })
+          const firstSheetName = workbook.SheetNames[0]
+          const worksheet = workbook.Sheets[firstSheetName]
+          rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+        } else {
+          const text = e.target.result
+          rawRows = parseCSV(text)
+        }
+
+        // Auto-detect supplier from sheet contents/filename
+        let detectedSupplier = 'Other'
+        const nameLower = file.name.toLowerCase()
+        if (nameLower.includes('cummins')) {
+          detectedSupplier = 'Cummins'
+        } else if (nameLower.includes('meritor')) {
+          detectedSupplier = 'Meritor'
+        }
+
+        if (detectedSupplier === 'Other' && rawRows.length > 0) {
+          const headerKeys = Object.keys(rawRows[0] || {})
+          const normalizedHeaders = headerKeys.map(k => k.replace(/^\uFEFF/, '').replace(/[\s_]+/g, '_').toLowerCase())
+          if (normalizedHeaders.includes('closing_qty') || normalizedHeaders.includes('planner') || normalizedHeaders.includes('closing_quantity')) {
+            detectedSupplier = 'Cummins'
+          } else if (normalizedHeaders.includes('qty') || normalizedHeaders.includes('location')) {
+            detectedSupplier = 'Meritor'
+          }
+        }
+
         // Map headers dynamically to known keys
         const headerMaps = {
-          sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number'],
+          sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number', 'part_no', 'partno'],
+          name: ['description', 'desc', 'name', 'product_name', 'item_name'],
+          planner: ['planner', 'plan'],
+          location: ['location', 'loc', 'bin', 'warehouse_location'],
           purchase_price: ['purchase_price', 'purchase price', 'purchase', 'buy_price', 'cost_price', 'cost'],
-          dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price'],
+          dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price', 'dl_price', 'dl price'],
           selling_price: ['selling_price', 'selling price', 'selling', 'sell_price', 'mrp', 'price'],
-          quantity: ['quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity', 'stock_on_hand', 'on_hand', 'count']
+          quantity: ['quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity', 'stock_on_hand', 'on_hand', 'count', 'closing_qty', 'closing qty', 'closing quantity'],
+          gst_rate: ['gst', 'gst_rate', 'gst_percent', 'gst percent', 'gst_percentage', 'gst percentage', 'tax_rate', 'tax']
         }
 
         const findMappedValue = (row, mappingKeys) => {
           for (const key of mappingKeys) {
             const normalizedKey = key.replace(/[\s_]+/g, '_').toLowerCase()
             for (const rowKey in row) {
-              if (rowKey.replace(/[\s_]+/g, '_').toLowerCase() === normalizedKey) {
+              const normalizedRowKey = rowKey.replace(/^\uFEFF/, '').replace(/[\s_]+/g, '_').toLowerCase()
+              if (normalizedRowKey === normalizedKey) {
                 return row[rowKey]
               }
             }
@@ -515,32 +583,54 @@ export default function ProductsListPage() {
 
         const normalizedRows = rawRows.map(row => {
           const sku = findMappedValue(row, headerMaps.sku)
+          const name = findMappedValue(row, headerMaps.name)
+          const planner = findMappedValue(row, headerMaps.planner)
+          const location = findMappedValue(row, headerMaps.location)
           const purchase_price = findMappedValue(row, headerMaps.purchase_price)
           const dealer_landing_price = findMappedValue(row, headerMaps.dealer_landing_price)
           const selling_price = findMappedValue(row, headerMaps.selling_price)
           const quantity = findMappedValue(row, headerMaps.quantity)
+          const gst_rate = findMappedValue(row, headerMaps.gst_rate)
 
           return {
             sku: sku || '',
-            purchase_price: purchase_price !== undefined ? purchase_price : '',
-            dealer_landing_price: dealer_landing_price !== undefined ? dealer_landing_price : '',
-            selling_price: selling_price !== undefined ? selling_price : '',
-            quantity: quantity !== undefined ? quantity : ''
+            name: name || '',
+            planner: planner || '',
+            location: location || '',
+            purchase_price: purchase_price !== undefined ? String(purchase_price) : '',
+            dealer_landing_price: dealer_landing_price !== undefined ? String(dealer_landing_price) : '',
+            selling_price: selling_price !== undefined ? String(selling_price) : '',
+            quantity: quantity !== undefined ? String(quantity) : '',
+            gst_rate: gst_rate !== undefined ? String(gst_rate) : '',
+            supplier: detectedSupplier
           }
-        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity)
+        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
 
         setParsedImportData(normalizedRows)
-        toast.success(`Successfully parsed ${normalizedRows.length} rows from file.`)
+        if (normalizedRows.length === 0 && rawRows.length > 0) {
+          toast.error('No matching columns found. Ensure headers match the template.')
+        } else {
+          toast.success(`Successfully parsed ${normalizedRows.length} rows from file (Supplier: ${detectedSupplier}).`)
+        }
       } catch (err) {
-        toast.error('Failed to parse CSV file. Ensure it is a valid CSV format.')
+        toast.error('Failed to parse file. Ensure it is a valid CSV or Excel format.')
       }
     };
-    reader.readAsText(file)
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.readAsText(file)
+    }
   }
 
   const { getRootProps: getImportRootProps, getInputProps: getImportInputProps, isDragActive: isImportDragActive } = useDropzone({
     onDrop: onImportDrop,
-    accept: { 'text/csv': ['.csv'] },
+    accept: {
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
+    },
     multiple: false
   })
 
@@ -553,9 +643,9 @@ export default function ProductsListPage() {
       const errors = []
       if (!item.sku?.trim()) {
         errors.push('SKU is missing')
-      } else if (!dbProduct) {
-        errors.push('SKU not found in catalog')
       }
+
+      const isNewProduct = !dbProduct
 
       const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
       const hasSelling = item.selling_price !== '' && item.selling_price !== null
@@ -570,18 +660,33 @@ export default function ProductsListPage() {
       if (item.dealer_landing_price !== '' && item.dealer_landing_price !== null && isNaN(parseFloat(item.dealer_landing_price))) {
         errors.push('Dealer Landing Price must be a number')
       }
+      if (item.gst_rate !== '' && item.gst_rate !== null && isNaN(parseFloat(item.gst_rate))) {
+        errors.push('GST Rate must be a number')
+      }
       if (hasQty && isNaN(parseFloat(item.quantity))) {
         errors.push('Stock Quantity must be a number')
       }
 
-      if (!hasPurchase && !hasSelling && !hasQty) {
-        errors.push('No prices or stock levels specified for update')
+      if (!hasPurchase && !hasSelling && !hasQty && item.gst_rate === '' && !isNewProduct) {
+        errors.push('No prices, GST %, or stock levels specified for update')
       }
 
+      const importName = item.name?.trim() || item.sku?.trim()
+
       return {
-        ...item,
         id: index,
+        sku: item.sku,
+        name: importName,
+        planner: item.planner,
+        location: item.location,
+        supplier: item.supplier,
+        purchase_price: item.purchase_price,
+        dealer_landing_price: item.dealer_landing_price,
+        selling_price: item.selling_price,
+        quantity: item.quantity,
+        gst_rate: item.gst_rate,
         dbProduct,
+        isNewProduct,
         isValid: errors.length === 0,
         errors
       }
@@ -597,7 +702,7 @@ export default function ProductsListPage() {
   }, [validatedImportItems])
 
   const downloadImportTemplate = () => {
-    const csvContent = "data:text/csv;charset=utf-8,SKU,Purchase Price,Dealer Landing Price,Selling Price,Stock Quantity\nSKU001,150.00,165.00,199.00,50\nSKU002,300.00,,399.00,120";
+    const csvContent = "data:text/csv;charset=utf-8,SKU,Description,Planner,Location,Stock Quantity,Dealer Landing Price\nSKU001,Copper Wire,John Doe,Bin A-1,50,165.00\nSKU002,Fiber Optic,Jane Smith,Bin B-4,120,320.00";
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
@@ -612,10 +717,15 @@ export default function ProductsListPage() {
       .filter(item => item.isValid)
       .map(item => ({
         sku: item.sku,
+        name: item.name,
+        planner: item.planner || undefined,
+        location: item.location || undefined,
+        supplier: item.supplier || undefined,
         purchase_price: item.purchase_price !== '' ? parseFloat(item.purchase_price) : undefined,
         dealer_landing_price: item.dealer_landing_price !== '' ? parseFloat(item.dealer_landing_price) : undefined,
         selling_price: item.selling_price !== '' ? parseFloat(item.selling_price) : undefined,
-        quantity: item.quantity !== '' ? parseFloat(item.quantity) : undefined
+        quantity: item.quantity !== '' ? parseFloat(item.quantity) : undefined,
+        gst_rate: item.gst_rate !== '' ? parseFloat(item.gst_rate) : undefined
       }))
 
     if (validPayloadItems.length === 0) {
@@ -634,12 +744,10 @@ export default function ProductsListPage() {
 
       if (res.success) {
         toast.success(res.message || 'Bulk import successful!')
-        // Reset state
         setParsedImportData([])
         setImportFileName('')
         setImportNotes('')
         setIsImportOpen(false)
-        // Refresh products list on screen immediately!
         fetchAll()
       } else {
         toast.error(res.error || 'Import failed')
@@ -720,7 +828,7 @@ export default function ProductsListPage() {
             </Button>
             {activeTab === 'catalogue' && (
               <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
-                Import CSV
+                Import CSV / Excel
               </Button>
             )}
             {activeTab === 'catalogue' ? (
@@ -745,7 +853,7 @@ export default function ProductsListPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search by name or SKU..."
+                  placeholder="Search by part no, desc, planner, loc..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="input-base pl-9 py-1.5"
@@ -766,9 +874,23 @@ export default function ProductsListPage() {
                 </select>
               </div>
 
-              {catFilter && (
-                <button onClick={() => setCatFilter('')} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
-                  <X className="h-3.5 w-3.5" /> Clear filter
+              <div className="relative w-full sm:w-48">
+                <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+                <select
+                  value={supplierFilter}
+                  onChange={e => setSupplierFilter(e.target.value)}
+                  className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+                >
+                  <option value="">All Suppliers</option>
+                  <option value="Cummins">Cummins</option>
+                  <option value="Meritor">Meritor</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {(catFilter || supplierFilter) && (
+                <button onClick={() => { setCatFilter(''); setSupplierFilter(''); }} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
+                  <X className="h-3.5 w-3.5" /> Clear filters
                 </button>
               )}
 
@@ -795,14 +917,12 @@ export default function ProductsListPage() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                      <th className="px-6 py-3.5">SKU</th>
-                      <th className="px-6 py-3.5">Product Name</th>
-                      <th className="px-6 py-3.5">Category</th>
-                      <th className="px-6 py-3.5">UOM</th>
-                      <th className="px-6 py-3.5">Stock</th>
-                      <th className="px-6 py-3.5">Selling Price</th>
-                      <th className="px-6 py-3.5">Purchase Price</th>
-                      <th className="px-6 py-3.5">Reorder At</th>
+                      <th className="px-6 py-3.5">Part Number</th>
+                      <th className="px-6 py-3.5">Description</th>
+                      <th className="px-6 py-3.5">Planner</th>
+                      <th className="px-6 py-3.5">Location</th>
+                      <th className="px-6 py-3.5">Qty</th>
+                      <th className="px-6 py-3.5">DL Price</th>
                       <th className="px-6 py-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -813,27 +933,26 @@ export default function ProductsListPage() {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-surface-900 dark:text-surface-50">{p.name}</div>
                           {p.remarks && <div className="text-xs text-surface-400 mt-0.5 line-clamp-1 italic">{p.remarks}</div>}
+                          <div className="flex gap-2 mt-1">
+                            {p.category && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300">
+                                {getCategoryLabel(p.category)}
+                              </span>
+                            )}
+                            {p.supplier && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50">
+                                {p.supplier}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          {p.category ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 border border-surface-200 dark:border-surface-600">
-                              <Tag className="h-2.5 w-2.5" />
-                              {getCategoryLabel(p.category)}
-                            </span>
-                          ) : <span className="text-surface-400">—</span>}
-                        </td>
-                        <td className="px-6 py-4">
-                          {p.uom ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-900/50">
-                              {p.uom.code}
-                            </span>
-                          ) : <span className="text-surface-400">—</span>}
-                        </td>
+                        <td className="px-6 py-4 font-medium text-surface-800 dark:text-surface-200">{p.planner || '—'}</td>
+                        <td className="px-6 py-4 font-mono text-xs text-surface-600 dark:text-surface-400">{p.location || '—'}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <div className="font-semibold text-surface-900 dark:text-surface-50">
                               {p.available != null ? parseFloat(p.available).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'}
-                              <span className="text-xs text-surface-500 font-normal ml-1">{p.uom?.code}</span>
+                              <span className="text-xs text-surface-500 font-normal ml-1">{p.uom?.code || 'units'}</span>
                             </div>
                             <div className="flex">
                               {p.available <= 0 ? (
@@ -846,13 +965,7 @@ export default function ProductsListPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(p.selling_price)}</td>
-                        <td className="px-6 py-4 text-surface-600 dark:text-surface-400">{fmt(p.purchase_price)}</td>
-                        <td className="px-6 py-4">
-                          {p.reorder_threshold > 0 ? (
-                            <span className="text-xs font-medium text-warning-700 dark:text-warning-400">{p.reorder_threshold} units</span>
-                          ) : <span className="text-surface-400">—</span>}
-                        </td>
+                        <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(p.dealer_landing_price || p.purchase_price)}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -1048,6 +1161,27 @@ export default function ProductsListPage() {
             <Input {...prodForm.register('purchase_price')} label="Purchase Price (₹)" type="number" step="0.01" required error={prodForm.formState.errors.purchase_price?.message} />
             <Input {...prodForm.register('dealer_landing_price')} label="Dealer Landing Price (₹)" type="number" step="0.01" error={prodForm.formState.errors.dealer_landing_price?.message} />
             <Input {...prodForm.register('selling_price')} label="Selling Price (₹)" type="number" step="0.01" required error={prodForm.formState.errors.selling_price?.message} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input {...prodForm.register('gst_rate')} label="GST Rate (%)" type="number" step="0.01" error={prodForm.formState.errors.gst_rate?.message} />
+            <Input {...prodForm.register('planner')} label="Planner" placeholder="e.g. Cummins Planner" error={prodForm.formState.errors.planner?.message} />
+            <Input {...prodForm.register('location')} label="Location" placeholder="e.g. Shelf A-3" error={prodForm.formState.errors.location?.message} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="flex flex-col gap-1.5 sm:col-span-1">
+              <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Supplier</label>
+              <select
+                {...prodForm.register('supplier')}
+                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2050/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+              >
+                <option value="">— Select Supplier —</option>
+                <option value="Cummins">Cummins</option>
+                <option value="Meritor">Meritor</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
 
           <Input {...prodForm.register('reorder_threshold')} label="Reorder Threshold (units)" type="number" placeholder="e.g. 50" error={prodForm.formState.errors.reorder_threshold?.message} />
@@ -1323,10 +1457,10 @@ export default function ProductsListPage() {
               <input {...getImportInputProps()} />
               <FileUp className="h-10 w-10 text-surface-400 mb-3 animate-bounce" />
               <h3 className="text-sm font-bold text-surface-800 dark:text-surface-100">
-                {isImportDragActive ? 'Drop your CSV file here' : 'Drag & drop price list / stock CSV'}
+                {isImportDragActive ? 'Drop your file here' : 'Drag & drop price list / stock CSV or Excel'}
               </h3>
               <p className="text-xs text-surface-500 mt-1">
-                or click to browse your local files (only .csv files supported)
+                or click to browse your local files (.csv, .xlsx, .xls supported)
               </p>
               <button
                 type="button"
@@ -1370,8 +1504,8 @@ export default function ProductsListPage() {
                 <table className="w-full text-left border-collapse text-[11px]">
                   <thead>
                     <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50 font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider sticky top-0 bg-white dark:bg-surface-900 z-10">
-                      <th className="px-4 py-2">SKU / Match</th>
-                      <th className="px-4 py-2">Pricing</th>
+                      <th className="px-4 py-2">Part Number / Match</th>
+                      <th className="px-4 py-2">Details (Planner/Loc/Price)</th>
                       <th className="px-4 py-2">Stock ({importStockMode === 'absolute' ? 'Abs' : 'Rel'})</th>
                       <th className="px-4 py-2">Status</th>
                     </tr>
@@ -1387,32 +1521,36 @@ export default function ProductsListPage() {
                         <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
                           <td className="px-4 py-2">
                             <span className="font-mono font-medium block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
-                            {item.dbProduct && <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>}
+                            {item.dbProduct ? (
+                              <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>
+                            ) : (
+                              <span className="text-[10px] text-primary-500 italic">Will create: {item.name}</span>
+                            )}
                           </td>
                           <td className="px-4 py-2">
-                            {item.dbProduct ? (
-                              <div className="space-y-0.5">
-                                {hasPurchase && (
-                                  <div>
-                                    <span className="text-surface-400">Buy: </span>
-                                    <span>{fmt(item.dbProduct.purchase_price)}</span>
-                                    <ChevronRight className="h-2.5 w-2.5 inline mx-1 text-surface-400" />
-                                    <span className="font-semibold text-success-600">{fmt(item.purchase_price)}</span>
-                                  </div>
-                                )}
-                                {hasSelling && (
-                                  <div>
-                                    <span className="text-surface-400">Sell: </span>
-                                    <span>{fmt(item.dbProduct.selling_price)}</span>
-                                    <ChevronRight className="h-2.5 w-2.5 inline mx-1 text-surface-400" />
-                                    <span className="font-semibold text-success-600">{fmt(item.selling_price)}</span>
-                                  </div>
-                                )}
-                                {!hasPurchase && !hasSelling && <span className="text-surface-400 italic">No price change</span>}
-                              </div>
-                            ) : (
-                              <span className="text-surface-400 italic">—</span>
-                            )}
+                            <div className="space-y-0.5">
+                              {item.planner && (
+                                <div>
+                                  <span className="text-surface-400">Planner: </span>
+                                  <span>{item.planner}</span>
+                                </div>
+                              )}
+                              {item.location && (
+                                <div>
+                                  <span className="text-surface-400">Loc: </span>
+                                  <span className="font-mono">{item.location}</span>
+                                </div>
+                              )}
+                              {item.dealer_landing_price && (
+                                <div>
+                                  <span className="text-surface-400">DL Price: </span>
+                                  <span className="font-semibold text-success-600">{fmt(item.dealer_landing_price)}</span>
+                                </div>
+                              )}
+                              {!item.planner && !item.location && !item.dealer_landing_price && (
+                                <span className="text-surface-400 italic">No details</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-2">
                             {item.dbProduct ? (
@@ -1431,12 +1569,23 @@ export default function ProductsListPage() {
                                 <span className="text-surface-400 italic">No stock change</span>
                               )
                             ) : (
-                              <span className="text-surface-400 italic">—</span>
+                              hasQty ? (
+                                <div>
+                                  <span className="text-surface-400">Initial: </span>
+                                  <span className="font-semibold text-primary-600 dark:text-primary-400">{fmtQty(qtyNum)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-surface-400 italic">No stock</span>
+                              )
                             )}
                           </td>
                           <td className="px-4 py-2">
                             {item.isValid ? (
-                              <Badge variant="success" size="sm">Ready</Badge>
+                              item.isNewProduct ? (
+                                <Badge variant="primary" size="sm">New Product</Badge>
+                              ) : (
+                                <Badge variant="success" size="sm">Ready</Badge>
+                              )
                             ) : (
                               <div className="space-y-0.5">
                                 {item.errors.map((err, i) => (

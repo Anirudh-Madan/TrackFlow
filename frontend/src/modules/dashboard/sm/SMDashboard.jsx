@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   ShoppingCart, Clock, AlertCircle, IndianRupee, TrendingUp, TrendingDown,
   ArrowRight, Plus, Wallet, RefreshCcw, Lightbulb, Building2, CheckCircle2,
-  Package, Zap, Star, ChevronRight, BarChart2, Activity,
+  Package, Zap, Star, ChevronRight, BarChart2, Activity, FilePlus, FileText,
+  UserPlus,
 } from 'lucide-react'
 import { useAuthStore } from '../../../store/authStore'
 import { getOrders } from '../../../api/endpoints/orders.api'
@@ -179,12 +180,33 @@ export default function SMDashboard() {
             Here's a summary of your sales activity today.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" icon={Wallet} onClick={() => navigate('/sm/payments', { state: { openNewPayment: true } })}>
+        <div className="flex flex-wrap items-center gap-4">
+          <Button
+            variant="secondary"
+            size="xl"
+            icon={Wallet}
+            onClick={() => navigate('/sm/payments', { state: { openNewPayment: true } })}
+            className="shadow-sm hover:bg-surface-50 active:bg-surface-100 font-semibold transition-all duration-150 active:scale-98"
+          >
             Log Payment
           </Button>
-          <Button size="sm" icon={Plus} onClick={() => navigate('/sm/orders', { state: { openNewOrder: true } })}>
-            New Order
+          <Button
+            variant="outline"
+            size="xl"
+            icon={UserPlus}
+            onClick={() => navigate('/sm/customers', { state: { openNewCustomer: true } })}
+            className="font-semibold transition-all duration-150 active:scale-98"
+          >
+            New Customer
+          </Button>
+          <Button
+            variant="success"
+            size="xl"
+            icon={FileText}
+            onClick={() => navigate('/sm/orders', { state: { openNewOrder: true } })}
+            className="bg-gradient-to-r from-success-600 to-emerald-600 hover:from-success-700 hover:to-emerald-700 text-white shadow-md shadow-success-500/10 hover:shadow-lg hover:shadow-success-500/20 font-semibold border-none transition-all duration-150 active:scale-98"
+          >
+            Create Sales Challan
           </Button>
         </div>
       </div>

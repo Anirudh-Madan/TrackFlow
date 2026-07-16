@@ -1,18 +1,22 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { getUsers, createUser, updateUser, deleteUser, getRegions, createRegion } from '../../../api/endpoints/users.api'
+import { getRoles, getRolePermissions, updateRolePermissions } from '../../../api/endpoints/rbac.api'
+import { getMe } from '../../../api/endpoints/auth.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
 import {
   Plus, Search, User as UserIcon, Phone, Shield, Eye, EyeOff,
   AlertCircle, Pencil, Trash2, MapPin, X, ShieldCheck,
-  Lock, CheckCircle2, Users,
+  Lock, CheckCircle2, Users, Save, AlertTriangle, RefreshCw, Info, Check, CheckSquare, Square, ChevronUp, ChevronDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import { usePermission } from '../../../hooks/usePermission'
+import { useAuthStore } from '../../../store/authStore'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const createSchema = z.object({
@@ -33,6 +37,7 @@ const editSchema = z.object({
   region_id:  z.string().optional(),
   new_region: z.string().optional(),
   is_active:  z.boolean().optional(),
+  role_id:    z.string().optional(),
 })
 
 const ROLE_LABELS = {
@@ -105,7 +110,7 @@ function RegionPicker({ regions, value, onChange, onNewRegionChange, newRegion }
           <button
             type="button"
             onClick={() => { setShowNew(false); onNewRegionChange(''); onChange('') }}
-            className="shrink-0 h-[38px] w-[38px] flex items-center justify-center rounded-lg border border-surface-300 dark:border-surface-600 text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
+                      className="shrink-0 h-[38px] w-[38px] flex items-center justify-center rounded-lg border border-surface-300 dark:border-surface-600 text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -119,6 +124,7 @@ function RegionPicker({ regions, value, onChange, onNewRegionChange, newRegion }
 // ─── Roles Tab Content ────────────────────────────────────────────────────────
 const SYSTEM_ROLES = [
   {
+    id: 1,
     name: 'admin',
     display: 'Administrator',
     color: ROLE_COLORS.admin,
@@ -126,6 +132,7 @@ const SYSTEM_ROLES = [
     permissions: ['Manage users & roles', 'Configure products & pricing', 'Approve & flag orders', 'View all reports & audit logs', 'Manage inventory adjustments'],
   },
   {
+    id: 2,
     name: 'sales_manager',
     display: 'Sales Manager',
     color: ROLE_COLORS.sales_manager,
@@ -133,6 +140,7 @@ const SYSTEM_ROLES = [
     permissions: ['Create & submit orders', 'View assigned parties & credit limits', 'Record payments', 'Track own order history', 'Access rate cards'],
   },
   {
+    id: 3,
     name: 'inventory_manager',
     display: 'Inventory Manager',
     color: ROLE_COLORS.inventory_manager,
@@ -140,6 +148,7 @@ const SYSTEM_ROLES = [
     permissions: ['View & update stock levels', 'Approve & flag orders', 'Record damage & adjustments', 'Manage inward entries', 'Generate challans'],
   },
   {
+    id: 4,
     name: 'dispatch_worker',
     display: 'Dispatch Worker',
     color: ROLE_COLORS.dispatch_worker,
@@ -149,56 +158,405 @@ const SYSTEM_ROLES = [
 ]
 
 function RolesTab() {
+  const currentUser = useAuthStore((s) => s.user)
+  const updatePermissions = useAuthStore((s) => s.updatePermissions)
+
+  const [roles, setRoles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // State to store current enabled permission IDs per role
+  const [rolePermissionsMap, setRolePermissionsMap] = useState({})
+  const [initialPermissionsMap, setInitialPermissionsMap] = useState({})
+  const [allPermissions, setAllPermissions] = useState([])
+  const [modulesList, setModulesList] = useState([])
+
+  useEffect(() => {
+    async function init() {
+      try {
+        setLoading(true)
+        const rolesRes = await getRoles()
+        if (!rolesRes.success || rolesRes.data.length === 0) {
+          throw new Error('No roles found in system')
+        }
+        const rolesData = rolesRes.data
+        setRoles(rolesData)
+
+        const results = await Promise.all(
+          rolesData.map(r => getRolePermissions(r.id))
+        )
+
+        const enabledMap = {}
+        const initialMap = {}
+        let flatPermissions = []
+
+        results.forEach((res, index) => {
+          if (!res.success) return
+          const roleId = rolesData[index].id
+          const enabledIds = []
+
+          res.data.permission_groups.forEach((group) => {
+            group.permissions.forEach((perm) => {
+              if (index === 0) {
+                flatPermissions.push({
+                  id: perm.id,
+                  permission_key: perm.permission_key,
+                  display_name: perm.display_name,
+                  description: perm.description,
+                  module: group.module,
+                })
+              }
+              if (perm.enabled) {
+                enabledIds.push(perm.id)
+              }
+            })
+          })
+
+          enabledMap[roleId] = enabledIds
+          initialMap[roleId] = [...enabledIds]
+        })
+
+        setAllPermissions(flatPermissions)
+        setRolePermissionsMap(enabledMap)
+        setInitialPermissionsMap(initialMap)
+
+        const uniqueModules = Array.from(new Set(flatPermissions.map(p => p.module))).sort()
+        setModulesList(uniqueModules)
+
+      } catch (err) {
+        toast.error('Failed to load RBAC data: ' + (err.message || 'Unknown error'))
+      } finally {
+        setLoading(false)
+      }
+    }
+    init()
+  }, [])
+
+  const dirtyRoleIds = useMemo(() => {
+    const dirty = []
+    roles.forEach(r => {
+      const current = [...(rolePermissionsMap[r.id] || [])].sort().toString()
+      const initial = [...(initialPermissionsMap[r.id] || [])].sort().toString()
+      if (current !== initial) {
+        dirty.push(r.id)
+      }
+    })
+    return dirty
+  }, [rolePermissionsMap, initialPermissionsMap, roles])
+
+  const isDirty = dirtyRoleIds.length > 0
+
+  const handleTogglePermission = (roleId, permissionId, key) => {
+    const isCurrentlyEnabled = rolePermissionsMap[roleId]?.includes(permissionId)
+    const role = roles.find(r => r.id === roleId)
+
+    if (role?.name === 'admin' && key === 'settings.manage' && isCurrentlyEnabled) {
+      toast(
+        (t) => (
+          <span className="flex flex-col gap-1">
+            <span className="font-semibold text-danger-600 flex items-center gap-1.5 text-xs">
+              <AlertTriangle className="h-3.5 w-3.5" /> Warning
+            </span>
+            <span className="text-[11px] text-surface-600 dark:text-surface-300">
+              Disabling "Manage Settings & Permissions" on Admin role will revoke your ability to manage permissions.
+            </span>
+            <span className="flex justify-end gap-1.5 mt-1">
+              <Button size="xs" variant="secondary" onClick={() => toast.dismiss(t.id)}>Cancel</Button>
+              <Button size="xs" variant="danger" onClick={() => {
+                toggleState(roleId, permissionId)
+                toast.dismiss(t.id)
+              }}>Proceed</Button>
+            </span>
+          </span>
+        ),
+        { duration: 6000 }
+      )
+      return
+    }
+
+    toggleState(roleId, permissionId)
+  }
+
+  const toggleState = (roleId, permissionId) => {
+    setRolePermissionsMap(prev => {
+      const current = prev[roleId] || []
+      const updated = current.includes(permissionId)
+        ? current.filter(id => id !== permissionId)
+        : [...current, permissionId]
+      return { ...prev, [roleId]: updated }
+    })
+  }
+
+  const handleToggleRoleAll = (roleId, allActive) => {
+    const role = roles.find(r => r.id === roleId)
+    setRolePermissionsMap(prev => {
+      if (allActive) {
+        if (role?.name === 'admin') {
+          const managePerm = allPermissions.find(p => p.permission_key === 'settings.manage')
+          return { ...prev, [roleId]: managePerm ? [managePerm.id] : [] }
+        }
+        return { ...prev, [roleId]: [] }
+      } else {
+        return { ...prev, [roleId]: allPermissions.map(p => p.id) }
+      }
+    })
+  }
+
+  const handleTogglePermissionRow = (permissionId, allActive) => {
+    setRolePermissionsMap(prev => {
+      const updated = { ...prev }
+      roles.forEach(r => {
+        const perm = allPermissions.find(p => p.id === permissionId)
+        if (r.name === 'admin' && perm?.permission_key === 'settings.manage' && allActive) {
+          return
+        }
+        const current = updated[r.id] || []
+        if (allActive) {
+          updated[r.id] = current.filter(id => id !== permissionId)
+        } else {
+          if (!current.includes(permissionId)) {
+            updated[r.id] = [...current, permissionId]
+          }
+        }
+      })
+      return updated
+    })
+  }
+
+  const handleReset = () => {
+    const resetMap = {}
+    Object.keys(initialPermissionsMap).forEach(roleId => {
+      resetMap[roleId] = [...initialPermissionsMap[roleId]]
+    })
+    setRolePermissionsMap(resetMap)
+    toast.success('Permissions reset to initial state')
+  }
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      await Promise.all(
+        dirtyRoleIds.map(roleId => 
+          updateRolePermissions(roleId, rolePermissionsMap[roleId])
+        )
+      )
+      toast.success('Permissions saved successfully!')
+      
+      const nextInitial = {}
+      Object.keys(rolePermissionsMap).forEach(roleId => {
+        nextInitial[roleId] = [...rolePermissionsMap[roleId]]
+      })
+      setInitialPermissionsMap(nextInitial)
+
+      if (currentUser && dirtyRoleIds.includes(currentUser.role_id)) {
+        try {
+          const meRes = await getMe()
+          if (meRes.success && meRes.data.permissions) {
+            updatePermissions(meRes.data.permissions)
+            toast.success('Your permissions refreshed instantly.', { icon: '🔄' })
+          }
+        } catch (e) {
+          console.error('Failed to sync permissions', e)
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to save permissions')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const filteredPermissionsByModule = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim()
+    const groups = {}
+    allPermissions.forEach(p => {
+      const match = p.display_name.toLowerCase().includes(query) ||
+                    p.permission_key.toLowerCase().includes(query) ||
+                    (p.description && p.description.toLowerCase().includes(query)) ||
+                    p.module.toLowerCase().includes(query)
+      if (match) {
+        if (!groups[p.module]) groups[p.module] = []
+        groups[p.module].push(p)
+      }
+    })
+    return groups
+  }, [allPermissions, searchQuery])
+
   return (
     <div className="space-y-6 py-2">
-      <div>
-        <h2 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
-          Roles & Permissions
-        </h2>
-        <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-          TrackFlow uses 4 fixed system roles. Each role has a predefined permission set that cannot be modified.
-        </p>
+      {/* Tab Header & Action Controls */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-surface-900 dark:text-surface-55 tracking-tight">
+            Roles & Permissions Management
+          </h2>
+          <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+            Manage comparative role permissions directly from the matrix.
+          </p>
+        </div>
+
+        {isDirty && (
+          <div className="flex items-center gap-3 animate-fade-in">
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+              <Info className="h-3.5 w-3.5" /> Unsaved changes in {dirtyRoleIds.length} role(s)
+            </span>
+            <Button variant="secondary" size="sm" onClick={handleReset} disabled={saving}>
+              Reset
+            </Button>
+            <Button variant="primary" size="sm" icon={Save} onClick={handleSave} loading={saving}>
+              Save Matrix
+            </Button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {SYSTEM_ROLES.map(role => (
-          <div key={role.name} className="card p-5 space-y-3 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3">
-              <div className={cn('p-2 rounded-lg', role.color.split(' ').slice(0,2).join(' '))}>
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <div>
-                <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border', role.color)}>
-                  {role.display}
-                </span>
-              </div>
-              <span className="ml-auto font-mono text-xs text-surface-400 bg-surface-100 dark:bg-surface-800 px-2 py-0.5 rounded">
-                {ROLE_PREFIXES[role.name] || ''}*
-              </span>
-            </div>
+      {/* Permissions Matrix search and table */}
+      <div className="space-y-4 pt-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search privileges..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-base pl-9 py-1.5 text-xs bg-white dark:bg-surface-800 text-surface-900 dark:text-white"
+            />
+          </div>
+          <div className="text-xs text-surface-500 flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5 text-surface-400" />
+            <span>Click intersection checkboxes to edit permission mapping.</span>
+          </div>
+        </div>
 
-            <p className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed">
-              {role.description}
-            </p>
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <RefreshCw className="h-6 w-6 animate-spin text-primary-500" />
+          </div>
+        ) : (
+          <div className="card overflow-hidden border border-surface-200 dark:border-surface-800">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-surface-200 dark:border-surface-800 bg-surface-50/70 dark:bg-surface-850/80 text-[10px] font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
+                    <th className="px-5 py-3 sticky left-0 bg-surface-50/90 dark:bg-surface-900/90 backdrop-blur-xs z-10 w-[300px]">
+                      Permission Module & Key
+                    </th>
+                    {roles.map((role) => {
+                      const roleActivePerms = rolePermissionsMap[role.id] || []
+                      const allActive = roleActivePerms.length === allPermissions.length
+                      return (
+                        <th key={role.id} className="px-5 py-3 text-center w-40">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="font-bold text-surface-900 dark:text-surface-100">
+                              {role.display_name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRoleAll(role.id, allActive)}
+                              className={cn(
+                                "px-1.5 py-0.5 rounded text-[8px] font-bold border transition-colors",
+                                allActive
+                                  ? "bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-900/10 dark:border-primary-900/40"
+                                  : "bg-surface-100 border-surface-200 text-surface-600 dark:bg-surface-800 dark:border-surface-700 dark:text-surface-400"
+                              )}
+                            >
+                              {allActive ? "Deselect" : "Select All"}
+                            </button>
+                          </div>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100 dark:divide-surface-800 text-[11px] text-surface-700 dark:text-surface-300">
+                  {modulesList.map((modName) => {
+                    const modulePerms = filteredPermissionsByModule[modName] || []
+                    if (modulePerms.length === 0) return null
 
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-surface-400 flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Permissions
-              </p>
-              {role.permissions.map(perm => (
-                <div key={perm} className="flex items-center gap-2 text-xs text-surface-600 dark:text-surface-400">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-success-500 shrink-0" />
-                  {perm}
-                </div>
-              ))}
+                    return (
+                      <React.Fragment key={modName}>
+                        <tr className="bg-surface-50/30 dark:bg-surface-900/5">
+                          <td colSpan={1 + roles.length} className="px-5 py-2 font-bold uppercase tracking-wider text-[9px] text-primary-600 dark:text-primary-400 sticky left-0 z-10">
+                            {modName} Module
+                          </td>
+                        </tr>
+
+                        {modulePerms.map((perm) => {
+                          const allEnabledForRow = roles.every(r => (rolePermissionsMap[r.id] || []).includes(perm.id))
+
+                          return (
+                            <tr key={perm.id} className="table-row-hover">
+                              <td className="px-5 py-2.5 sticky left-0 bg-white dark:bg-surface-900 z-10 w-[300px] border-r border-surface-100 dark:border-surface-800/40">
+                                <div className="flex items-start gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePermissionRow(perm.id, allEnabledForRow)}
+                                    className={cn(
+                                      "mt-0.5 p-0.5 rounded border transition-colors",
+                                      allEnabledForRow
+                                        ? "bg-primary-100 border-primary-300 text-primary-800 dark:bg-primary-950 dark:border-primary-800 dark:text-primary-300"
+                                        : "bg-surface-55 border-surface-300 text-surface-400 dark:bg-surface-800 dark:border-surface-700"
+                                    )}
+                                    title={allEnabledForRow ? "Deselect for all" : "Select for all"}
+                                  >
+                                    <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                                  </button>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-semibold text-surface-800 dark:text-white">
+                                      {perm.display_name}
+                                    </span>
+                                    <span className="font-mono text-[8px] text-surface-400 dark:text-surface-500">
+                                      {perm.permission_key}
+                                    </span>
+                                    {perm.description && (
+                                      <span className="text-[9px] text-surface-500 dark:text-surface-400 font-light mt-0.5 leading-snug">
+                                        {perm.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {roles.map((role) => {
+                                const isEnabled = (rolePermissionsMap[role.id] || []).includes(perm.id)
+                                return (
+                                  <td
+                                    key={role.id}
+                                    onClick={() => handleTogglePermission(role.id, perm.id, perm.permission_key)}
+                                    className={cn(
+                                      "px-5 py-2.5 text-center cursor-pointer select-none border-r border-surface-100 dark:border-surface-800/10 last:border-r-0",
+                                      isEnabled ? "bg-primary-50/5 dark:bg-primary-950/2" : ""
+                                    )}
+                                  >
+                                    <div className="flex justify-center items-center">
+                                      <button
+                                        type="button"
+                                        className={cn(
+                                          "h-4 w-4 rounded flex items-center justify-center border transition-all duration-150",
+                                          isEnabled
+                                            ? "bg-primary-600 border-primary-700 text-white shadow-xs"
+                                            : "bg-white border-surface-300 text-transparent dark:bg-surface-800 dark:border-surface-700"
+                                        )}
+                                      >
+                                        <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          )
+                        })}
+                      </React.Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-        ))}
-      </div>
-
-      <div className="flex items-start gap-2 p-3.5 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-surface-200 dark:border-surface-700 text-xs text-surface-500">
-        <Shield className="h-4 w-4 text-surface-400 shrink-0 mt-0.5" />
-        Role permissions are fixed at the system level. To grant additional access, assign a user a higher-privilege role.
+        )}
       </div>
     </div>
   )
@@ -206,6 +564,8 @@ function RolesTab() {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function UsersListPage() {
+  const canChangeRole = usePermission('users.change_role')
+  
   const [activeTab,    setActiveTab]    = useState('users')
   const [users,        setUsers]        = useState([])
   const [regions,      setRegions]      = useState([])
@@ -241,7 +601,7 @@ export default function UsersListPage() {
 
   const editForm = useForm({
     resolver: zodResolver(editSchema),
-    defaultValues: { name: '', phone: '', region_id: '', new_region: '', is_active: true },
+    defaultValues: { name: '', phone: '', region_id: '', new_region: '', is_active: true, role_id: '' },
   })
   const newRegionEdit = editForm.watch('new_region')
   const regionIdEdit  = editForm.watch('region_id')
@@ -296,6 +656,7 @@ export default function UsersListPage() {
       name: user.name, phone: user.phone || '',
       region_id: user.region_id ? String(user.region_id) : '',
       new_region: '', is_active: user.is_active,
+      role_id: user.role_id ? String(user.role_id) : '',
     })
     setSubmitError(null)
     setIsEditOpen(true)
@@ -311,7 +672,15 @@ export default function UsersListPage() {
         region_id = rRes.data.id
         setRegions(prev => [...prev, rRes.data])
       }
-      const res = await updateUser(activeUser.id, { name: data.name, phone: data.phone, region_id, is_active: data.is_active })
+      
+      const role_id = data.role_id ? parseInt(data.role_id) : undefined
+      const res = await updateUser(activeUser.id, { 
+        name: data.name, 
+        phone: data.phone, 
+        region_id, 
+        is_active: data.is_active,
+        role_id
+      })
       if (res.success) {
         toast.success('User updated successfully!')
         setIsEditOpen(false)
@@ -321,6 +690,36 @@ export default function UsersListPage() {
       }
     } catch (err) {
       setSubmitError(err.message || 'Error updating user')
+    }
+  }
+
+  const handleAssignRole = async (userId, roleId) => {
+    try {
+      const userToAssign = users.find(u => u.id === userId)
+      if (!userToAssign) return
+
+      const currentUser = useAuthStore.getState().user
+      if (String(currentUser?.id) === String(userId)) {
+        toast.error('You cannot change your own role.')
+        return
+      }
+
+      const res = await updateUser(userId, {
+        name: userToAssign.name,
+        phone: userToAssign.phone,
+        region_id: userToAssign.region_id,
+        is_active: userToAssign.is_active,
+        role_id: roleId
+      })
+
+      if (res.success) {
+        toast.success(`User "${userToAssign.name}" role updated successfully!`)
+        fetchAll()
+      } else {
+        toast.error(res.error || 'Failed to update user role')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error updating user role')
     }
   }
 
@@ -379,7 +778,7 @@ export default function UsersListPage() {
           id="roles-tab"
         >
           <ShieldCheck className="h-4 w-4" />
-          Roles
+          Roles and Permissions
         </button>
       </div>
 
@@ -504,7 +903,9 @@ export default function UsersListPage() {
       {/* ════════════════════════════════════════════════════════════════ */}
       {/* ROLES TAB                                                       */}
       {/* ════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'roles' && <RolesTab />}
+      {activeTab === 'roles' && (
+        <RolesTab />
+      )}
 
       {/* ── Create User Modal ────────────────────────────────────────── */}
       <Modal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create New User" description="Add a new system user with credentials. Login ID prefix updates with role selection." size="md">
@@ -563,7 +964,7 @@ export default function UsersListPage() {
       </Modal>
 
       {/* ── Edit User Modal ──────────────────────────────────────────── */}
-      <Modal open={isEditOpen} onClose={() => setIsEditOpen(false)} title={`Edit User: ${activeUser?.name}`} description="Update user details. Role and login ID cannot be changed." size="md">
+      <Modal open={isEditOpen} onClose={() => setIsEditOpen(false)} title={`Edit User: ${activeUser?.name}`} description={canChangeRole ? "Update user details including role. Login ID cannot be changed." : "Update user details. Role and login ID cannot be changed."} size="md">
         <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4" noValidate>
           {submitError && (
             <div className="flex items-center gap-2 text-sm text-danger-600 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 px-3 py-2.5 rounded-lg">
@@ -572,6 +973,39 @@ export default function UsersListPage() {
           )}
           <Input {...editForm.register('name')} label="Full Name" placeholder="e.g. Ramesh Kumar" required error={editForm.formState.errors.name?.message} icon={UserIcon} id="user-edit-name" />
           <Input {...editForm.register('phone')} label="Phone Number" placeholder="e.g. +91 9876543210" error={editForm.formState.errors.phone?.message} icon={Phone} id="user-edit-phone" />
+          
+          {canChangeRole ? (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="user-edit-role" className="text-xs font-medium text-surface-700 dark:text-surface-300">System Role <span className="text-danger-500">*</span></label>
+              <div className="relative">
+                <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+                <select
+                  {...editForm.register('role_id')}
+                  id="user-edit-role"
+                  className={`input-base pl-9 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+                >
+                  <option value="1">Administrator (admin)</option>
+                  <option value="2">Sales Manager (sales_manager)</option>
+                  <option value="3">Inventory Manager (inventory_manager)</option>
+                  <option value="4">Dispatch Worker (dispatch_worker)</option>
+                </select>
+              </div>
+              {editForm.formState.errors.role_id && <p className="text-xs text-danger-600">{editForm.formState.errors.role_id.message}</p>}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5 opacity-60">
+              <label className="text-xs font-medium text-surface-700 dark:text-surface-300">System Role</label>
+              <div className="relative">
+                <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+                <input
+                  type="text"
+                  disabled
+                  value={ROLE_LABELS[activeUser?.role?.name] || activeUser?.role?.display_name || ''}
+                  className="input-base pl-9 bg-surface-100 dark:bg-surface-800"
+                />
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700">
             <div className="flex-1">
               <p className="text-sm font-medium text-surface-900 dark:text-surface-100">Account Status</p>

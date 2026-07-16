@@ -2,33 +2,31 @@ const express = require('express');
 const router = express.Router();
 const c = require('./pipeline.controller');
 const authenticate = require('../../middleware/authenticate');
-const authorizeRoles = require('../../middleware/authorizeRoles');
+const requirePermission = require('../../middleware/authorizePermission');
 
 router.use(authenticate);
 
-// Reads (role-scoped in controller)
-router.get('/', c.getPipelines);
-router.get('/stats', c.getStats);
-router.get('/workers', c.getDispatchWorkers);
-router.get('/order/:orderId/available-parts', c.getAvailablePartsForOrder);
-router.get('/:id', c.getPipelineById);
+// Reads (role-scoped filtering handled inside controller)
+router.get('/',                                requirePermission('orders.view'),     c.getPipelines);
+router.get('/stats',                           requirePermission('orders.view'),     c.getStats);
+router.get('/workers',                         requirePermission('orders.approve'),  c.getDispatchWorkers);
+router.get('/order/:orderId/available-parts',  requirePermission('orders.approve'),  c.getAvailablePartsForOrder);
+router.get('/:id',                             requirePermission('orders.view'),     c.getPipelineById);
 
-// Stage 1 — IM approves + picks parts + assigns worker (admin may override)
-router.post('/:id/im-approve', authorizeRoles('admin', 'inventory_manager'), c.imApprove);
+// Stage 1 — IM approves + picks parts + assigns worker
+router.post('/:id/im-approve',                        requirePermission('orders.approve'),  c.imApprove);
+router.post('/order/:orderId/assign-worker',           requirePermission('orders.approve'),  c.quickAssignWorker);
 
-// Quick assign / reassign a worker straight from the Orders & Challans lists
-router.post('/order/:orderId/assign-worker', authorizeRoles('admin', 'inventory_manager'), c.quickAssignWorker);
+// Stage 2 — DW out for delivery
+router.post('/:id/start-delivery',                    requirePermission('orders.dispatch'), c.startDelivery);
 
-// Stage 2 — DW out for delivery (admin may override)
-router.post('/:id/start-delivery', authorizeRoles('admin', 'dispatch_worker'), c.startDelivery);
+// Stage 3 — DW delivered
+router.post('/:id/deliver',                           requirePermission('orders.dispatch'), c.markDelivered);
 
-// Stage 3 — DW delivered (admin may override)
-router.post('/:id/deliver', authorizeRoles('admin', 'dispatch_worker'), c.markDelivered);
+// Stage 4 — SM confirms received / sold
+router.post('/:id/fulfill',                           requirePermission('orders.view'),     c.fulfill);
 
-// Stage 4 — SM confirms received / sold (admin may override)
-router.post('/:id/fulfill', authorizeRoles('admin', 'sales_manager'), c.fulfill);
-
-// Reject — Admin or IM before delivery
-router.post('/:id/reject', authorizeRoles('admin', 'inventory_manager'), c.reject);
+// Reject
+router.post('/:id/reject',                            requirePermission('orders.approve'),  c.reject);
 
 module.exports = router;

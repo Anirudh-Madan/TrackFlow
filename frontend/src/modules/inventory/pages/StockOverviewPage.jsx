@@ -4,6 +4,8 @@ import {
   getDamaged, recordDamage, getAdjustments, createAdjustment, placeReorder,
 } from '../../../api/endpoints/inventory.api'
 import { getProducts } from '../../../api/endpoints/products.api'
+import { createReorderFlag } from '../../../api/endpoints/reorder.api'
+import { useAuthStore } from '../../../store/authStore'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
@@ -94,26 +96,46 @@ export default function StockOverviewPage() {
   const [reorderQty,        setReorderQty]        = useState({})
   const [reorderingProduct, setReorderingProduct] = useState(null)
 
+  // Sales Manager Request Reorder Modal states
+  const [showReorderModal, setShowReorderModal] = useState(false)
+  const [reorderProduct, setReorderProduct] = useState(null)
+  const [reorderQuantity, setReorderQuantity] = useState(10)
+  const [reorderNotes, setReorderNotes] = useState('')
+  const [submittingReorder, setSubmittingReorder] = useState(false)
+
+  const { user } = useAuthStore()
+  const roleName = typeof user?.role === 'object' ? user.role.name : user?.role
+  const isSM = roleName === 'sales_manager'
+
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [sRes, tRes, dRes, aRes, pRes, lRes] = await Promise.all([
-        getStockSummary(), getTransactions(), getDamaged(),
-        getAdjustments(), getProducts(), getLowStock(),
-      ])
-      if (sRes.success)  setStock(sRes.data)
-      if (tRes.success)  setTransactions(tRes.data)
-      if (dRes.success)  setDamaged(dRes.data)
-      if (aRes.success)  setAdjustments(aRes.data)
-      if (pRes.success)  setProducts(pRes.data)
-      if (lRes.success)  setLowStock(lRes.data)
+      if (isSM) {
+        const [sRes, pRes, lRes] = await Promise.all([
+          getStockSummary(), getProducts(), getLowStock(),
+        ])
+        if (sRes.success)  setStock(sRes.data)
+        if (pRes.success)  setProducts(pRes.data)
+        if (lRes.success)  setLowStock(lRes.data)
+      } else {
+        const [sRes, tRes, dRes, aRes, pRes, lRes] = await Promise.all([
+          getStockSummary(), getTransactions(), getDamaged(),
+          getAdjustments(), getProducts(), getLowStock(),
+        ])
+        if (sRes.success)  setStock(sRes.data)
+        if (tRes.success)  setTransactions(tRes.data)
+        if (dRes.success)  setDamaged(dRes.data)
+        if (aRes.success)  setAdjustments(aRes.data)
+        if (pRes.success)  setProducts(pRes.data)
+        if (lRes.success)  setLowStock(lRes.data)
+      }
     } catch (err) {
       toast.error('Failed to load inventory data')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isSM])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -205,33 +227,42 @@ export default function StockOverviewPage() {
     }
   }
 
-  const handleReorder = async (productId) => {
-    const qty = parseFloat(reorderQty[productId] || 0)
-    if (!qty || qty <= 0) return toast.error('Enter a valid quantity to order')
-    setReorderingProduct(productId)
+  const submitReorderRequest = async () => {
+    if (!reorderProduct) return
+    if (!reorderQuantity || reorderQuantity < 1) {
+      toast.error('Please enter a valid quantity')
+      return
+    }
+    setSubmittingReorder(true)
     try {
-      const res = await placeReorder({ product_id: productId, quantity: qty })
-      if (res.success) {
-        toast.success(res.message || 'Reorder placed')
-        setReorderQty(prev => ({ ...prev, [productId]: '' }))
+      const res = await createReorderFlag({
+        product_id: reorderProduct.id,
+        quantity_requested: reorderQuantity,
+        note: reorderNotes || undefined
+      })
+      if (res?.success) {
+        toast.success(`Reorder request submitted for ${reorderProduct.name}!`)
+        setShowReorderModal(false)
         fetchAll()
       } else {
-        toast.error(res.error || 'Reorder failed')
+        toast.error(res?.error || 'Failed to submit request')
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Reorder failed')
+      toast.error(err?.response?.data?.error || 'Failed to submit request')
     } finally {
-      setReorderingProduct(null)
+      setSubmittingReorder(false)
     }
   }
 
   // ── Tab config ────────────────────────────────────────────────────────────
-  const tabs = [
-    { id: 'overview',     label: 'Stock Overview',    Icon: Boxes },
-    { id: 'transactions', label: 'Transactions',      Icon: Activity },
-    { id: 'damaged',      label: 'Damaged Stock',     Icon: AlertTriangle },
-    { id: 'adjustments',  label: 'Adjustments',       Icon: Wrench },
-  ]
+  const tabs = isSM
+    ? [{ id: 'overview',     label: 'Stock Overview',    Icon: Boxes }]
+    : [
+        { id: 'overview',     label: 'Stock Overview',    Icon: Boxes },
+        { id: 'transactions', label: 'Transactions',      Icon: Activity },
+        { id: 'damaged',      label: 'Damaged Stock',     Icon: AlertTriangle },
+        { id: 'adjustments',  label: 'Adjustments',       Icon: Wrench },
+      ]
 
   const TH = ({ children, right }) => (
     <th className={cn('px-4 py-3 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400', right && 'text-right')}>
@@ -251,7 +282,9 @@ export default function StockOverviewPage() {
             Inventory
           </h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-            Live stock levels, movement ledger, damage records, and manual adjustments.
+            {isSM
+              ? 'View live stock levels and request items for restocking.'
+              : 'Live stock levels, movement ledger, damage records, and manual adjustments.'}
           </p>
         </div>
 
@@ -266,24 +299,26 @@ export default function StockOverviewPage() {
           </button>
 
           {/* Reorder Alert Button */}
-          <button
-            id="reorder-alert-btn"
-            onClick={() => setReorderOpen(true)}
-            className={cn(
-              'relative inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-              lowStock.length > 0
-                ? 'bg-warning-500 hover:bg-warning-600 text-white shadow-md shadow-warning-200 dark:shadow-warning-900/30'
-                : 'bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300'
-            )}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            Reorder Alert
-            {lowStock.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-danger-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                {lowStock.length}
-              </span>
-            )}
-          </button>
+          {!isSM && (
+            <button
+              id="reorder-alert-btn"
+              onClick={() => setReorderOpen(true)}
+              className={cn(
+                'relative inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
+                lowStock.length > 0
+                  ? 'bg-warning-500 hover:bg-warning-600 text-white shadow-md shadow-warning-200 dark:shadow-warning-900/30'
+                  : 'bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300'
+              )}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Reorder Alert
+              {lowStock.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-danger-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                  {lowStock.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -387,6 +422,7 @@ export default function StockOverviewPage() {
                     <TH>Available</TH>
                     <TH>Status</TH>
                     <TH>Fill Rate</TH>
+                    {isSM && <TH>Action</TH>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700/50 text-sm">
@@ -420,6 +456,22 @@ export default function StockOverviewPage() {
                         <td className="px-4 py-3.5">
                           <StockBar available={p.available} onHand={p.on_hand} threshold={p.reorder_threshold} />
                         </td>
+                        {isSM && (
+                          <td className="px-4 py-3.5">
+                            <Button
+                              size="xs"
+                              variant={isLow || isOut ? 'warning' : 'secondary'}
+                              onClick={() => {
+                                setReorderProduct(p)
+                                setReorderNotes('')
+                                setReorderQuantity(10)
+                                setShowReorderModal(true)
+                              }}
+                            >
+                              Request Reorder
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -906,6 +958,52 @@ export default function StockOverviewPage() {
             />
           </div>
         </form>
+      </Modal>
+
+      {/* ─── Sales Manager Reorder Request Modal ─── */}
+      <Modal
+        open={showReorderModal}
+        onClose={() => setShowReorderModal(false)}
+        title="Request Product Reorder"
+        description={`Request the Inventory Manager to reorder additional stock for ${reorderProduct?.name}.`}
+        size="md"
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setShowReorderModal(false)}>Cancel</Button>
+            <Button variant="warning" loading={submittingReorder} onClick={submitReorderRequest}>Submit Request</Button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-surface-500">Product Name</label>
+            <div className="px-3.5 py-2.5 bg-surface-50 dark:bg-surface-800 border border-surface-150 rounded-xl text-sm text-surface-900 font-semibold">{reorderProduct?.name}</div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-surface-500">Part Number / SKU</label>
+            <div className="px-3.5 py-2.5 bg-surface-50 dark:bg-surface-800 border border-surface-150 rounded-xl text-sm font-mono text-surface-600">{reorderProduct?.sku}</div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-surface-500">Quantity Needed *</label>
+            <input
+              type="number"
+              min="1"
+              value={reorderQuantity}
+              onChange={e => setReorderQuantity(parseInt(e.target.value) || 1)}
+              className="w-full px-3.5 py-2.5 border border-surface-200 dark:border-surface-700 rounded-xl bg-white dark:bg-surface-800 text-sm text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-surface-500">Notes / Remarks</label>
+            <textarea
+              value={reorderNotes}
+              onChange={e => setReorderNotes(e.target.value)}
+              rows={2}
+              placeholder="e.g. High customer demand for Speedo repairs"
+              className="w-full px-3.5 py-2.5 border border-surface-200 dark:border-surface-700 rounded-xl bg-white dark:bg-surface-800 text-sm text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+          </div>
+        </div>
       </Modal>
 
     </div>

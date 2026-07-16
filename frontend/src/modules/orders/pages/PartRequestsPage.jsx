@@ -10,6 +10,7 @@ import { getOrderItems, createPurchaseOrder, getPurchaseOrders } from '../../../
 import { useAuthStore } from '../../../store/authStore'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
+import { useLocation } from 'react-router-dom'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v) => {
@@ -743,43 +744,66 @@ function OrderHistoryTab({ vendors }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PartRequestsPage() {
+  const location = useLocation()
+  const { user } = useAuthStore()
+  const roleName = typeof user?.role === 'object' ? user.role.name : user?.role
+  const isSM = roleName === 'sales_manager'
+
   const [activeTab, setActiveTab] = useState('history')
   const [vendors, setVendors]   = useState([])
   const [products, setProducts] = useState([])
+
+  useEffect(() => {
+    if (isSM) {
+      setActiveTab('history')
+      return
+    }
+    if (location.state?.openNewPO) {
+      setActiveTab('new-po')
+      window.history.replaceState({}, document.title)
+    } else if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location, isSM])
 
   useEffect(() => {
     getVendors().then(r => { if (r?.success) setVendors(r.data ?? []) }).catch(() => {})
     getProducts().then(r => { if (r?.success) setProducts(r.data ?? []) }).catch(() => {})
   }, [])
 
-  const tabs = [
-    { id: 'history', label: 'Ordered Items', icon: ClipboardList },
-    { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
-  ]
+  const tabs = isSM
+    ? [{ id: 'history', label: 'Ordered Items', icon: ClipboardList }]
+    : [
+        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
+        { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
+      ]
 
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-0">
       {/* Tab bar */}
-      <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6 mb-0">
-        {tabs.map(t => {
-          const Icon = t.icon
-          return (
-            <button key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              id={`${t.id}-tab-btn`}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
-                activeTab === t.id
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {t.label}
-            </button>
-          )
-        })}
-      </div>
+      {!isSM && (
+        <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6 mb-0">
+          {tabs.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                id={`${t.id}-tab-btn`}
+                className={cn(
+                  'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                  activeTab === t.id
+                    ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                    : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="pt-6">
         {activeTab === 'history'

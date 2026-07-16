@@ -11,10 +11,12 @@ const RegionsPage     = lazy(() => import('../../modules/regions/pages/RegionsPa
 
 const PartiesListPage = lazy(() => import('../../modules/parties/pages/PartiesListPage'))
 const PartyDetailPage = lazy(() => import('../../modules/parties/pages/PartyDetailPage'))
+const CustomersPage   = lazy(() => import('../../modules/parties/pages/CustomersPage'))
 
 const ProductsListPage  = lazy(() => import('../../modules/products/pages/ProductsListPage'))
 const ProductDetailPage = lazy(() => import('../../modules/products/pages/ProductDetailPage'))
 const ProductCreatePage = lazy(() => import('../../modules/products/pages/ProductCreatePage'))
+const PriceListPage     = lazy(() => import('../../modules/prices/pages/PriceListPage'))
 
 const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
 
@@ -26,6 +28,7 @@ const AdminPipelinePage = lazy(() => import('../../modules/pipeline/pages/AdminP
 const SalesReportPage      = lazy(() => import('../../modules/reports/pages/SalesReportPage'))
 const StockReportPage      = lazy(() => import('../../modules/reports/pages/StockReportPage'))
 const AuditLogPage         = lazy(() => import('../../modules/audit/pages/AuditLogPage'))
+const BelowDlReportPage    = lazy(() => import('../../modules/reports/pages/BelowDlReportPage'))
 
 const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
 
@@ -42,6 +45,9 @@ export const adminRoutes = [
   // Regions
   { path: 'regions',             element: <Wrap><RegionsPage /></Wrap> },
 
+  // Customers
+  { path: 'customers',             element: <Wrap><CustomersPage /></Wrap> },
+
   // Parties
   { path: 'parties',             element: <Wrap><PartiesListPage /></Wrap> },
   { path: 'parties/:id',         element: <Wrap><PartyDetailPage /></Wrap> },
@@ -50,6 +56,7 @@ export const adminRoutes = [
   { path: 'products',            element: <Wrap><ProductsListPage /></Wrap> },
   { path: 'products/new',        element: <Wrap><ProductCreatePage /></Wrap> },
   { path: 'products/:id',        element: <Wrap><ProductDetailPage /></Wrap> },
+  { path: 'prices',              element: <Wrap><PriceListPage /></Wrap> },
 
   // Inventory
   { path: 'inventory', element: <Wrap><StockOverviewPage /></Wrap> },
@@ -65,6 +72,7 @@ export const adminRoutes = [
   { path: 'reports/sales',       element: <Wrap><SalesReportPage /></Wrap> },
   { path: 'reports/stock',       element: <Wrap><StockReportPage /></Wrap> },
   { path: 'reports/audit',       element: <Wrap><AuditLogPage /></Wrap> },
+  { path: 'reports/below-dl',    element: <Wrap><BelowDlReportPage /></Wrap> },
 
   // Retired per pipeline rebuild — redirect + logout
   { path: 'payments',            element: <RouteRetired /> },
