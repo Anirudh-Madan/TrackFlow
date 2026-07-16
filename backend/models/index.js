@@ -1,5 +1,7 @@
 const sequelize = require('../config/database');
 const Role = require('./Role');
+const Permission = require('./Permission');
+const RolePermission = require('./RolePermission');
 const User = require('./User');
 const Region = require('./Region');
 const RefreshToken = require('./RefreshToken');
@@ -43,6 +45,10 @@ const PurchaseOrderItem = require('./PurchaseOrderItem');
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
 User.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
+
+// ── RBAC: Role ↔ Permission (many-to-many) ───────────────────────────────────
+Role.belongsToMany(Permission, { through: RolePermission, foreignKey: 'role_id', otherKey: 'permission_id', as: 'permissions' });
+Permission.belongsToMany(Role, { through: RolePermission, foreignKey: 'permission_id', otherKey: 'role_id', as: 'roles' });
 
 Region.hasMany(User, { foreignKey: 'region_id', as: 'users' });
 User.belongsTo(Region, { foreignKey: 'region_id', as: 'region' });
@@ -213,6 +219,8 @@ PurchaseOrderItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' }
 module.exports = {
   sequelize,
   Role,
+  Permission,
+  RolePermission,
   User,
   Region,
   RefreshToken,

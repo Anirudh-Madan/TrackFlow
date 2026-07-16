@@ -2,40 +2,34 @@ const express = require('express');
 const router = express.Router();
 const c = require('./products.controller');
 const authenticate = require('../../middleware/authenticate');
-
-const adminOnly = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Admin access required' });
-  }
-  next();
-};
+const requirePermission = require('../../middleware/authorizePermission');
 
 router.use(authenticate);
 
 // Categories (specific paths must come before /:id)
-router.get('/categories',       c.getCategories);
-router.post('/categories',      adminOnly, c.createCategory);
-router.put('/categories/:id',   adminOnly, c.updateCategory);
-router.delete('/categories/:id', adminOnly, c.deleteCategory);
+router.get('/categories',        requirePermission('products.view'),   c.getCategories);
+router.post('/categories',       requirePermission('products.create'), c.createCategory);
+router.put('/categories/:id',    requirePermission('products.edit'),   c.updateCategory);
+router.delete('/categories/:id', requirePermission('products.delete'), c.deleteCategory);
 
 // Units of Measure
-router.get('/uom',       c.getUOM);
-router.post('/uom',      adminOnly, c.createUOM);
-router.put('/uom/:id',   adminOnly, c.updateUOM);
-router.delete('/uom/:id', adminOnly, c.deleteUOM);
+router.get('/uom',        requirePermission('products.view'),   c.getUOM);
+router.post('/uom',       requirePermission('products.create'), c.createUOM);
+router.put('/uom/:id',    requirePermission('products.edit'),   c.updateUOM);
+router.delete('/uom/:id', requirePermission('products.delete'), c.deleteUOM);
 
 // Pricing
-router.get('/pricing',       c.getPricing);
-router.post('/pricing',      c.createPricing);
-router.put('/pricing/:id',   c.updatePricing);
-router.delete('/pricing/:id', c.deletePricing);
+router.get('/pricing',        requirePermission('products.view'),         c.getPricing);
+router.post('/pricing',       requirePermission('products.price_update'), c.createPricing);
+router.put('/pricing/:id',    requirePermission('products.price_update'), c.updatePricing);
+router.delete('/pricing/:id', requirePermission('products.price_update'), c.deletePricing);
 
 // Products
-router.get('/',       c.getProducts);
-router.post('/bulk-import', c.bulkImport);
-router.get('/import-history', c.getImportHistory);
-router.post('/',      c.createProduct);
-router.put('/:id',    c.updateProduct);
-router.delete('/:id', c.deleteProduct);
+router.get('/',              requirePermission('products.view'),   c.getProducts);
+router.post('/bulk-import',  requirePermission('products.import'), c.bulkImport);
+router.get('/import-history',requirePermission('products.view'),   c.getImportHistory);
+router.post('/',             requirePermission('products.create'), c.createProduct);
+router.put('/:id',           requirePermission('products.edit'),   c.updateProduct);
+router.delete('/:id',        requirePermission('products.delete'), c.deleteProduct);
 
 module.exports = router;

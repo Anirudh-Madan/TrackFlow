@@ -16,6 +16,7 @@ const OrdersPendingPage = lazy(() => import('../../modules/orders/pages/OrdersLi
 const ChallansPage      = lazy(() => import('../../modules/challans/pages/ChallansListPage'))
 const ReorderListPage   = lazy(() => import('../../modules/reorder/pages/ReorderListPage'))
 const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+const PartRequestsPage   = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
 
 // Pipeline + requests
 const IMPipelinePage = lazy(() => import('../../modules/pipeline/pages/IMPipelinePage'))
@@ -41,5 +42,6 @@ export const imRoutes = [
   { path: 'pipeline', element: <Wrap><IMPipelinePage /></Wrap> },
   { path: 'workers', element: <Wrap><IMWorkersPage /></Wrap> },
   { path: 'requests', element: <Wrap><IMRequestsPage /></Wrap> },
+  { path: 'purchase-requests', element: <Wrap><PartRequestsPage /></Wrap> },
   { path: 'notifications', element: <Wrap><NotificationsPage /></Wrap> },
 ]

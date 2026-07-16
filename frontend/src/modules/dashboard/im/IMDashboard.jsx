@@ -109,6 +109,13 @@ export default function IMDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            to="/im/purchase-requests"
+            state={{ openNewPO: true }}
+            className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all shadow-indigo-500/10"
+          >
+            Create Purchase Order
+          </Link>
+          <Link
             to="/im/inward/new"
             className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-500 rounded-lg shadow-sm transition-all shadow-primary-500/10"
           >

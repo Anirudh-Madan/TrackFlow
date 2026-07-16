@@ -1,9 +1,13 @@
 const { ReorderFlag, Product, User, Customer, InwardEntry, sequelize } = require('../../models');
+const { notify, usersByRole } = require('../../services/notification.service');
 
 // Create Reorder Flag
 exports.createReorder = async (req, res, next) => {
   try {
-    const { product_id, party_id, quantity_wanted, notes } = req.body;
+    let { product_id, party_id, quantity_wanted, quantity_requested, notes, note } = req.body;
+
+    if (!quantity_wanted && quantity_requested) quantity_wanted = quantity_requested;
+    if (!notes && note) notes = note;
 
     if (!product_id || !quantity_wanted || isNaN(quantity_wanted) || parseInt(quantity_wanted) <= 0) {
       return res.status(400).json({ success: false, error: 'Product ID and a valid quantity wanted are required' });
@@ -37,6 +41,42 @@ exports.createReorder = async (req, res, next) => {
         { model: Customer, as: 'party', attributes: ['id', 'company_name'] },
       ],
     });
+
+    // Notify admins and inventory managers
+    try {
+      const [admins, ims] = await Promise.all([
+        usersByRole('admin'),
+        usersByRole('inventory_manager'),
+      ]);
+      const recipients = [...admins, ...ims];
+
+      const notificationPromises = recipients.map(user =>
+        notify({
+          recipient_id: user.id,
+          sender_id: req.user.id,
+          type: 'REORDER_REQUEST',
+          title: `Reorder requested: ${product.name}`,
+          body: `Sales Manager ${req.user.name} requested reorder of ${quantity_wanted} unit(s) of ${product.name} (SKU: ${product.sku}).`,
+          link: `/im/purchase-requests`,
+          entity_type: 'ReorderFlag',
+          entity_id: reorder.id,
+        })
+      );
+      await Promise.all(notificationPromises);
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to('admin').to('inventory_manager').emit('new-notification', {
+          type: 'REORDER_REQUEST',
+          title: `Reorder requested: ${product.name}`,
+          body: `Sales Manager ${req.user.name} requested reorder of ${quantity_wanted} unit(s) of ${product.name} (SKU: ${product.sku}).`,
+          link: `/im/purchase-requests`,
+          created_at: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send reorder notifications:', err);
+    }
 
     return res.status(201).json({ success: true, data: result });
   } catch (error) {

@@ -2,25 +2,26 @@ const express = require('express');
 const router  = express.Router();
 const c       = require('./inventory.controller');
 const authenticate = require('../../middleware/authenticate');
+const requirePermission = require('../../middleware/authorizePermission');
 
 router.use(authenticate);
 
 // Stock Summary & Low Stock
-router.get('/stock',       c.getStockSummary);
-router.get('/stock/low',   c.getLowStock);
+router.get('/stock',        requirePermission('inventory.view'),      c.getStockSummary);
+router.get('/stock/low',    requirePermission('inventory.low_stock'), c.getLowStock);
 
 // Transaction Ledger (read-only, immutable)
-router.get('/transactions', c.getTransactions);
+router.get('/transactions', requirePermission('inventory.view'),      c.getTransactions);
 
 // Damaged Stock
-router.get('/damaged',     c.getDamaged);
-router.post('/damaged',    c.recordDamage);
+router.get('/damaged',      requirePermission('inventory.view'),      c.getDamaged);
+router.post('/damaged',     requirePermission('inventory.adjust'),    c.recordDamage);
 
 // Manual Adjustments
-router.get('/adjustments', c.getAdjustments);
-router.post('/adjustments', c.createAdjustment);
+router.get('/adjustments',  requirePermission('inventory.view'),      c.getAdjustments);
+router.post('/adjustments', requirePermission('inventory.adjust'),    c.createAdjustment);
 
 // Reorder
-router.post('/reorder',    c.placeReorder);
+router.post('/reorder',     requirePermission('reorder.order'),       c.placeReorder);
 
 module.exports = router;

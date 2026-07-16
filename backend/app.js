@@ -21,6 +21,7 @@ const partRequestsRoutes  = require('./modules/partRequests/partRequests.routes'
 const analyticsRoutes = require('./modules/analytics/analytics.routes');
 const purchaseOrdersRoutes = require('./modules/purchaseOrders/purchaseOrders.routes');
 const reportsRoutes = require('./modules/reports/reports.routes');
+const rbacRoutes = require('./modules/rbac/rbac.routes');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/v1/part-requests', partRequestsRoutes);
 app.use('/api/v1/analytics',       analyticsRoutes);
 app.use('/api/v1/purchase-orders', purchaseOrdersRoutes);
 app.use('/api/v1/reports',         reportsRoutes);
+app.use('/api/v1/rbac',            rbacRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

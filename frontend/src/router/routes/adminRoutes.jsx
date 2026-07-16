@@ -11,6 +11,7 @@ const RegionsPage     = lazy(() => import('../../modules/regions/pages/RegionsPa
 
 const PartiesListPage = lazy(() => import('../../modules/parties/pages/PartiesListPage'))
 const PartyDetailPage = lazy(() => import('../../modules/parties/pages/PartyDetailPage'))
+const CustomersPage   = lazy(() => import('../../modules/parties/pages/CustomersPage'))
 
 const ProductsListPage  = lazy(() => import('../../modules/products/pages/ProductsListPage'))
 const ProductDetailPage = lazy(() => import('../../modules/products/pages/ProductDetailPage'))
@@ -43,6 +44,9 @@ export const adminRoutes = [
 
   // Regions
   { path: 'regions',             element: <Wrap><RegionsPage /></Wrap> },
+
+  // Customers
+  { path: 'customers',             element: <Wrap><CustomersPage /></Wrap> },
 
   // Parties
   { path: 'parties',             element: <Wrap><PartiesListPage /></Wrap> },

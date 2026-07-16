@@ -326,12 +326,10 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
   const lineTotal = fmtNum(item.sell_price) * fmtNum(item.qty)
 
   return (
-    <div className="grid gap-3 p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative"
-      style={{ gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr 1fr auto' }}
-    >
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative">
       {/* Product / Part search */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">Product</label>
+      <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Product</label>
         <ProductDropdown
           products={products}
           value={item.product_id}
@@ -347,8 +345,8 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* Part Number */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">
+      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">
           Part No. <span className="text-danger-500">*</span>
         </label>
         <input
@@ -361,8 +359,8 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* Description */}
-      <div className="flex flex-col gap-1" style={{ gridColumn: 'span 1' }}>
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">Description</label>
+      <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Description</label>
         <input
           type="text"
           value={item.description}
@@ -373,8 +371,8 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* DL Price */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">DL Price</label>
+      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">DL Price</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
           <input
@@ -390,8 +388,8 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* Qty */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">Qty <span className="text-danger-500">*</span></label>
+      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Qty <span className="text-danger-500">*</span></label>
         <input
           type="number"
           min="1"
@@ -403,8 +401,8 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* Selling Price per Unit */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">Sell Price/Unit</label>
+      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
           <input
@@ -420,10 +418,10 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       </div>
 
       {/* Total */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">Total</label>
+      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Total</label>
         <div className={cn(
-          'px-3.5 py-2.5 rounded-xl border text-xs font-semibold font-mono',
+          'px-3.5 py-2.5 rounded-xl border text-xs font-semibold font-mono h-[38px] flex items-center',
           lineTotal > 0
             ? 'border-success-100 dark:border-success-900/30 bg-success-50 dark:bg-success-900/10 text-success-700 dark:text-success-400'
             : 'border-surface-100 dark:border-surface-800 bg-surface-50 dark:bg-surface-800 text-surface-400',
@@ -436,7 +434,7 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
       <button
         type="button"
         onClick={() => onRemove(index)}
-        className="self-end mb-1 p-1.5 rounded-lg text-surface-300 hover:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-all"
+        className="absolute top-3 right-3 lg:static lg:self-end lg:mb-1 p-1.5 rounded-lg text-surface-300 hover:text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-all shrink-0"
         aria-label="Remove row"
       >
         <Trash2 className="h-3.5 w-3.5" />

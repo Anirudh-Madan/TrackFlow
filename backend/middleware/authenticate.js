@@ -28,12 +28,13 @@ module.exports = async (req, res, next) => {
       return res.status(401).json({ success: false, error: 'User is inactive or deleted' });
     }
 
-    // Attach user object to request
+    // Attach user object to request (includes role_id for permission cache lookups)
     req.user = {
       id: user.id,
       name: user.name,
       login_id: user.login_id,
       role: user.role.name,
+      role_id: user.role.id,
       must_change_password: user.must_change_password,
     };
 
