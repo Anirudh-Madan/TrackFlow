@@ -1,0 +1,1 @@
+import{Yt as e}from"./index-DOCD3_Ca.js";var t=t=>e.get(`/reports/sales`,{params:t}),n=t=>e.get(`/reports/below-dl`,{params:t}),r=()=>e.get(`/reports/stock`);export{t as n,r,n as t};

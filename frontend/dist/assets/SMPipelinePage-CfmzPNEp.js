@@ -1,0 +1,1 @@
+import{n as e}from"./createLucideIcon-DyCq-HOk.js";import{t}from"./PipelineBoard-375qRmct.js";var n=e();function r(){return(0,n.jsx)(t,{title:`My Orders — Pipeline`,subtitle:`Track your orders through fulfilment. Mark sold once the customer receives the goods.`})}export{r as default};
