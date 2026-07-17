@@ -1,0 +1,1 @@
+import{Yt as e}from"./index-DOCD3_Ca.js";var t=()=>e.get(`/users`),n=t=>e.post(`/users`,t),r=(t,n)=>e.put(`/users/${t}`,n),i=t=>e.delete(`/users/${t}`),a=()=>e.get(`/regions`),o=t=>e.post(`/regions`,t);export{t as a,a as i,n,r as o,i as r,o as t};

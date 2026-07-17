@@ -1,0 +1,1 @@
+import{c as e,t}from"./index-DOCD3_Ca.js";function n(n){return e(t,n)}export{n as t};
