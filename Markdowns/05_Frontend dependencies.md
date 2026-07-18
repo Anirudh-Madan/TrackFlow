@@ -25,7 +25,8 @@
 | `tailwind-merge` | ^2.3.0 | Merges conflicting Tailwind classes safely. Used in `cn()` utility alongside clsx. |
 | `lucide-react` | ^0.395.0 | Icon library. All UI icons (sidebar, actions, status indicators). Clean, consistent, tree-shakable. |
 | `@headlessui/react` | ^2.1.0 | Accessible unstyled UI primitives. Used for Modal, Dropdown, Transition, Combobox (search selects). |
-| `react-dropzone` | ^14.2.0 | File drag-and-drop upload. Used in Excel import pages and price list upload. |
+| `react-dropzone` | ^15.0.0 | File drag-and-drop upload. Used in Excel import pages and price list upload. |
+| `xlsx` | ^0.18.5 | Client-side Excel reading and parsing (SheetJS). Used to parse uploaded `.xlsx` and `.xls` files into JSON payloads. |
 
 ---
 

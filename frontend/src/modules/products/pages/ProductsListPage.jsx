@@ -22,6 +22,7 @@ import {
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 import * as XLSX from 'xlsx'
+import { matchHeaders, applyMapping, buildRowsFromSheet } from '../../../utils/headerMatcher'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const productSchema = z.object({
@@ -193,6 +194,7 @@ export default function ProductsListPage() {
   const [importEffectiveFrom, setImportEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
   const [importNotes, setImportNotes]           = useState('')
   const [importing, setImporting]               = useState(false)
+  const [unmatchedHeaders, setUnmatchedHeaders] = useState([])   // columns the file had that we couldn't map
 
   // Filter state
   const [search, setSearch]             = useState('')
@@ -518,6 +520,7 @@ export default function ProductsListPage() {
     if (!file) return
 
     setImportFileName(file.name)
+    setUnmatchedHeaders([])   // reset on each new file
     const fileExtension = file.name.split('.').pop().toLowerCase()
     const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls'
 
@@ -530,13 +533,18 @@ export default function ProductsListPage() {
           const workbook = XLSX.read(data, { type: 'array' })
           const firstSheetName = workbook.SheetNames[0]
           const worksheet = workbook.Sheets[firstSheetName]
-          rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+          // Parse in array mode first so we can detect the real header row
+          // (avoids __EMPTY_N placeholders when title/logo rows sit above data)
+          const allArrayRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+          const { rows, headerRowIndex } = buildRowsFromSheet(allArrayRows)
+          console.log(`[Import – Products] Header row detected at sheet row ${headerRowIndex + 1}`)
+          rawRows = rows
         } else {
           const text = e.target.result
           rawRows = parseCSV(text)
         }
 
-        // Auto-detect supplier from sheet contents/filename
+        // ── Auto-detect supplier from filename / header content ─────────────
         let detectedSupplier = 'Other'
         const nameLower = file.name.toLowerCase()
         if (nameLower.includes('cummins')) {
@@ -555,67 +563,61 @@ export default function ProductsListPage() {
           }
         }
 
-        // Map headers dynamically to known keys
-        const headerMaps = {
-          sku: ['sku', 'sku_code', 'product_sku', 'item_sku', 'part_number', 'part_no', 'partno'],
-          name: ['description', 'desc', 'name', 'product_name', 'item_name'],
-          planner: ['planner', 'plan'],
-          location: ['location', 'loc', 'bin', 'warehouse_location'],
-          purchase_price: ['purchase_price', 'purchase price', 'purchase', 'buy_price', 'cost_price', 'cost'],
-          dealer_landing_price: ['dealer_landing_price', 'dealer landing price', 'dealer landing', 'landing_price', 'dealer_price', 'dl_price', 'dl price'],
-          selling_price: ['selling_price', 'selling price', 'selling', 'sell_price', 'mrp', 'price'],
-          quantity: ['quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity', 'stock_on_hand', 'on_hand', 'count', 'closing_qty', 'closing qty', 'closing quantity'],
-          gst_rate: ['gst', 'gst_rate', 'gst_percent', 'gst percent', 'gst_percentage', 'gst percentage', 'tax_rate', 'tax']
-        }
+        // ── Header matching via shared utility ──────────────────────────────
+        const rawHeaders = Object.keys(rawRows[0] || {})
+        const { fieldMap, unmatchedHeaders: unmatched, matchLog } = matchHeaders(rawHeaders, detectedSupplier)
 
-        const findMappedValue = (row, mappingKeys) => {
-          for (const key of mappingKeys) {
-            const normalizedKey = key.replace(/[\s_]+/g, '_').toLowerCase()
-            for (const rowKey in row) {
-              const normalizedRowKey = rowKey.replace(/^\uFEFF/, '').replace(/[\s_]+/g, '_').toLowerCase()
-              if (normalizedRowKey === normalizedKey) {
-                return row[rowKey]
-              }
-            }
-          }
-          return undefined
-        }
+        // Always log matching detail — invaluable for debugging supplier files
+        console.group('[Import – Products] Header matching result')
+        console.log('File            :', file.name)
+        console.log('Detected supplier:', detectedSupplier)
+        console.log('Raw headers      :', matchLog.received)
+        console.log('Matched fields   :', matchLog.matched)
+        console.log('Unmatched headers:', matchLog.unmatched)
+        console.groupEnd()
 
-        const normalizedRows = rawRows.map(row => {
-          const sku = findMappedValue(row, headerMaps.sku)
-          const name = findMappedValue(row, headerMaps.name)
-          const planner = findMappedValue(row, headerMaps.planner)
-          const location = findMappedValue(row, headerMaps.location)
-          const purchase_price = findMappedValue(row, headerMaps.purchase_price)
-          const dealer_landing_price = findMappedValue(row, headerMaps.dealer_landing_price)
-          const selling_price = findMappedValue(row, headerMaps.selling_price)
-          const quantity = findMappedValue(row, headerMaps.quantity)
-          const gst_rate = findMappedValue(row, headerMaps.gst_rate)
+        // ── Build normalised rows ───────────────────────────────────────────
+        const mappedRows = applyMapping(rawRows, fieldMap)
+        const normalizedRows = mappedRows
+          .map(r => ({
+            sku:                  r.sku                  || '',
+            name:                 r.name                 || '',
+            planner:              r.planner              || '',
+            location:             r.location             || '',
+            purchase_price:       r.purchase_price       ?? '',
+            dealer_landing_price: r.dealer_landing_price ?? '',
+            selling_price:        r.selling_price        ?? '',
+            quantity:             r.quantity             ?? '',
+            gst_rate:             r.gst_rate             ?? '',
+            supplier:             r.supplier             || detectedSupplier,
+          }))
+          .filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
 
-          return {
-            sku: sku || '',
-            name: name || '',
-            planner: planner || '',
-            location: location || '',
-            purchase_price: purchase_price !== undefined ? String(purchase_price) : '',
-            dealer_landing_price: dealer_landing_price !== undefined ? String(dealer_landing_price) : '',
-            selling_price: selling_price !== undefined ? String(selling_price) : '',
-            quantity: quantity !== undefined ? String(quantity) : '',
-            gst_rate: gst_rate !== undefined ? String(gst_rate) : '',
-            supplier: detectedSupplier
-          }
-        }).filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
-
+        setUnmatchedHeaders(unmatched)
         setParsedImportData(normalizedRows)
+
         if (normalizedRows.length === 0 && rawRows.length > 0) {
-          toast.error('No matching columns found. Ensure headers match the template.')
+          console.error('[Import – Products] FAILED: no rows matched after header mapping', {
+            file: file.name,
+            supplier: detectedSupplier,
+            rawHeaders: matchLog.received,
+            fieldMap,
+          })
+          toast.error(
+            `No matching columns found. Received: [${matchLog.received.join(', ')}]. Check console for details.`
+          )
+        } else if (unmatched.length > 0) {
+          toast.success(
+            `Parsed ${normalizedRows.length} rows (${detectedSupplier}). ${unmatched.length} column(s) not recognised — see warning below.`
+          )
         } else {
-          toast.success(`Successfully parsed ${normalizedRows.length} rows from file (Supplier: ${detectedSupplier}).`)
+          toast.success(`Successfully parsed ${normalizedRows.length} rows (${detectedSupplier}).`)
         }
       } catch (err) {
+        console.error('[Import – Products] Parse error:', err)
         toast.error('Failed to parse file. Ensure it is a valid CSV or Excel format.')
       }
-    };
+    }
 
     if (isExcel) {
       reader.readAsArrayBuffer(file)
@@ -1496,6 +1498,19 @@ export default function ProductsListPage() {
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
                     <strong>Warning:</strong> {importSummary.invalid} invalid rows will be skipped during import. Please check matching details.
+                  </div>
+                </div>
+              )}
+
+              {unmatchedHeaders.length > 0 && (
+                <div className="p-3 bg-warning-50 dark:bg-yellow-900/20 border border-warning-200 dark:border-yellow-800/50 rounded-lg text-[11px] text-warning-700 dark:text-yellow-300 flex gap-2">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5 text-warning-500 dark:text-yellow-400" />
+                  <div>
+                    <strong>Unrecognised columns skipped ({unmatchedHeaders.length}):</strong>{' '}
+                    <span className="font-mono">{unmatchedHeaders.join(', ')}</span>
+                    <span className="block mt-0.5 text-warning-600 dark:text-yellow-400 opacity-80">
+                      These columns had no matching internal field and were ignored. Add aliases to <code>headerMatcher.js</code> if they should be mapped.
+                    </span>
                   </div>
                 </div>
               )}

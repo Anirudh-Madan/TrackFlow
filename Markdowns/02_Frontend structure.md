@@ -73,6 +73,7 @@
     │   ├── api
     │   │   ├── client.js           # Axios instance: base URL /api/v1, interceptors
     │   │   ├── endpoints
+    │   │   │   ├── analytics.api.js
     │   │   │   ├── audit.api.js
     │   │   │   ├── auth.api.js
     │   │   │   ├── challans.api.js
@@ -81,93 +82,97 @@
     │   │   │   ├── inward.api.js
     │   │   │   ├── notifications.api.js
     │   │   │   ├── orders.api.js
+    │   │   │   ├── partRequests.api.js
     │   │   │   ├── parties.api.js
     │   │   │   ├── payments.api.js
+    │   │   │   ├── pipeline.api.js
     │   │   │   ├── prices.api.js
-    │   │   │   ├── products.api.js
+    │   │   │   ├── products.api.js  # API wrapper: includes bulkImportProducts endpoint
+    │   │   │   ├── purchaseOrders.api.js
+    │   │   │   ├── rbac.api.js
     │   │   │   ├── regions.api.js
     │   │   │   ├── reorder.api.js
     │   │   │   ├── reports.api.js
     │   │   │   └── users.api.js
     │   │   └── interceptors
-    │   │       ├── authInterceptor.js # TODO: placeholder (auth is inline in client.js)
-    │   │       └── refreshInterceptor.js # Auto-refresh token on 401 (skips /auth/login)
-    │   ├── App.css                 # Global app-level CSS overrides
-    │   ├── App.jsx                 # Root component, theme toggle effect
+    │   │       ├── authInterceptor.js
+    │   │       └── refreshInterceptor.js
+    │   ├── App.css
+    │   ├── App.jsx
     │   ├── assets
-    │   │   ├── hero.png            # Hero/branding image
+    │   │   ├── hero.png
     │   │   ├── react.svg
     │   │   └── vite.svg
     │   ├── components
     │   │   ├── data
-    │   │   │   ├── DataTable.jsx   # Sortable, paginated, filterable table
-    │   │   │   ├── PaymentAgeingBadge.jsx # Green/amber/red payment ageing
-    │   │   │   ├── StatCard.jsx    # Dashboard metric card
-    │   │   │   ├── StatusBadge.jsx # Order/dispatch/stock status chips
-    │   │   │   ├── StockBadge.jsx  # In Stock / Low Stock / Out of Stock
-    │   │   │   ├── TableFilters.jsx # Filter bar (status, date, search)
-    │   │   │   └── TablePagination.jsx # Pagination controls
+    │   │   │   ├── DataTable.jsx
+    │   │   │   ├── PaymentAgeingBadge.jsx
+    │   │   │   ├── StatCard.jsx
+    │   │   │   ├── StatusBadge.jsx
+    │   │   │   ├── StockBadge.jsx
+    │   │   │   ├── TableFilters.jsx
+    │   │   │   └── TablePagination.jsx
     │   │   ├── feedback
-    │   │   │   ├── ConfirmDialog.jsx # "Are you sure?" confirmation modal
-    │   │   │   ├── ErrorBoundary.jsx # React error boundary with fallback UI
-    │   │   │   └── Toast.jsx       # Toast notification (success/error/info)
+    │   │   │   ├── ConfirmDialog.jsx
+    │   │   │   ├── ErrorBoundary.jsx
+    │   │   │   └── Toast.jsx
     │   │   ├── form
-    │   │   │   ├── FormDatePicker.jsx # Date picker
-    │   │   │   ├── FormField.jsx   # Label + input + error message wrapper
-    │   │   │   ├── FormFileUpload.jsx # Drag-drop file upload with preview
-    │   │   │   ├── FormSearchSelect.jsx # Async search select (for products/parties)
-    │   │   │   ├── FormSelect.jsx  # RHF-connected select
-    │   │   │   └── FormTextarea.jsx # RHF-connected textarea
+    │   │   │   ├── FormDatePicker.jsx
+    │   │   │   ├── FormField.jsx
+    │   │   │   ├── FormFileUpload.jsx
+    │   │   │   ├── FormSearchSelect.jsx
+    │   │   │   ├── FormSelect.jsx
+    │   │   │   └── FormTextarea.jsx
     │   │   ├── layout
-    │   │   │   ├── Breadcrumb.jsx  # Auto-generated from route
-    │   │   │   ├── GlobalSearch.jsx # Command-palette-style global search
-    │   │   │   ├── NotificationBell.jsx # Bell icon with unread count
-    │   │   │   ├── ProfileMenu.jsx # Avatar dropdown: profile, theme, logout
-    │   │   │   ├── Sidebar.jsx     # Collapsible sidebar shell
-    │   │   │   ├── SidebarGroup.jsx # Grouped nav section with header
-    │   │   │   ├── SidebarItem.jsx # Single nav item with icon, label, badge
-    │   │   │   └── TopNavbar.jsx   # Top bar: breadcrumbs, search, bell, avatar
+    │   │   │   ├── Breadcrumb.jsx
+    │   │   │   ├── GlobalSearch.jsx
+    │   │   │   ├── NotificationBell.jsx
+    │   │   │   ├── ProfileMenu.jsx
+    │   │   │   ├── Sidebar.jsx
+    │   │   │   ├── SidebarGroup.jsx
+    │   │   │   ├── SidebarItem.jsx
+    │   │   │   └── TopNavbar.jsx
     │   │   └── ui
-    │   │       ├── Alert.jsx       # Info/warning/error/success banners
-    │   │       ├── Badge.jsx       # Status badges (green/amber/red/gray)
-    │   │       ├── Button.jsx      # Primary, secondary, ghost, danger variants
-    │   │       ├── Card.jsx        # Content card container
+    │   │       ├── Alert.jsx
+    │   │       ├── Badge.jsx
+    │   │       ├── Button.jsx
+    │   │       ├── Card.jsx
     │   │       ├── Checkbox.jsx
-    │   │       ├── ComingSoon.jsx  # Placeholder page for unimplemented modules
+    │   │       ├── ComingSoon.jsx
     │   │       ├── Divider.jsx
-    │   │       ├── Drawer.jsx      # Right-side slide-over panel
-    │   │       ├── EmptyState.jsx  # Empty table/list state with CTA
-    │   │       ├── Input.jsx       # Text input with label, error, helper
-    │   │       ├── Modal.jsx       # Accessible modal dialog
-    │   │       ├── Select.jsx      # Dropdown select
-    │   │       ├── Skeleton.jsx    # Loading skeleton for tables/cards
-    │   │       ├── Spinner.jsx     # Loading spinner
+    │   │       ├── Drawer.jsx
+    │   │       ├── EmptyState.jsx
+    │   │       ├── Input.jsx
+    │   │       ├── Modal.jsx
+    │   │       ├── Select.jsx
+    │   │       ├── Skeleton.jsx
+    │   │       ├── Spinner.jsx
     │   │       ├── Tabs.jsx
     │   │       ├── Textarea.jsx
     │   │       └── Tooltip.jsx
     │   ├── constants
     │   │   ├── dispatchStatuses.js
-    │   │   ├── orderStatuses.js    # Order status constants + labels
+    │   │   ├── orderStatuses.js
     │   │   ├── paymentModes.js
     │   │   ├── reorderStatuses.js
-    │   │   ├── roles.js            # Role string constants
-    │   │   ├── socketEvents.js     # Mirrors socket/socketEvents.js (shared)
+    │   │   ├── roles.js
+    │   │   ├── socketEvents.js
     │   │   └── stockStates.js
     │   ├── hooks
-    │   │   ├── useConfirm.js       # Trigger confirm dialog, returns Promise
-    │   │   ├── useDebounce.js      # Debounce hook for search inputs
-    │   │   ├── usePagination.js    # Shared pagination state + params builder
-    │   │   ├── usePermission.js    # Check if current user has a permission code
-    │   │   ├── useTableFilters.js  # Filter state management for DataTable
-    │   │   └── useToast.js         # Trigger toast notifications
-    │   ├── index.css               # Tailwind directives + custom base styles
+    │   │   ├── useConfirm.js
+    │   │   ├── useDebounce.js
+    │   │   ├── usePagination.js
+    │   │   ├── usePermission.js
+    │   │   ├── useTableFilters.js
+    │   │   └── useToast.js
+    │   ├── index.css
     │   ├── layouts
-    │   │   ├── AdminLayout.jsx     # Admin shell: topnav + sidebar + content
-    │   │   ├── AuthLayout.jsx      # Login/password pages (no sidebar)
-    │   │   ├── DWLayout.jsx        # DW shell: topnav + sidebar + content
-    │   │   ├── IMLayout.jsx        # IM shell: topnav + sidebar + content
-    │   │   └── SMLayout.jsx        # SM shell: topnav + sidebar + content
-    │   ├── main.jsx                # App entry point, providers setup
+    │   │   ├── AdminLayout.jsx
+    │   │   ├── AuthLayout.jsx
+    │   │   ├── DWLayout.jsx
+    │   │   ├── IMLayout.jsx
+    │   │   └── SMLayout.jsx
+    │   ├── main.jsx
     │   ├── modules
     │   │   ├── audit
     │   │   │   ├── components
@@ -175,14 +180,14 @@
     │   │   │   ├── hooks
     │   │   │   │   └── useAuditLogs.js
     │   │   │   └── pages
-    │   │   │       └── AuditLogPage.jsx # Admin only
+    │   │   │       └── AuditLogPage.jsx # Admin only (Placeholder; ComingSoon)
     │   │   ├── auth
     │   │   │   ├── components
     │   │   │   │   └── LoginForm.jsx # TODO: extracted form component
     │   │   │   ├── hooks
-    │   │   │   │   └── useLogin.js # TODO: login mutation hook (currently inline in page)
+    │   │   │   │   └── useLogin.js # TODO: login mutation hook
     │   │   │   └── pages
-    │   │   │       ├── ChangePasswordPage.jsx # Password change (first-login or manual)
+    │   │   │       ├── ChangePasswordPage.jsx # Password change
     │   │   │       └── LoginPage.jsx # Login form
     │   │   ├── challans
     │   │   │   ├── components
@@ -191,7 +196,7 @@
     │   │   │   ├── hooks
     │   │   │   │   └── useChallans.js
     │   │   │   └── pages
-    │   │   │       ├── ChallanDetailPage.jsx # Full challan view + PDF download
+    │   │   │       ├── ChallanDetailPage.jsx
     │   │   │       └── ChallansListPage.jsx
     │   │   ├── dashboard
     │   │   │   ├── admin
@@ -216,7 +221,7 @@
     │   │   │   │       ├── LowStockWidget.jsx
     │   │   │   │       ├── PendingOrdersWidget.jsx
     │   │   │   │       └── ReorderWidget.jsx
-    │   │   │   ├── RolePlaceholderPage.jsx # Fallback page for roles without a dashboard yet
+    │   │   │   ├── RolePlaceholderPage.jsx # Fallback page
     │   │   │   └── sm
     │   │   │       ├── SMDashboard.jsx
     │   │   │       └── widgets
@@ -226,28 +231,28 @@
     │   │   │           └── PricingSummaryWidget.jsx
     │   │   ├── dispatch
     │   │   │   ├── components
-    │   │   │   │   ├── ChallanPickList.jsx # Rack location + pick checkbox per item
+    │   │   │   │   ├── ChallanPickList.jsx
     │   │   │   │   └── DispatchTable.jsx
     │   │   │   ├── hooks
     │   │   │   │   ├── useDispatches.js
     │   │   │   │   └── useDispatchMutations.js
     │   │   │   └── pages
-    │   │   │       ├── DispatchPickPage.jsx # DW: item-by-item picking interface
-    │   │   │       ├── DispatchQueuePage.jsx # DW: list of assigned challans
-    │   │   │       └── DispatchSummaryPage.jsx # Daily summary PDF download
+    │   │   │       ├── DispatchPickPage.jsx
+    │   │   │       ├── DispatchQueuePage.jsx
+    │   │   │       └── DispatchSummaryPage.jsx
     │   │   ├── inventory
     │   │   │   ├── components
-    │   │   │   │   ├── StockSplitBadge.jsx # Stock1 | Stock2 display for IM/Admin
-    │   │   │   │   └── StockTable.jsx # Shows combined or split depending on role
+    │   │   │   │   ├── StockSplitBadge.jsx
+    │   │   │   │   └── StockTable.jsx
     │   │   │   ├── hooks
     │   │   │   │   └── useStock.js
     │   │   │   └── pages
-    │   │   │       └── StockCleanupPage.jsx # Admin: Stock1/Stock2 cleanup tool
+    │   │   │       └── StockCleanupPage.jsx
     │   │   ├── inward
     │   │   │   ├── components
-    │   │   │   │   ├── InwardEntryForm.jsx # Header + dynamic line items
+    │   │   │   │   ├── InwardEntryForm.jsx
     │   │   │   │   ├── InwardHistoryTable.jsx
-    │   │   │   │   └── InwardLineItem.jsx # Part search + qty + inline create
+    │   │   │   │   └── InwardLineItem.jsx
     │   │   │   ├── hooks
     │   │   │   │   ├── useInwardEntries.js
     │   │   │   │   └── useInwardMutations.js
@@ -262,45 +267,45 @@
     │   │   │   ├── hooks
     │   │   │   │   └── useNotifications.js
     │   │   │   └── pages
-    │   │   │       └── NotificationsPage.jsx # Full notification history
+    │   │   │       └── NotificationsPage.jsx
     │   │   ├── orders
     │   │   │   ├── components
     │   │   │   │   ├── OrderBuilder
-    │   │   │   │   │   ├── OrderBuilder.jsx # Parent: party select + items + submit
-    │   │   │   │   │   ├── OrderItemList.jsx # Dynamic list of rows
-    │   │   │   │   │   ├── OrderItemRow.jsx # Product search + base price + SM price
-    │   │   │   │   │   ├── OrderSummary.jsx # Totals, GST, submit button
-    │   │   │   │   │   ├── PartySelector.jsx # Searchable party dropdown
-    │   │   │   │   │   └── SmartSuggestionPanel.jsx # Suggestion cards with + Add
-    │   │   │   │   ├── OrderFlagModal.jsx # IM: flag with reason
-    │   │   │   │   ├── OrderReturnModal.jsx # Admin/IM: return/cancel with reason
-    │   │   │   │   ├── OrderStatusTrail.jsx # Visual status timeline
+    │   │   │   │   │   ├── OrderBuilder.jsx
+    │   │   │   │   │   ├── OrderItemList.jsx
+    │   │   │   │   │   ├── OrderItemRow.jsx
+    │   │   │   │   │   ├── OrderSummary.jsx
+    │   │   │   │   │   ├── PartySelector.jsx
+    │   │   │   │   │   └── SmartSuggestionPanel.jsx
+    │   │   │   │   ├── OrderFlagModal.jsx
+    │   │   │   │   ├── OrderReturnModal.jsx
+    │   │   │   │   ├── OrderStatusTrail.jsx
     │   │   │   │   └── OrderTable.jsx
     │   │   │   ├── hooks
     │   │   │   │   ├── useOrderMutations.js
     │   │   │   │   └── useOrders.js
     │   │   │   └── pages
-    │   │   │       ├── OrderDetailPage.jsx # View + actions (approve/flag/dispatch)
-    │   │   │       ├── OrderHistoryPage.jsx # SM: own past orders, clone action (also rendered as tab)
-    │   │   │       ├── OrderNewPage.jsx # SM: full order builder (also supports modal rendering)
-    │   │   │       └── OrdersListPage.jsx # All orders (Admin/IM) or own (SM) (with tabs and modal integration)
+    │   │   │       ├── OrderDetailPage.jsx
+    │   │   │       ├── OrderHistoryPage.jsx
+    │   │   │       ├── OrderNewPage.jsx
+    │   │   │       └── OrdersListPage.jsx
     │   │   ├── parties
     │   │   │   ├── components
-    │   │   │   │   ├── CreditLimitBanner.jsx # Inline credit warning during order
+    │   │   │   │   ├── CreditLimitBanner.jsx
     │   │   │   │   ├── PartyForm.jsx
-    │   │   │   │   ├── PartyLedger.jsx # Orders + payments timeline
-    │   │   │   │   ├── PartyOrderHistory.jsx # Last N orders for SM field use
+    │   │   │   │   ├── PartyLedger.jsx
+    │   │   │   │   ├── PartyOrderHistory.jsx
     │   │   │   │   └── PartyTable.jsx
     │   │   │   ├── hooks
     │   │   │   │   ├── useParties.js
     │   │   │   │   └── usePartyMutations.js
     │   │   │   └── pages
     │   │   │       ├── PartiesListPage.jsx
-    │   │   │       ├── PartyDetailPage.jsx # Ledger, order history, credit info
-    │   │   │       └── PartyImportPage.jsx # Excel import flow
+    │   │   │       ├── PartyDetailPage.jsx
+    │   │   │       └── PartyImportPage.jsx # Placeholder (returns null; actual excel logic is in specific pages)
     │   │   ├── payments
     │   │   │   ├── components
-    │   │   │   │   ├── AgeingBadge.jsx # Green/amber/red ageing indicator
+    │   │   │   │   ├── AgeingBadge.jsx
     │   │   │   │   ├── PaymentForm.jsx
     │   │   │   │   └── PaymentTable.jsx
     │   │   │   ├── hooks
@@ -308,31 +313,43 @@
     │   │   │   │   └── usePayments.js
     │   │   │   └── pages
     │   │   │       ├── PartyLedgerPage.jsx
-    │   │   │       ├── PaymentNewPage.jsx # SM: log payment form (also supports modal rendering)
-    │   │   │       └── PaymentsListPage.jsx # Payments history (with modal integration)
+    │   │   │       ├── PaymentNewPage.jsx
+    │   │   │       └── PaymentsListPage.jsx
+    │   │   ├── pipeline
+    │   │   │   ├── components
+    │   │   │   ├── constants.js
+    │   │   │   └── pages
+    │   │   │       ├── AdminPipelinePage.jsx
+    │   │   │       ├── DWPipelinePage.jsx
+    │   │   │       ├── IMPipelinePage.jsx
+    │   │   │       ├── IMRequestsPage.jsx
+    │   │   │       ├── IMWorkersPage.jsx
+    │   │   │       ├── SMPipelinePage.jsx
+    │   │   │       └── SMRequestsPage.jsx
     │   │   ├── prices
     │   │   │   ├── components
     │   │   │   │   ├── PriceHistoryTable.jsx
-    │   │   │   │   ├── PricePreviewTable.jsx # Old / New / Change% with row deselect
+    │   │   │   │   ├── PricePreviewTable.jsx
     │   │   │   │   └── PriceUploadForm.jsx
     │   │   │   ├── hooks
     │   │   │   │   └── usePrices.js
     │   │   │   └── pages
     │   │   │       ├── PriceHistoryPage.jsx
-    │   │   │       └── PriceUpdatePage.jsx # Upload → preview → confirm flow
+    │   │   │       ├── PriceListPage.jsx   # Core prices list, inline updates, and Excel/CSV import flow using SheetJS (XLSX.read) client-side
+    │   │   │       └── PriceUpdatePage.jsx # Placeholder (returns null)
     │   │   ├── products
     │   │   │   ├── components
-    │   │   │   │   ├── ProductForm.jsx # Includes all custom Admin fields
-    │   │   │   │   ├── ProductSearchSelect.jsx # Async search used in order screen
+    │   │   │   │   ├── ProductForm.jsx
+    │   │   │   │   ├── ProductSearchSelect.jsx
     │   │   │   │   └── ProductTable.jsx
     │   │   │   ├── hooks
     │   │   │   │   ├── useProductMutations.js
     │   │   │   │   └── useProducts.js
     │   │   │   └── pages
-    │   │   │       ├── ProductCreatePage.jsx # Dedicated product creation page
+    │   │   │       ├── ProductCreatePage.jsx
     │   │   │       ├── ProductDetailPage.jsx
-    │   │   │       ├── ProductImportPage.jsx
-    │   │   │       └── ProductsListPage.jsx
+    │   │   │       ├── ProductImportPage.jsx # Placeholder (returns null)
+    │   │   │       └── ProductsListPage.jsx  # Core product table and bulk Excel/CSV product import flow using SheetJS (XLSX.read) client-side
     │   │   ├── regions
     │   │   │   ├── components
     │   │   │   │   ├── RegionForm.jsx
@@ -608,3 +625,28 @@ Minimal and purposeful:
 - Toast: slide in from right (Framer Motion, lightweight usage)
 - Table row hover: `transition-colors duration-100`
 - No page transition animations — ERP users value speed over spectacle.
+
+---
+
+## Excel / CSV Import Flow
+
+The Excel and CSV import feature is implemented entirely client-side for parsing and verification, sending the clean JSON payload to the backend for transaction-wrapped database inserts and audits.
+
+### Core Handling Files
+1. **[ProductsListPage.jsx](file:///c:/Users/sreed/OneDrive/Desktop/TrackFlow/frontend/src/modules/products/pages/ProductsListPage.jsx)**:
+   - Implements React Dropzone (`useDropzone`) for dragging and dropping `.xlsx`, `.xls`, or `.csv` files.
+   - Reads files as an array buffer (`FileReader.readAsArrayBuffer`) for Excel or text (`FileReader.readAsText`) for CSV.
+   - Uses **SheetJS** (`XLSX.read` and `XLSX.utils.sheet_to_json`) for parsing Excel workbooks.
+   - Uses a local `parseCSV` function for CSV text files.
+   - Dynamically maps variant headers (e.g., `sku_code`, `part_number` -> `sku`) to standard internal properties.
+   - Performs client-side validation (against product lookup dictionaries) to identify validation errors, categorizing products as "new" or "existing" to prepare the payload.
+   - Triggers the `bulkImportProducts` API utility.
+2. **[PriceListPage.jsx](file:///c:/Users/sreed/OneDrive/Desktop/TrackFlow/frontend/src/modules/prices/pages/PriceListPage.jsx)**:
+   - Follows the identical parsing structure as the products list page for import dropzone handling, SheetJS integration, and custom CSV parsing.
+   - Focuses validation on pricing attributes (DN Price, DL Price, GST %, Description).
+   - Dynamically detects the pricing format structure and validates inputs.
+   - Hits the same bulk import endpoint via the shared api helper.
+3. **[products.api.js](file:///c:/Users/sreed/OneDrive/Desktop/TrackFlow/frontend/src/api/endpoints/products.api.js)**:
+   - Exposes `bulkImportProducts(data)` endpoint hitting `POST /products/bulk-import`.
+   - Exposes `getImportHistory()` endpoint hitting `GET /products/import-history`.
+
