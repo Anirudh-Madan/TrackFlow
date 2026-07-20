@@ -1,1 +1,0 @@
-import{n as e}from"./createLucideIcon-DyCq-HOk.js";import{t}from"./PipelineBoard-375qRmct.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Pipeline — Inventory Manager`,subtitle:`Approve admin-cleared orders, pick parts from stock, and assign a Dispatch Worker.`})}export{r as default};

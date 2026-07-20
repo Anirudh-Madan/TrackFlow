@@ -1,1 +1,0 @@
-import{n as e}from"./createLucideIcon-DyCq-HOk.js";import{t}from"./ComingSoon-CQxm9E4o.js";var n=e();function r(){return(0,n.jsx)(t,{module:`audit`,title:`Audit Log`})}export{r as default};

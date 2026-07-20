@@ -1,1 +1,0 @@
-import{n as e}from"./createLucideIcon-DyCq-HOk.js";import{t}from"./PipelineBoard-375qRmct.js";var n=e();function r(){return(0,n.jsx)(t,{title:`My Deliveries`,subtitle:`Deliveries assigned to you. Start delivery when you pick up, mark delivered on hand-off.`})}export{r as default};

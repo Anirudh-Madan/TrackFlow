@@ -37,7 +37,7 @@ export const imRoutes = [
   { path: 'inward/new', element: <Wrap><InwardNewPage /></Wrap> },
   { path: 'inward/:id', element: <Wrap><InwardDetailPage /></Wrap> },
   { path: 'orders/pending', element: <Wrap><OrdersPendingPage /></Wrap> },
-  { path: 'challans', element: <Wrap><ChallansPage /></Wrap> },
+  { path: 'challans', element: <Navigate to="/im/orders/pending" replace /> },
   { path: 'reorder', element: <Wrap><ReorderListPage /></Wrap> },
   { path: 'pipeline', element: <Wrap><IMPipelinePage /></Wrap> },
   { path: 'workers', element: <Wrap><IMWorkersPage /></Wrap> },

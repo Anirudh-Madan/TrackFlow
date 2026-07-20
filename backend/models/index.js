@@ -41,6 +41,9 @@ const Notification = require('./Notification');
 const PartRequest = require('./PartRequest');
 const PurchaseOrder = require('./PurchaseOrder');
 const PurchaseOrderItem = require('./PurchaseOrderItem');
+const AppSetting = require('./AppSetting');
+const ChallanEditLog = require('./ChallanEditLog');
+const POEditLog = require('./POEditLog');
 
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
@@ -148,6 +151,12 @@ OrderStatusHistory.belongsTo(User, { foreignKey: 'changed_by', as: 'changer' });
 // ── Challans ──────────────────────────────────────────────────────────────────
 Order.hasOne(Challan, { foreignKey: 'order_id', as: 'challan', onDelete: 'CASCADE' });
 Challan.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+Challan.belongsTo(Customer, { foreignKey: 'party_id', as: 'party' });
+Challan.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+Challan.belongsTo(User, { foreignKey: 'returned_by', as: 'returner' });
+Challan.hasMany(ChallanEditLog, { foreignKey: 'challan_id', as: 'editHistory' });
+ChallanEditLog.belongsTo(Challan, { foreignKey: 'challan_id', as: 'challan' });
+ChallanEditLog.belongsTo(User, { foreignKey: 'edited_by', as: 'editor' });
 
 // ── Reorders ──────────────────────────────────────────────────────────────────
 Product.hasMany(ReorderFlag, { foreignKey: 'product_id', as: 'reorderFlags', onDelete: 'CASCADE' });
@@ -208,12 +217,16 @@ PartRequest.belongsTo(Customer, { foreignKey: 'customer_id', as: 'customer' });
 // ── Purchase Orders (SM → Vendor) ─────────────────────────────────────────────
 User.hasMany(PurchaseOrder, { foreignKey: 'created_by', as: 'purchaseOrders' });
 PurchaseOrder.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+PurchaseOrder.belongsTo(User, { foreignKey: 'returned_by', as: 'returner' });
 Vendor.hasMany(PurchaseOrder, { foreignKey: 'vendor_id', as: 'purchaseOrders' });
 PurchaseOrder.belongsTo(Vendor, { foreignKey: 'vendor_id', as: 'vendor' });
 PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });
 PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder' });
 Product.hasMany(PurchaseOrderItem, { foreignKey: 'product_id', as: 'purchaseOrderItems' });
 PurchaseOrderItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+PurchaseOrder.hasMany(POEditLog, { foreignKey: 'po_id', as: 'editHistory' });
+POEditLog.belongsTo(PurchaseOrder, { foreignKey: 'po_id', as: 'purchaseOrder' });
+POEditLog.belongsTo(User, { foreignKey: 'edited_by', as: 'editor' });
 
 
 module.exports = {
@@ -255,4 +268,7 @@ module.exports = {
   PartRequest,
   PurchaseOrder,
   PurchaseOrderItem,
+  AppSetting,
+  ChallanEditLog,
+  POEditLog,
 };

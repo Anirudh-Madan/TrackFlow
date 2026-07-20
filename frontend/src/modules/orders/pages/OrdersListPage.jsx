@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import ChallansListPage from '../../challans/pages/ChallansListPage'
+import AdminChallanPage from '../../challans/pages/AdminChallanPage'
 import OrderNewPage from './OrderNewPage'
 import OrderHistoryPage from './OrderHistoryPage'
 import {
   ShoppingCart, FileText, Search, Filter, Calendar, MapPin, Plus, Eye,
-  CheckCircle, Clock, AlertCircle, Package, DollarSign, X, Check, Flag, Loader2
+  CheckCircle, Clock, AlertCircle, Package, DollarSign, X, Check, Flag, Loader2, Truck
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
@@ -26,10 +27,19 @@ const ORDER_STATUS_CONFIG = {
 export default function OrdersListPage() {
   const { user } = useAuthStore()
   const roleName = typeof user?.role === 'object' ? user.role.name : user?.role;
+  const isAdmin = roleName === 'admin';
   const isIM = roleName === 'inventory_manager';
   const isSM = roleName === 'sales_manager';
 
-  const [activeTab, setActiveTab]       = useState(isSM ? 'new-challan' : 'orders') // 'orders' | 'challans' | 'my-orders' | 'order-history' | 'new-challan'
+  const location = useLocation()
+  const isPathChallan = location.pathname.endsWith('/challans')
+
+  const [activeTab, setActiveTab]       = useState(() => {
+    if (isPathChallan) return 'challans'
+    if (isSM) return 'new-challan'
+    return 'orders'
+  }) // 'orders' | 'challans' | 'my-orders' | 'order-history' | 'new-challan'
+
   const [search, setSearch]             = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [viewOrder, setViewOrder]       = useState(null)
@@ -45,36 +55,23 @@ export default function OrdersListPage() {
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false)
   const [preselectedPartyId, setPreselectedPartyId] = useState(null)
 
-  const location = useLocation()
-
   // Track location state to open modal or change tab
   useEffect(() => {
     if (location.state?.openNewOrder) {
       setPreselectedPartyId(location.state.partyId || null)
-      if (isSM) {
-        setActiveTab('new-challan')
-      } else {
-        setIsNewOrderOpen(true)
-      }
-      // clear state so it doesn't open again on page refresh
+      setActiveTab('new-challan')
       window.history.replaceState({}, document.title)
     } else if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab)
       window.history.replaceState({}, document.title)
+    } else if (isPathChallan) {
+      setActiveTab('challans')
     }
-  }, [location, isSM])
-
-  // Safeguard activeTab default
-  useEffect(() => {
-    if (isSM) {
-      setActiveTab(prev => prev === 'orders' || prev === 'challans' ? 'new-challan' : prev)
-    }
-  }, [isSM])
+  }, [location, isPathChallan])
 
   const fetchOrdersList = useCallback(async () => {
     setLoading(true)
     try {
-      // If user is IM, show pending orders by default or restrict view
       const params = isIM ? { status: 'PENDING' } : {}
       const res = await getOrders(params)
       if (res.success) {
@@ -161,13 +158,68 @@ export default function OrdersListPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-6">
       {/* Tabs Selector */}
-      <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6">
-        {isSM ? (
+      <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6 overflow-x-auto">
+        {isAdmin ? (
           <>
             <button
               onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'new-challan'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-new-challan-tab-btn"
+            >
+              <Plus className="h-4 w-4" />
+              New Challan
+            </button>
+            <button
+              onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'orders'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-orders-tab-btn"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Orders List
+            </button>
+            <button
+              onClick={() => { setActiveTab('order-history'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'order-history'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-order-history-tab-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Order History
+            </button>
+            <button
+              onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'challans'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-challans-tab-btn"
+            >
+              <Truck className="h-4 w-4" />
+              Delivery Challans
+            </button>
+          </>
+        ) : isSM ? (
+          <>
+            <button
+              onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
                 activeTab === 'new-challan'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
@@ -180,7 +232,7 @@ export default function OrdersListPage() {
             <button
               onClick={() => { setActiveTab('my-orders'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
                 activeTab === 'my-orders'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
@@ -193,7 +245,7 @@ export default function OrdersListPage() {
             <button
               onClick={() => { setActiveTab('order-history'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
                 activeTab === 'order-history'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
@@ -209,7 +261,7 @@ export default function OrdersListPage() {
             <button
               onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
                 activeTab === 'orders'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
@@ -219,19 +271,6 @@ export default function OrdersListPage() {
               <ShoppingCart className="h-4 w-4" />
               Orders List
             </button>
-            <button
-              onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
-                activeTab === 'challans'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="challans-tab-btn"
-            >
-              <FileText className="h-4 w-4" />
-              Delivery Challans
-            </button>
           </>
         )}
       </div>
@@ -239,14 +278,14 @@ export default function OrdersListPage() {
       {activeTab === 'order-history' ? (
         <OrderHistoryPage isTab={true} />
       ) : activeTab === 'challans' ? (
-        <ChallansListPage />
+        isAdmin ? <AdminChallanPage /> : <ChallansListPage />
       ) : activeTab === 'new-challan' ? (
         <div className="pt-6">
           <OrderNewPage
             isModal={false}
             preselectedPartyId={preselectedPartyId}
             onSuccess={() => {
-              setActiveTab('my-orders');
+              setActiveTab(isAdmin ? 'challans' : 'my-orders');
               fetchOrdersList();
             }}
           />
@@ -263,7 +302,7 @@ export default function OrdersListPage() {
                 {isSM ? 'View and track your submitted orders.' : isIM ? 'Review, approve, or flag submitted sales orders.' : 'View, track, and manage all sales orders.'}
               </p>
             </div>
-            {isSM && (
+            {(isSM || isAdmin) && (
               <Button size="sm" icon={Plus} onClick={() => setActiveTab('new-challan')} id="new-order-modal-btn">
                 New Challan
               </Button>

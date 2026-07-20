@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   ClipboardList, FilePlus, Search, ChevronDown, Plus, Trash2,
   Eye, Printer, CheckCircle2, Loader2, X, Package, Calendar,
-  FileText, Filter, Building2,
+  FileText, Filter, Building2, ShoppingBag,
 } from 'lucide-react'
 import { getVendors } from '../../../api/endpoints/parties.api'
 import { getProducts } from '../../../api/endpoints/products.api'
@@ -11,6 +11,7 @@ import { useAuthStore } from '../../../store/authStore'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { useLocation } from 'react-router-dom'
+import AdminPOPage from '../../inward/pages/AdminPOPage'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v) => {
@@ -748,6 +749,7 @@ export default function PartRequestsPage() {
   const { user } = useAuthStore()
   const roleName = typeof user?.role === 'object' ? user.role.name : user?.role
   const isSM = roleName === 'sales_manager'
+  const isAdmin = roleName === 'admin'
 
   const [activeTab, setActiveTab] = useState('history')
   const [vendors, setVendors]   = useState([])
@@ -774,6 +776,12 @@ export default function PartRequestsPage() {
 
   const tabs = isSM
     ? [{ id: 'history', label: 'Ordered Items', icon: ClipboardList }]
+    : isAdmin
+    ? [
+        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
+        { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
+        { id: 'po-list', label: 'Purchase Orders List', icon: ShoppingBag },
+      ]
     : [
         { id: 'history', label: 'Ordered Items', icon: ClipboardList },
         { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
@@ -808,6 +816,8 @@ export default function PartRequestsPage() {
       <div className="pt-6">
         {activeTab === 'history'
           ? <OrderHistoryTab vendors={vendors} />
+          : activeTab === 'po-list'
+          ? <AdminPOPage />
           : <NewPOTab vendors={vendors} products={products} />
         }
       </div>

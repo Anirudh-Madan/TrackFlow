@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import AuthGuard from './guards/AuthGuard'
 import RoleGuard from './guards/RoleGuard'
 import FirstLoginGuard from './guards/FirstLoginGuard'
@@ -16,34 +17,38 @@ import LoginPage from '../modules/auth/pages/LoginPage'
 import ChangePasswordPage from '../modules/auth/pages/ChangePasswordPage'
 import AuthLayout from '../layouts/AuthLayout'
 
-// Non-admin placeholder
-import RolePlaceholderPage from '../modules/dashboard/RolePlaceholderPage'
+// Public views (no auth required)
+const PublicChallanView = lazy(() => import('../modules/challans/pages/PublicChallanView'))
+const PublicPOView      = lazy(() => import('../modules/inward/pages/PublicPOView'))
+
+const LoadingSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
+  </div>
+)
 
 const router = createBrowserRouter([
   // Root redirect
-  {
-    path: '/',
-    element: <Navigate to="/login" replace />,
-  },
+  { path: '/', element: <Navigate to="/login" replace /> },
 
   // Auth flows
   {
     path: '/login',
-    element: (
-      <AuthLayout>
-        <LoginPage />
-      </AuthLayout>
-    ),
+    element: <AuthLayout><LoginPage /></AuthLayout>,
   },
   {
     path: '/change-password',
-    element: (
-      <AuthGuard>
-        <AuthLayout>
-          <ChangePasswordPage />
-        </AuthLayout>
-      </AuthGuard>
-    ),
+    element: <AuthGuard><AuthLayout><ChangePasswordPage /></AuthLayout></AuthGuard>,
+  },
+
+  // Public share views (no auth required)
+  {
+    path: '/challan/view/:token',
+    element: <Suspense fallback={<LoadingSpinner />}><PublicChallanView /></Suspense>,
+  },
+  {
+    path: '/po/view/:token',
+    element: <Suspense fallback={<LoadingSpinner />}><PublicPOView /></Suspense>,
   },
 
   // Admin module
@@ -107,10 +112,7 @@ const router = createBrowserRouter([
   },
 
   // Catch-all
-  {
-    path: '*',
-    element: <Navigate to="/login" replace />,
-  },
+  { path: '*', element: <Navigate to="/login" replace /> },
 ])
 
 export function AppRouter() {

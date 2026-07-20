@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   ShoppingCart, Clock, GitBranch, CheckCircle2, XCircle, Shield,
   RefreshCcw, Activity, AlertTriangle, Loader2, ArrowRight, Package,
-  TrendingUp, Users, Truck,
+  TrendingUp, Users, Truck, FileText, FileUp,
 } from 'lucide-react'
 import Card, { CardHeader, CardTitle, CardDescription } from '../../../components/ui/Card'
 import Button from '../../../components/ui/Button'
@@ -144,8 +144,10 @@ export default function AdminDashboard() {
           <h1 className="text-xl font-bold text-surface-900 dark:text-surface-50">Welcome back, {user?.name?.split(' ')[0] || 'Admin'}</h1>
           <p className="text-sm text-surface-500">Live view of the fulfilment pipeline and its health.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" icon={RefreshCcw} onClick={fetchData}>Refresh</Button>
+          <Link to="/admin/challans"><Button size="sm" variant="secondary" icon={FileText}>Create Challan</Button></Link>
+          <Link to="/admin/purchase-orders"><Button size="sm" variant="secondary" icon={FileUp}>Create PO</Button></Link>
           <Link to="/admin/pipeline"><Button size="sm" icon={GitBranch}>Open Pipeline</Button></Link>
         </div>
       </div>

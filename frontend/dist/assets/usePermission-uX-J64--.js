@@ -1,1 +1,0 @@
-import{Vn as e}from"./index-DOCD3_Ca.js";function t(t){return e(e=>e.hasPermission(t))}export{t};

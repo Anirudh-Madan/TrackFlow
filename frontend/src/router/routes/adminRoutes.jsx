@@ -29,8 +29,15 @@ const SalesReportPage      = lazy(() => import('../../modules/reports/pages/Sale
 const StockReportPage      = lazy(() => import('../../modules/reports/pages/StockReportPage'))
 const AuditLogPage         = lazy(() => import('../../modules/audit/pages/AuditLogPage'))
 const BelowDlReportPage    = lazy(() => import('../../modules/reports/pages/BelowDlReportPage'))
+const ReportsPage          = lazy(() => import('../../modules/reports/pages/ReportsPage'))
 
 const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+
+// New pages
+const AdminChallanPage  = lazy(() => import('../../modules/challans/pages/AdminChallanPage'))
+const AdminPOPage       = lazy(() => import('../../modules/inward/pages/AdminPOPage'))
+const PartRequestsPage  = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
+const SettingsPage      = lazy(() => import('../../modules/settings/pages/SettingsPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
@@ -40,13 +47,13 @@ export const adminRoutes = [
   { index: true,                  element: <AdminDashboard /> },
 
   // Users & Roles
-  { path: 'users', element: <Wrap><UsersListPage /></Wrap> },
+  { path: 'users',               element: <Wrap><UsersListPage /></Wrap> },
 
   // Regions
   { path: 'regions',             element: <Wrap><RegionsPage /></Wrap> },
 
   // Customers
-  { path: 'customers',             element: <Wrap><CustomersPage /></Wrap> },
+  { path: 'customers',           element: <Wrap><CustomersPage /></Wrap> },
 
   // Parties
   { path: 'parties',             element: <Wrap><PartiesListPage /></Wrap> },
@@ -59,7 +66,7 @@ export const adminRoutes = [
   { path: 'prices',              element: <Wrap><PriceListPage /></Wrap> },
 
   // Inventory
-  { path: 'inventory', element: <Wrap><StockOverviewPage /></Wrap> },
+  { path: 'inventory',           element: <Wrap><StockOverviewPage /></Wrap> },
 
   // Orders
   { path: 'orders',              element: <Wrap><OrdersListPage /></Wrap> },
@@ -68,13 +75,23 @@ export const adminRoutes = [
   { path: 'pipeline',            element: <Wrap><AdminPipelinePage /></Wrap> },
   { path: 'dispatch',            element: <Wrap><AdminPipelinePage /></Wrap> }, // legacy alias
 
-  // Reports (kept)
+  // Challans (Admin)
+  { path: 'challans',            element: <Wrap><OrdersListPage /></Wrap> },
+
+  // Purchase Orders (Admin)
+  { path: 'purchase-orders',     element: <Wrap><PartRequestsPage /></Wrap> },
+
+  // Reports — legacy pages kept, new combined insights page at /admin/reports
+  { path: 'reports',             element: <Wrap><ReportsPage /></Wrap> },
   { path: 'reports/sales',       element: <Wrap><SalesReportPage /></Wrap> },
   { path: 'reports/stock',       element: <Wrap><StockReportPage /></Wrap> },
   { path: 'reports/audit',       element: <Wrap><AuditLogPage /></Wrap> },
   { path: 'reports/below-dl',    element: <Wrap><BelowDlReportPage /></Wrap> },
 
-  // Retired per pipeline rebuild — redirect + logout
+  // Settings (Admin PIN, Gemini API info)
+  { path: 'settings',            element: <Wrap><SettingsPage /></Wrap> },
+
+  // Retired routes
   { path: 'payments',            element: <RouteRetired /> },
   { path: 'payments/ledger/:id', element: <RouteRetired /> },
   { path: 'reports/imports',     element: <RouteRetired /> },

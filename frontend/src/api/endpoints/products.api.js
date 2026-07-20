@@ -1,10 +1,11 @@
 import client from '../client'
 
 // Products
-export const getProducts    = ()          => client.get('/products')
-export const createProduct  = (data)      => client.post('/products', data)
-export const updateProduct  = (id, data)  => client.put(`/products/${id}`, data)
-export const deleteProduct  = (id)        => client.delete(`/products/${id}`)
+export const getProducts            = ()          => client.get('/products')
+export const createProduct          = (data)      => client.post('/products', data)
+export const updateProduct          = (id, data)  => client.put(`/products/${id}`, data)
+export const deleteProduct          = (id)        => client.delete(`/products/${id}`)
+export const getProductTransactions = (id)        => client.get(`/products/${id}/transactions`).then(r => r.data)
 
 // Categories
 export const getCategories    = ()         => client.get('/products/categories')

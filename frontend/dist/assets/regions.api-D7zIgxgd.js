@@ -1,1 +1,0 @@
-import{Yt as e}from"./index-DOCD3_Ca.js";var t=()=>e.get(`/regions`),n=t=>e.post(`/regions`,t),r=(t,n)=>e.put(`/regions/${t}`,n),i=t=>e.delete(`/regions/${t}`);export{r as i,i as n,t as r,n as t};

@@ -678,3 +678,63 @@ exports.getImportHistory = async (req, res, next) => {
     next(err);
   }
 };
+
+// ── GET /api/v1/products/:id/transactions ─────────────────────────────────────
+// Part-wise transaction history
+exports.getProductTransactions = async (req, res, next) => {
+  try {
+    const product = await Product.findByPk(req.params.id, { attributes: ['id', 'name', 'sku'] });
+    if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+
+    const transactions = await StockTransaction.findAll({
+      where: { product_id: req.params.id },
+      include: [{ model: User, as: 'performer', attributes: ['id', 'name'] }],
+      order: [['created_at', 'DESC']],
+      limit: 200,
+    });
+
+    res.json({ success: true, data: transactions, product });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/products/check-availability?sku=XXX ──────────────────────────
+// Check if a part no is in price list and/or stock
+exports.checkPartAvailability = async (req, res, next) => {
+  try {
+    const sku = (req.query.sku || '').trim().toUpperCase();
+    if (!sku) return res.status(400).json({ success: false, error: 'sku query param required' });
+
+    const product = await Product.findOne({
+      where: { sku },
+      include: [
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        {
+          model: Pricing, as: 'pricingHistory',
+          where: { [require('sequelize').Op.or]: [{ effective_to: null }, { effective_to: { [require('sequelize').Op.gte]: new Date() } }] },
+          required: false,
+          order: [['effective_from', 'DESC']],
+          limit: 1,
+        },
+      ],
+    });
+
+    if (!product) return res.json({ success: true, status: 'not_found', sku });
+
+    const inPriceList = (product.pricingHistory?.length > 0) || product.dealer_landing_price != null;
+    const stockQty    = parseFloat(product.stockOnHand?.quantity || 0);
+    const inStock     = stockQty > 0;
+
+    return res.json({
+      success: true,
+      status: inStock ? 'in_stock' : (inPriceList ? 'price_list_only' : 'not_found'),
+      sku,
+      product: {
+        id:                   product.id,
+        name:                 product.name,
+        sku:                  product.sku,
+        stock_qty:            stockQty,
+        dealer_landing_price: product.pricingHistory?.[0]?.dealer_landing_price ?? product.dealer_landing_price,
+      },
+    });
+  } catch (err) { next(err); }
+};

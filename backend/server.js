@@ -286,7 +286,7 @@ async function startServer() {
     console.log('Database connection established successfully.');
 
     console.log('Syncing database schema...');
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('Database schema synchronized.');
 
     await seedDatabase();
