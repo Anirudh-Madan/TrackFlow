@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   ClipboardList, FilePlus, Search, ChevronDown, Plus, Trash2,
   Eye, Printer, CheckCircle2, Loader2, X, Package, Calendar,
-  FileText, Filter, Building2,
+  FileText, Filter, Building2, ShoppingBag,
 } from 'lucide-react'
 import { getVendors } from '../../../api/endpoints/parties.api'
 import { getProducts } from '../../../api/endpoints/products.api'
@@ -11,6 +11,8 @@ import { useAuthStore } from '../../../store/authStore'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { useLocation } from 'react-router-dom'
+import AdminPOPage from '../../inward/pages/AdminPOPage'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v) => {
@@ -168,6 +170,7 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
       </div>
       <div class="grid">
         <div><div class="label">Supplier</div><div class="value">${vendor?.company_name || '—'}</div>${vendor?.gst ? `<div style="font-size:10px;color:#666;font-family:monospace">${vendor.gst}</div>` : ''}</div>
+        <div><div class="label">Bill Number</div><div class="value" style="font-family:monospace">${data.bill_number || '—'}</div></div>
         <div><div class="label">PO Date</div><div class="value">${data.po_date ? new Date(data.po_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '—'}</div></div>
         <div><div class="label">Prepared By</div><div class="value">${user?.name || '—'}</div></div>
         ${data.notes ? `<div style="grid-column:span 3"><div class="label">Notes</div><div>${data.notes}</div></div>` : ''}
@@ -215,6 +218,10 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
               <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">Supplier</p>
               <p className="text-sm font-bold text-surface-800 dark:text-surface-200">{vendor?.company_name || '—'}</p>
               {vendor?.gst && <p className="text-xs text-surface-400 font-mono">{vendor.gst}</p>}
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">Bill Number</p>
+              <p className="text-sm font-bold font-mono text-primary-700 dark:text-primary-300">{data.bill_number || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">PO Date</p>
@@ -305,6 +312,85 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
   )
 }
 
+function ProductDropdown({ products, value, onSelect }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const filtered = useMemo(() =>
+    products.filter(p =>
+      (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.sku || '').toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 30),
+    [products, search]
+  )
+
+  const selected = value ? products.find(p => p.id === value) : null
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          'w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-sm transition-colors',
+          'bg-white dark:bg-surface-800',
+          open
+            ? 'border-primary-400 ring-2 ring-primary-500/20'
+            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600',
+        )}
+      >
+        {selected ? (
+          <div className="min-w-0 text-left">
+            <p className="font-medium text-surface-900 dark:text-surface-100 truncate">{selected.name}</p>
+            <p className="text-[11px] text-surface-400 font-mono">{selected.sku}</p>
+          </div>
+        ) : (
+          <span className="text-surface-400">Search product…</span>
+        )}
+        <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-surface-100 dark:border-surface-800">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-800">
+              <Search className="h-3 w-3 text-surface-400 shrink-0" />
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by name or SKU…"
+                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400"
+              />
+            </div>
+          </div>
+          <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
+            {filtered.length === 0 ? (
+              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found</p>
+            ) : filtered.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => { onSelect(p); setOpen(false); setSearch('') }}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-surface-900 dark:text-surface-100 truncate">{p.name}</p>
+                  <p className="text-[11px] text-surface-400 font-mono">{p.sku}</p>
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.selling_price)}</p>
+                  <p className="text-[10px] text-surface-400">Unit Price</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Blank PO Item ────────────────────────────────────────────────────────────
 const BLANK_ITEM = () => ({ part_number: '', description: '', unit_price: '', qty: '1', product_id: null })
 
@@ -312,14 +398,15 @@ const BLANK_ITEM = () => ({ part_number: '', description: '', unit_price: '', qt
 function NewPOTab({ vendors, products }) {
   const { user } = useAuthStore()
   const [vendorId, setVendorId]   = useState(null)
+  const [billNumber, setBillNumber] = useState('')
   const [poDate, setPoDate]       = useState(todayStr)
   const [notes, setNotes]         = useState('')
   const [items, setItems]         = useState([BLANK_ITEM()])
   const [showPreview, setShowPreview] = useState(false)
   const [submitting, setSubmitting]   = useState(false)
 
-  const [poNumber]      = useState(genPO)
-  const [invoiceNumber] = useState(genINV)
+  const [poNumber, setPoNumber]           = useState(genPO)
+  const [invoiceNumber, setInvoiceNumber] = useState(genINV)
 
   // Lookup product by part_number typed
   const lookupProduct = useCallback((idx, partNum) => {
@@ -344,18 +431,23 @@ function NewPOTab({ vendors, products }) {
   const subtotal = items.reduce((s, it) => s + fmtN(it.unit_price) * fmtN(it.qty), 0)
 
   const handlePreview = () => {
-    const valid = items.filter(it => (it.part_number || it.description) && fmtN(it.qty) > 0)
-    if (valid.length === 0) { toast.error('Add at least one item with a Part Number and Qty'); return }
+    if (!billNumber.trim()) { toast.error('Bill Number is required'); return }
+    const valid = items.filter(it => (it.product_id || it.part_number || it.description) && fmtN(it.qty) > 0)
+    if (valid.length === 0) { toast.error('Add at least one item with a Part Number or Product and Qty'); return }
     setShowPreview(true)
   }
 
   const handleSubmit = async () => {
-    const valid = items.filter(it => (it.part_number || it.description) && fmtN(it.qty) > 0)
+    if (!billNumber.trim()) { toast.error('Bill Number is required'); return }
+    const valid = items.filter(it => (it.product_id || it.part_number || it.description) && fmtN(it.qty) > 0)
+    if (valid.length === 0) { toast.error('Add at least one item with a Part Number or Product and Qty'); return }
     setSubmitting(true)
     try {
       const res = await createPurchaseOrder({
         vendor_id: vendorId || undefined,
         po_date: poDate,
+        bill_number: billNumber.trim(),
+        invoice_number: invoiceNumber,
         notes: notes || undefined,
         items: valid.map(it => ({
           product_id: it.product_id || undefined,
@@ -370,7 +462,10 @@ function NewPOTab({ vendors, products }) {
         setShowPreview(false)
         setItems([BLANK_ITEM()])
         setNotes('')
+        setBillNumber('')
         setVendorId(null)
+        setPoNumber(genPO())
+        setInvoiceNumber(genINV())
       } else {
         toast.error(res?.error || 'Failed to create PO')
       }
@@ -388,7 +483,7 @@ function NewPOTab({ vendors, products }) {
         onClose={() => setShowPreview(false)}
         onConfirm={handleSubmit}
         submitting={submitting}
-        data={{ po_number: poNumber, invoice_number: invoiceNumber, vendor_id: vendorId, po_date: poDate, notes }}
+        data={{ po_number: poNumber, invoice_number: invoiceNumber, bill_number: billNumber.trim(), vendor_id: vendorId, po_date: poDate, notes }}
         items={items}
         vendors={vendors}
         user={user}
@@ -420,6 +515,12 @@ function NewPOTab({ vendors, products }) {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-surface-500">Supplier</label>
               <VendorDropdown vendors={vendors} value={vendorId} onChange={setVendorId} />
+            </div>
+
+            {/* Bill Number */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-surface-500">Bill Number <span className="text-danger-500">*</span></label>
+              <input type="text" required value={billNumber} onChange={e => setBillNumber(e.target.value)} placeholder="Enter bill number" className={inputCls('font-mono')} id="po-tab-bill-input" />
             </div>
 
             {/* PO Date */}
@@ -476,8 +577,8 @@ function NewPOTab({ vendors, products }) {
           </div>
 
           {/* Column Headers */}
-          <div className="hidden lg:grid gap-3 px-4 mb-2" style={{ gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr auto' }}>
-            {['Part No. *', 'Description', 'Unit Price', 'Qty', 'Total', ''].map(h => (
+          <div className="hidden lg:grid gap-3 px-4 mb-2" style={{ gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr 1fr auto' }}>
+            {['Product', 'Part No. *', 'Description', 'Unit Price', 'Qty', 'Total', ''].map(h => (
               <div key={h} className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">{h}</div>
             ))}
           </div>
@@ -487,8 +588,21 @@ function NewPOTab({ vendors, products }) {
               const lineTotal = fmtN(item.unit_price) * fmtN(item.qty)
               return (
                 <div key={idx} className="grid gap-3 p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30"
-                  style={{ gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr auto' }}
+                  style={{ gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr 1fr auto' }}
                 >
+                  {/* Product Search Dropdown */}
+                  <ProductDropdown
+                    products={products}
+                    value={item.product_id}
+                    onSelect={p => {
+                      updateItem(idx, {
+                        product_id: p.id,
+                        part_number: p.sku || item.part_number || '',
+                        description: p.name || item.description || '',
+                        unit_price: String(p.dealer_landing_price || p.selling_price || ''),
+                      })
+                    }}
+                  />
                   {/* Part Number */}
                   <input
                     type="text"
@@ -574,6 +688,9 @@ function OrderHistoryTab({ vendors }) {
   const [search, setSearch]       = useState('')
   const [vendorFilter, setVendorFilter] = useState('all')
   const [vendorFilterOpen, setVendorFilterOpen] = useState(false)
+  const [page, setPage]           = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, vendorFilter])
 
   useEffect(() => {
     getOrderItems()
@@ -696,7 +813,7 @@ function OrderHistoryTab({ vendors }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-50 dark:divide-surface-800">
-                {filtered.map((it, i) => (
+                {filtered.slice((page - 1) * 50, page * 50).map((it, i) => (
                   <tr key={it.id || i} className="hover:bg-surface-50/50 dark:hover:bg-surface-800/30 transition-colors">
                     <td className="px-4 py-3 font-mono font-medium text-surface-900 dark:text-surface-100 whitespace-nowrap">
                       {it.order?.order_number || '—'}
@@ -737,6 +854,12 @@ function OrderHistoryTab({ vendors }) {
             </table>
           </div>
         )}
+        <TablePagination
+          currentPage={page}
+          totalItems={filtered.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   )
@@ -748,6 +871,7 @@ export default function PartRequestsPage() {
   const { user } = useAuthStore()
   const roleName = typeof user?.role === 'object' ? user.role.name : user?.role
   const isSM = roleName === 'sales_manager'
+  const isAdmin = roleName === 'admin'
 
   const [activeTab, setActiveTab] = useState('history')
   const [vendors, setVendors]   = useState([])
@@ -774,6 +898,12 @@ export default function PartRequestsPage() {
 
   const tabs = isSM
     ? [{ id: 'history', label: 'Ordered Items', icon: ClipboardList }]
+    : isAdmin
+    ? [
+        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
+        { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
+        { id: 'po-list', label: 'Purchase Orders List', icon: ShoppingBag },
+      ]
     : [
         { id: 'history', label: 'Ordered Items', icon: ClipboardList },
         { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
@@ -808,6 +938,8 @@ export default function PartRequestsPage() {
       <div className="pt-6">
         {activeTab === 'history'
           ? <OrderHistoryTab vendors={vendors} />
+          : activeTab === 'po-list'
+          ? <AdminPOPage />
           : <NewPOTab vendors={vendors} products={products} />
         }
       </div>

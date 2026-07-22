@@ -593,3 +593,154 @@ exports.stockReport = async (req, res, next) => {
     return next(error);
   }
 };
+
+// ── GET /api/v1/reports/salesman-wise ─────────────────────────────────────────
+exports.salesmanWise = async (req, res, next) => {
+  try {
+    let { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      const today = new Date();
+      endDate = today.toISOString().slice(0, 10);
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    }
+
+    const { Customer, PurchaseOrder } = require('../../models');
+
+    const salesManagers = await User.findAll({
+      include: [{ model: require('../../models').Role, as: 'role', where: { name: 'sales_manager' } }],
+      attributes: ['id', 'name'],
+    });
+
+    const orders = await Order.findAll({
+      where: { order_date: { [Op.between]: [startDate, endDate] } },
+      include: [
+        { model: User, as: 'salesManager', attributes: ['id', 'name'] },
+        { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
+      ],
+    });
+
+    const challans = await require('../../models').Challan.findAll({
+      where: { created_at: { [Op.between]: [startDate + ' 00:00:00', endDate + ' 23:59:59'] } },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name'] }],
+    });
+
+    const smMap = {};
+    salesManagers.forEach(sm => {
+      smMap[sm.id] = { id: sm.id, name: sm.name, orders: 0, order_value: 0, items_sold: 0, challans: 0 };
+    });
+
+    orders.forEach(o => {
+      const smId = o.sales_manager_id;
+      if (!smMap[smId]) smMap[smId] = { id: smId, name: o.salesManager?.name || 'Unknown', orders: 0, order_value: 0, items_sold: 0, challans: 0 };
+      smMap[smId].orders++;
+      smMap[smId].order_value += parseFloat(o.grand_total || 0);
+      smMap[smId].items_sold  += o.items?.reduce((s, i) => s + i.quantity, 0) || 0;
+    });
+
+    challans.forEach(c => {
+      const creatorId = c.created_by;
+      if (smMap[creatorId]) smMap[creatorId].challans++;
+    });
+
+    const data = Object.values(smMap).sort((a, b) => b.order_value - a.order_value);
+    res.json({ success: true, data, period: { startDate, endDate } });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/reports/party-wise ───────────────────────────────────────────
+exports.partyWise = async (req, res, next) => {
+  try {
+    let { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      const today = new Date();
+      endDate = today.toISOString().slice(0, 10);
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    }
+
+    const { Customer } = require('../../models');
+
+    const orders = await Order.findAll({
+      where: { order_date: { [Op.between]: [startDate, endDate] } },
+      include: [
+        { model: Customer, as: 'party', attributes: ['id', 'company_name'] },
+        { model: OrderItem, as: 'items' },
+      ],
+    });
+
+    const partyMap = {};
+    orders.forEach(o => {
+      const pid = o.party_id;
+      const name = o.party?.company_name || o.customer_company || 'Unknown';
+      if (!partyMap[pid]) partyMap[pid] = { id: pid, name, orders: 0, total_value: 0, items_count: 0 };
+      partyMap[pid].orders++;
+      partyMap[pid].total_value  += parseFloat(o.grand_total || 0);
+      partyMap[pid].items_count  += o.items?.reduce((s, i) => s + i.quantity, 0) || 0;
+    });
+
+    const data = Object.values(partyMap).sort((a, b) => b.total_value - a.total_value);
+    res.json({ success: true, data, period: { startDate, endDate } });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/reports/supplier-wise ────────────────────────────────────────
+exports.supplierWise = async (req, res, next) => {
+  try {
+    let { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      const today = new Date();
+      endDate = today.toISOString().slice(0, 10);
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    }
+
+    const { PurchaseOrder, PurchaseOrderItem, Vendor } = require('../../models');
+
+    const pos = await PurchaseOrder.findAll({
+      where: { created_at: { [Op.between]: [startDate + ' 00:00:00', endDate + ' 23:59:59'] }, is_returned: false },
+      include: [
+        { model: Vendor, as: 'vendor', attributes: ['id', 'company_name'] },
+        { model: PurchaseOrderItem, as: 'items' },
+      ],
+    });
+
+    const supplierMap = {};
+    pos.forEach(po => {
+      const sid = po.vendor_id || 'manual';
+      const name = po.vendor?.company_name || po.vendor_name || 'Manual';
+      if (!supplierMap[sid]) supplierMap[sid] = { id: sid, name, pos: 0, total_value: 0, items_count: 0 };
+      supplierMap[sid].pos++;
+      supplierMap[sid].total_value  += parseFloat(po.total || 0);
+      supplierMap[sid].items_count  += po.items?.reduce((s, i) => s + i.quantity, 0) || 0;
+    });
+
+    const data = Object.values(supplierMap).sort((a, b) => b.total_value - a.total_value);
+    res.json({ success: true, data, period: { startDate, endDate } });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/reports/activity-log ─────────────────────────────────────────
+exports.activityLog = async (req, res, next) => {
+  try {
+    const { AuditLog } = require('../../models');
+    const { user_id, startDate, endDate, limit = 100 } = req.query;
+    const where = {};
+    if (user_id) where.actor_id = user_id;
+    if (startDate && endDate) where.created_at = { [Op.between]: [startDate + ' 00:00:00', endDate + ' 23:59:59'] };
+
+    const logs = await AuditLog.findAll({ where, order: [['created_at', 'DESC']], limit: parseInt(limit) });
+    res.json({ success: true, data: logs });
+  } catch (err) { next(err); }
+};
+
+// ── POST /api/v1/reports/ai-insight ──────────────────────────────────────────
+// Body: { reportType: 'salesman'|'party'|'supplier', data: {...} }
+exports.aiInsight = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
+    const { reportType, data } = req.body;
+    if (!reportType || !data) return res.status(400).json({ success: false, error: 'reportType and data are required' });
+
+    const { generateReportInsight } = require('../../services/aiService');
+    const insight = await generateReportInsight(reportType, data);
+    res.json({ success: true, insight });
+  } catch (err) { next(err); }
+};

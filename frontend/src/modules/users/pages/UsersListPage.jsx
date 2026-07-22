@@ -17,6 +17,7 @@ import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 import { usePermission } from '../../../hooks/usePermission'
 import { useAuthStore } from '../../../store/authStore'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const createSchema = z.object({
@@ -571,7 +572,10 @@ export default function UsersListPage() {
   const [regions,      setRegions]      = useState([])
   const [loading,      setLoading]      = useState(true)
   const [searchTerm,   setSearchTerm]   = useState('')
+  const [page,         setPage]         = useState(1)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+  useEffect(() => { setPage(1) }, [searchTerm])
   const [isEditOpen,   setIsEditOpen]   = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [activeUser,   setActiveUser]   = useState(null)
@@ -846,7 +850,7 @@ export default function UsersListPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                    {filteredUsers.map(user => (
+                    {filteredUsers.slice((page - 1) * 50, page * 50).map(user => (
                       <tr key={user.id} className="table-row-hover">
                         <td className="px-6 py-4 flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 flex items-center justify-center font-bold text-xs shrink-0">
@@ -896,6 +900,12 @@ export default function UsersListPage() {
                 </table>
               )}
             </div>
+            <TablePagination
+              currentPage={page}
+              totalItems={filteredUsers.length}
+              pageSize={50}
+              onPageChange={setPage}
+            />
           </div>
         </>
       )}

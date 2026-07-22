@@ -25,11 +25,13 @@ router.put('/pricing/:id',    requirePermission('products.price_update'), c.upda
 router.delete('/pricing/:id', requirePermission('products.price_update'), c.deletePricing);
 
 // Products
-router.get('/',              requirePermission('products.view'),   c.getProducts);
-router.post('/bulk-import',  requirePermission('products.import'), c.bulkImport);
-router.get('/import-history',requirePermission('products.view'),   c.getImportHistory);
-router.post('/',             requirePermission('products.create'), c.createProduct);
-router.put('/:id',           requirePermission('products.edit'),   c.updateProduct);
-router.delete('/:id',        requirePermission('products.delete'), c.deleteProduct);
+router.get('/check-availability', requirePermission('products.view'),  c.checkPartAvailability);
+router.get('/',                   requirePermission('products.view'),   c.getProducts);
+router.post('/bulk-import',       requirePermission('products.import'), c.bulkImport);
+router.get('/import-history',     requirePermission('products.view'),   c.getImportHistory);
+router.post('/',                  requirePermission('products.create'), c.createProduct);
+router.get('/:id/transactions',   requirePermission('products.view'),   c.getProductTransactions);
+router.put('/:id',                requirePermission('products.edit'),   c.updateProduct);
+router.delete('/:id',             requirePermission('products.delete'), c.deleteProduct);
 
 module.exports = router;

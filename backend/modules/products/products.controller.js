@@ -50,26 +50,31 @@ exports.createProduct = async (req, res, next) => {
   try {
     const { name, sku, category_id, uom_id, purchase_price, dealer_landing_price, selling_price, reorder_threshold, remarks, planner, location, supplier, gst_rate } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ success: false, error: 'Product name is required' });
-    if (!sku?.trim()) return res.status(400).json({ success: false, error: 'SKU is required' });
+    if (!sku?.trim()) return res.status(400).json({ success: false, error: 'Part No is required' });
 
     const existing = await Product.findOne({ where: { sku: sku.trim().toUpperCase() } });
-    if (existing) return res.status(400).json({ success: false, error: 'A product with this SKU already exists' });
+    if (existing) return res.status(400).json({ success: false, error: 'A product with this Part No already exists' });
+
+    let plannerVal = planner?.trim() || null;
+    if (!plannerVal && category_id) {
+      const cat = await ProductCategory.findByPk(category_id);
+      if (cat) plannerVal = cat.name;
+    }
 
     const product = await Product.create({
-      name: name.trim(),
+      name: name?.trim() || null,
       sku: sku.trim().toUpperCase(),
       category_id: category_id || null,
       uom_id: uom_id || null,
-      purchase_price: parseFloat(purchase_price) || 0,
-      dealer_landing_price: dealer_landing_price ? parseFloat(dealer_landing_price) : null,
-      selling_price: parseFloat(selling_price) || 0,
-      reorder_threshold: parseInt(reorder_threshold) || 0,
+      purchase_price: purchase_price !== undefined && purchase_price !== '' && purchase_price !== null ? parseFloat(purchase_price) : null,
+      dealer_landing_price: dealer_landing_price !== undefined && dealer_landing_price !== '' && dealer_landing_price !== null ? parseFloat(dealer_landing_price) : null,
+      selling_price: selling_price !== undefined && selling_price !== '' && selling_price !== null ? parseFloat(selling_price) : null,
+      reorder_threshold: reorder_threshold ? parseInt(reorder_threshold) : 0,
       remarks: remarks || null,
-      planner: planner || null,
+      planner: plannerVal,
       location: location || null,
       supplier: supplier || null,
-      gst_rate: gst_rate !== undefined && gst_rate !== '' ? parseFloat(gst_rate) : 18.00,
+      gst_rate: gst_rate !== undefined && gst_rate !== '' && gst_rate !== null ? parseFloat(gst_rate) : 18.00,
     });
 
     // Create initial stock rows
@@ -120,19 +125,25 @@ exports.updateProduct = async (req, res, next) => {
 
     if (sku && sku.trim().toUpperCase() !== product.sku) {
       const existing = await Product.findOne({ where: { sku: sku.trim().toUpperCase() } });
-      if (existing) return res.status(400).json({ success: false, error: 'A product with this SKU already exists' });
+      if (existing) return res.status(400).json({ success: false, error: 'A product with this Part No already exists' });
     }
 
-    if (name !== undefined) product.name = name.trim();
+    if (name !== undefined) product.name = name ? name.trim() : null;
     if (sku !== undefined) product.sku = sku.trim().toUpperCase();
-    if (category_id !== undefined) product.category_id = category_id || null;
+    if (category_id !== undefined) {
+      product.category_id = category_id || null;
+      if (!planner && category_id) {
+        const cat = await ProductCategory.findByPk(category_id);
+        if (cat) product.planner = cat.name;
+      }
+    }
     if (uom_id !== undefined) product.uom_id = uom_id || null;
-    if (purchase_price !== undefined) product.purchase_price = parseFloat(purchase_price) || 0;
-    if (dealer_landing_price !== undefined) product.dealer_landing_price = dealer_landing_price ? parseFloat(dealer_landing_price) : null;
-    if (selling_price !== undefined) product.selling_price = parseFloat(selling_price) || 0;
-    if (reorder_threshold !== undefined) product.reorder_threshold = parseInt(reorder_threshold) || 0;
+    if (purchase_price !== undefined) product.purchase_price = purchase_price !== '' && purchase_price !== null ? parseFloat(purchase_price) : null;
+    if (dealer_landing_price !== undefined) product.dealer_landing_price = dealer_landing_price !== '' && dealer_landing_price !== null ? parseFloat(dealer_landing_price) : null;
+    if (selling_price !== undefined) product.selling_price = selling_price !== '' && selling_price !== null ? parseFloat(selling_price) : null;
+    if (reorder_threshold !== undefined) product.reorder_threshold = reorder_threshold ? parseInt(reorder_threshold) : 0;
     if (remarks !== undefined) product.remarks = remarks || null;
-    if (planner !== undefined) product.planner = planner || null;
+    if (planner !== undefined) product.planner = planner ? planner.trim() : null;
     if (location !== undefined) product.location = location || null;
     if (supplier !== undefined) product.supplier = supplier || null;
     if (gst_rate !== undefined) product.gst_rate = gst_rate !== '' && gst_rate !== null ? parseFloat(gst_rate) : 18.00;
@@ -481,33 +492,36 @@ exports.bulkImport = async (req, res, next) => {
       // If product doesn't exist, create it on-the-fly!
       if (!product) {
         product = await Product.create({
-          name: item.name?.trim() || sku,
+          name: item.name?.trim() || null,
           sku: sku,
           planner: item.planner?.trim() || null,
           location: item.location?.trim() || null,
           supplier: item.supplier?.trim() || null,
-          purchase_price: (item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '') ? parseFloat(item.purchase_price) : 0,
+          purchase_price: (item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '') ? parseFloat(item.purchase_price) : null,
           dealer_landing_price: (item.dealer_landing_price !== undefined && item.dealer_landing_price !== null && item.dealer_landing_price !== '') ? parseFloat(item.dealer_landing_price) : null,
-          selling_price: (item.selling_price !== undefined && item.selling_price !== null && item.selling_price !== '') ? parseFloat(item.selling_price) : 0,
+          selling_price: (item.selling_price !== undefined && item.selling_price !== null && item.selling_price !== '') ? parseFloat(item.selling_price) : null,
           category_id: null,
           uom_id: null,
           gst_rate: (item.gst_rate !== undefined && item.gst_rate !== null && item.gst_rate !== '') ? parseFloat(item.gst_rate) : 18.00,
         }, { transaction: t });
 
-        // Create initial stock rows
-        await StockOnHand.create({ product_id: product.id, quantity: 0 }, { transaction: t });
-        await StockReserved.create({ product_id: product.id, quantity: 0 }, { transaction: t });
+        // Create initial stock rows if missing
+        await StockOnHand.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
+        await StockReserved.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
 
         productMap[sku] = product;
         isNewCreated = true;
       } else {
-        // Update name, planner, location, supplier if provided
+        // Overwrite name, planner, location, supplier, gst_rate on re-upload
         if (item.name?.trim()) product.name = item.name.trim();
-        if (item.planner !== undefined) product.planner = item.planner?.trim() || null;
-        if (item.location !== undefined) product.location = item.location?.trim() || null;
-        if (item.supplier !== undefined) product.supplier = item.supplier?.trim() || null;
+        if (item.planner !== undefined && item.planner !== null) product.planner = item.planner.trim();
+        if (item.location !== undefined && item.location !== null) product.location = item.location.trim();
+        if (item.supplier !== undefined && item.supplier !== null) product.supplier = item.supplier.trim();
         if (item.gst_rate !== undefined && item.gst_rate !== null && item.gst_rate !== '') product.gst_rate = parseFloat(item.gst_rate);
-        // Save these updates
+
+        await StockOnHand.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
+        await StockReserved.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
+
         await product.save({ transaction: t });
       }
 
@@ -527,37 +541,37 @@ exports.bulkImport = async (req, res, next) => {
       const hasDealer = item.dealer_landing_price !== undefined && item.dealer_landing_price !== null && item.dealer_landing_price !== '';
       
       if (hasPurchase || hasSelling || hasDealer) {
-        const purchase = hasPurchase ? parseFloat(item.purchase_price) : parseFloat(product.purchase_price);
-        const selling = hasSelling ? parseFloat(item.selling_price) : parseFloat(product.selling_price);
-        const dealer = hasDealer ? parseFloat(item.dealer_landing_price) : product.dealer_landing_price;
+        const parsedPurchase = hasPurchase && !isNaN(parseFloat(item.purchase_price)) ? parseFloat(item.purchase_price) : (product.purchase_price ? parseFloat(product.purchase_price) : null);
+        const parsedSelling = hasSelling && !isNaN(parseFloat(item.selling_price)) ? parseFloat(item.selling_price) : (product.selling_price ? parseFloat(product.selling_price) : null);
+        const parsedDealer = hasDealer && !isNaN(parseFloat(item.dealer_landing_price)) ? parseFloat(item.dealer_landing_price) : (product.dealer_landing_price ? parseFloat(product.dealer_landing_price) : null);
 
-        product.purchase_price = purchase;
-        product.selling_price = selling;
-        product.dealer_landing_price = dealer;
+        product.purchase_price = parsedPurchase;
+        product.selling_price = parsedSelling;
+        product.dealer_landing_price = parsedDealer;
         await product.save({ transaction: t });
 
         // Add to pricing history
         await Pricing.create({
           product_id: product.id,
-          purchase_price: purchase,
-          dealer_landing_price: dealer,
-          selling_price: selling,
+          purchase_price: parsedPurchase,
+          dealer_landing_price: parsedDealer,
+          selling_price: parsedSelling,
           effective_from: effFrom,
-          created_by: req.user.id,
+          created_by: req.user?.id || null,
           notes: notes || 'Bulk price import'
         }, { transaction: t });
 
         // Audit Log for pricing update
         await AuditLog.create({
-          actor_id: req.user.id,
-          actor_name: req.user.name,
-          actor_role: req.user.role,
+          actor_id: req.user?.id || 1,
+          actor_name: req.user?.name || 'System',
+          actor_role: req.user?.role || 'admin',
           action_type: 'price_update',
           module: 'products',
           entity_type: 'pricing',
           entity_id: product.id,
           before_state: oldPrices,
-          after_state: { purchase_price: purchase, dealer_landing_price: dealer, selling_price: selling },
+          after_state: { purchase_price: parsedPurchase, dealer_landing_price: parsedDealer, selling_price: parsedSelling },
           ip_address: req.ip,
           user_agent: req.headers['user-agent']
         }, { transaction: t });
@@ -568,7 +582,16 @@ exports.bulkImport = async (req, res, next) => {
       // Check if stock update is provided
       if (item.quantity !== undefined && item.quantity !== null && item.quantity !== '') {
         const qtyToImport = parseFloat(item.quantity);
-        if (!isNaN(qtyToImport)) {
+        if (!isNaN(qtyToImport) && qtyToImport > 0) {
+          // Check if product is in price list
+          const hasDbPricing = product.dealer_landing_price != null || product.purchase_price != null || product.selling_price != null ||
+            (await Pricing.count({ where: { product_id: product.id }, transaction: t })) > 0;
+          const inPriceList = priceUpdated || hasDbPricing;
+
+          if (!inPriceList) {
+            throw new Error(`Stock cannot be added for product '${product.sku}' because it is not in the price list.`);
+          }
+
           // Ensure stock rows exist
           await StockOnHand.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
           await StockReserved.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
@@ -591,8 +614,8 @@ exports.bulkImport = async (req, res, next) => {
             reason: notes || 'Bulk stock import',
             quantity_before: oldQty,
             quantity_after: newQty,
-            approved_by: req.user.id,
-            performed_by: req.user.id
+            approved_by: req.user?.id || 1,
+            performed_by: req.user?.id || 1
           }, { transaction: t });
 
           // Record stock transaction ledger entry
@@ -602,7 +625,7 @@ exports.bulkImport = async (req, res, next) => {
             reference: `IMPORT-${adjustment.id}`,
             quantity_change: delta,
             quantity_after: newQty,
-            performed_by: req.user.id,
+            performed_by: req.user?.id || 1,
             notes: notes || 'Bulk stock import'
           }, { transaction: t });
 
@@ -628,9 +651,9 @@ exports.bulkImport = async (req, res, next) => {
 
     // Write a parent AuditLog entry for the bulk import
     const mainLog = await AuditLog.create({
-      actor_id: req.user.id,
-      actor_name: req.user.name,
-      actor_role: req.user.role,
+      actor_id: req.user?.id || 1,
+      actor_name: req.user?.name || 'System',
+      actor_role: req.user?.role || 'admin',
       action_type: 'import',
       module: 'products',
       entity_type: 'bulk_import',
@@ -677,4 +700,64 @@ exports.getImportHistory = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+// ── GET /api/v1/products/:id/transactions ─────────────────────────────────────
+// Part-wise transaction history
+exports.getProductTransactions = async (req, res, next) => {
+  try {
+    const product = await Product.findByPk(req.params.id, { attributes: ['id', 'name', 'sku'] });
+    if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+
+    const transactions = await StockTransaction.findAll({
+      where: { product_id: req.params.id },
+      include: [{ model: User, as: 'performer', attributes: ['id', 'name'] }],
+      order: [['created_at', 'DESC']],
+      limit: 200,
+    });
+
+    res.json({ success: true, data: transactions, product });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/products/check-availability?sku=XXX ──────────────────────────
+// Check if a part no is in price list and/or stock
+exports.checkPartAvailability = async (req, res, next) => {
+  try {
+    const sku = (req.query.sku || '').trim().toUpperCase();
+    if (!sku) return res.status(400).json({ success: false, error: 'sku query param required' });
+
+    const product = await Product.findOne({
+      where: { sku },
+      include: [
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        {
+          model: Pricing, as: 'pricingHistory',
+          where: { [require('sequelize').Op.or]: [{ effective_to: null }, { effective_to: { [require('sequelize').Op.gte]: new Date() } }] },
+          required: false,
+          order: [['effective_from', 'DESC']],
+          limit: 1,
+        },
+      ],
+    });
+
+    if (!product) return res.json({ success: true, status: 'not_found', sku });
+
+    const inPriceList = (product.pricingHistory?.length > 0) || product.dealer_landing_price != null;
+    const stockQty    = parseFloat(product.stockOnHand?.quantity || 0);
+    const inStock     = stockQty > 0;
+
+    return res.json({
+      success: true,
+      status: inStock ? 'in_stock' : (inPriceList ? 'price_list_only' : 'not_found'),
+      sku,
+      product: {
+        id:                   product.id,
+        name:                 product.name,
+        sku:                  product.sku,
+        stock_qty:            stockQty,
+        dealer_landing_price: product.pricingHistory?.[0]?.dealer_landing_price ?? product.dealer_landing_price,
+      },
+    });
+  } catch (err) { next(err); }
 };

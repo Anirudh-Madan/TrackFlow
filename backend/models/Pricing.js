@@ -4,9 +4,9 @@ const sequelize = require('../config/database');
 const Pricing = sequelize.define('Pricing', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   product_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
-  purchase_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  purchase_price: { type: DataTypes.DECIMAL(12, 2), allowNull: true, defaultValue: 0.00 },
   dealer_landing_price: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
-  selling_price: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
+  selling_price: { type: DataTypes.DECIMAL(12, 2), allowNull: true, defaultValue: 0.00 },
   effective_from: { type: DataTypes.DATEONLY, allowNull: false },
   effective_to: { type: DataTypes.DATEONLY, allowNull: true },
   created_by: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true },

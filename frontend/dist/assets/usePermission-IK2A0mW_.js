@@ -1,0 +1,1 @@
+import{Gn as e}from"./index-CBXxf4yW.js";function t(t){return e(e=>e.hasPermission(t))}export{t};

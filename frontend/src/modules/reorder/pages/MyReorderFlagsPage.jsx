@@ -10,6 +10,7 @@ import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import Badge from '../../../components/ui/Badge'
 import toast from 'react-hot-toast'
+import TablePagination from '../../../components/data/TablePagination'
 
 const STATUS_CONFIG = {
   OPEN:     { label: 'Open',     variant: 'warning' },
@@ -175,7 +176,10 @@ export default function MyReorderFlagsPage() {
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage]         = useState(1)
   const [showNewModal, setShowNewModal] = useState(false)
+
+  useEffect(() => { setPage(1) }, [search, filterStatus])
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -299,7 +303,7 @@ export default function MyReorderFlagsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
-                {filtered.map(r => (
+                {filtered.slice((page - 1) * 50, page * 50).map(r => (
                   <tr key={r.id} className="hover:bg-surface-50/50 dark:hover:bg-surface-800/30 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
@@ -333,11 +337,12 @@ export default function MyReorderFlagsPage() {
             </table>
           </div>
         )}
-        {!loading && filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-surface-100 dark:border-surface-800 text-xs text-surface-500 dark:text-surface-400">
-            Showing {filtered.length} of {reorders.length} flags
-          </div>
-        )}
+        <TablePagination
+          currentPage={page}
+          totalItems={filtered.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </Card>
 
       {showNewModal && (

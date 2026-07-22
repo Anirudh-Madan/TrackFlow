@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { getReorders, updateReorderStatus } from '../../../api/endpoints/reorder.api'
+import TablePagination from '../../../components/data/TablePagination'
 
 const REORDER_STATUS_CONFIG = {
   OPEN:     { label: 'Open',     color: 'bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-900/20 dark:text-warning-400 dark:border-warning-900/40', icon: AlertCircle },
@@ -30,7 +31,10 @@ export default function ReorderListPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage] = useState(1)
   const [submittingId, setSubmittingId] = useState(null)
+
+  useEffect(() => { setPage(1) }, [search, filterStatus])
 
   const fetchReorders = useCallback(async () => {
     setLoading(true)
@@ -245,7 +249,7 @@ export default function ReorderListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                  {filteredReorders.map(r => (
+                  {filteredReorders.slice((page - 1) * 50, page * 50).map(r => (
                     <tr key={r.id} className="table-row-hover">
                       <td className="px-5 py-4 font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">
                         {r.product?.sku || 'N/A'}
@@ -329,6 +333,12 @@ export default function ReorderListPage() {
             )}
           </div>
         )}
+        <TablePagination
+          currentPage={page}
+          totalItems={filteredReorders.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   )

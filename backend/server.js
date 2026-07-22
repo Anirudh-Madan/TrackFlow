@@ -260,20 +260,21 @@ async function seedDatabase() {
 async function ensureAllStockRows() {
   try {
     const { Product, StockOnHand, StockReserved } = require('./models');
-    const products = await Product.findAll();
-    let count = 0;
-    for (const p of products) {
-      const [, sohCreated] = await StockOnHand.findOrCreate({
-        where: { product_id: p.id },
-        defaults: { product_id: p.id, quantity: 0 },
-      });
-      const [, srCreated] = await StockReserved.findOrCreate({
-        where: { product_id: p.id },
-        defaults: { product_id: p.id, quantity: 0 },
-      });
-      if (sohCreated || srCreated) count++;
+    const products = await Product.findAll({ attributes: ['id'], raw: true });
+    if (!products.length) return;
+
+    const existingSoh = new Set((await StockOnHand.findAll({ attributes: ['product_id'], raw: true })).map(s => s.product_id));
+    const existingSr  = new Set((await StockReserved.findAll({ attributes: ['product_id'], raw: true })).map(s => s.product_id));
+
+    const newSoh = products.filter(p => !existingSoh.has(p.id)).map(p => ({ product_id: p.id, quantity: 0 }));
+    const newSr  = products.filter(p => !existingSr.has(p.id)).map(p => ({ product_id: p.id, quantity: 0 }));
+
+    if (newSoh.length) await StockOnHand.bulkCreate(newSoh);
+    if (newSr.length)  await StockReserved.bulkCreate(newSr);
+
+    if (newSoh.length || newSr.length) {
+      console.log(`Ensured stock rows: created ${newSoh.length} StockOnHand and ${newSr.length} StockReserved records.`);
     }
-    if (count > 0) console.log(`Ensured stock rows for ${count} product(s) with missing records.`);
   } catch (error) {
     console.error('Error during ensuring all stock rows:', error);
   }
@@ -286,15 +287,15 @@ async function startServer() {
     console.log('Database connection established successfully.');
 
     console.log('Syncing database schema...');
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('Database schema synchronized.');
-
-    await seedDatabase();
-    await ensureAllStockRows();
 
     server.listen(PORT, () => {
       console.log(`Backend server is running on port ${PORT}`);
     });
+
+    await seedDatabase();
+    await ensureAllStockRows();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

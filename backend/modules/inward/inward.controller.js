@@ -66,6 +66,14 @@ exports.createInwardEntry = async (req, res, next) => {
         return res.status(404).json({ success: false, error: `Product with ID ${product_id} not found` });
       }
 
+      const { Pricing } = require('../../models');
+      const pricingCount = await Pricing.count({ where: { product_id }, transaction: t });
+      const inPriceList = product.dealer_landing_price != null || product.purchase_price != null || product.selling_price != null || pricingCount > 0;
+      if (!inPriceList) {
+        await t.rollback();
+        return res.status(400).json({ success: false, error: `Stock cannot be added for product '${product.sku}' because it is not in the price list.` });
+      }
+
       // Create Inward Item
       await InwardItem.create({
         inward_entry_id: inwardEntry.id,

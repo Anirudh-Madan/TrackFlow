@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtQty = (v) => v != null ? parseFloat(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'
@@ -79,6 +80,15 @@ export default function StockOverviewPage() {
   const [txnFilter,   setTxnFilter]   = useState({ product_id: '', type: '' })
   const [dmgFilter,   setDmgFilter]   = useState('')
   const [adjFilter,   setAdjFilter]   = useState('')
+
+  // Pagination state
+  const [overviewPage, setOverviewPage] = useState(1)
+  const [txnPage,      setTxnPage]      = useState(1)
+  const [dmgPage,      setDmgPage]      = useState(1)
+
+  useEffect(() => { setOverviewPage(1) }, [search])
+  useEffect(() => { setTxnPage(1) }, [txnFilter])
+  useEffect(() => { setDmgPage(1) }, [dmgFilter])
 
   // Modals
   const [reorderOpen,  setReorderOpen]  = useState(false)
@@ -204,6 +214,13 @@ export default function StockOverviewPage() {
     if (!adjForm.product_id) return setAdjErr('Select a product')
     if (adjForm.new_quantity === '' || adjForm.new_quantity == null) return setAdjErr('Enter the new quantity')
     if (!adjForm.reason.trim()) return setAdjErr('Reason is required')
+
+    const selProd = products.find(p => String(p.id) === String(adjForm.product_id))
+    const inPriceList = selProd && (selProd.dealer_landing_price != null || selProd.purchase_price != null || selProd.selling_price != null)
+    if (!inPriceList && parseFloat(adjForm.new_quantity) > 0) {
+      return setAdjErr('Stock cannot be added for a product that is not in the price list.')
+    }
+
     setSubmitting(true)
     try {
       const res = await createAdjustment({
@@ -426,7 +443,7 @@ export default function StockOverviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700/50 text-sm">
-                  {filteredStock.map(p => {
+                  {filteredStock.slice((overviewPage - 1) * 50, overviewPage * 50).map(p => {
                     const isLow  = p.is_low_stock
                     const isOut  = p.available <= 0
                     return (
@@ -479,6 +496,12 @@ export default function StockOverviewPage() {
               </table>
             )}
           </div>
+          <TablePagination
+            currentPage={overviewPage}
+            totalItems={filteredStock.length}
+            pageSize={50}
+            onPageChange={setOverviewPage}
+          />
         </div>
       )}
 
@@ -539,7 +562,7 @@ export default function StockOverviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700/50 text-sm">
-                  {filteredTxns.map(t => (
+                  {filteredTxns.slice((txnPage - 1) * 50, txnPage * 50).map(t => (
                     <tr key={t.id} className="table-row-hover">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
@@ -566,6 +589,12 @@ export default function StockOverviewPage() {
               </table>
             )}
           </div>
+          <TablePagination
+            currentPage={txnPage}
+            totalItems={filteredTxns.length}
+            pageSize={50}
+            onPageChange={setTxnPage}
+          />
         </div>
       )}
 
@@ -630,7 +659,7 @@ export default function StockOverviewPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-100 dark:divide-surface-700/50 text-sm">
-                    {filteredDamaged.map(d => (
+                    {filteredDamaged.slice((dmgPage - 1) * 50, dmgPage * 50).map(d => (
                       <tr key={d.id} className="table-row-hover">
                         <td className="px-4 py-3.5">
                           <div className="font-medium text-surface-900 dark:text-surface-100">{d.product?.name || '—'}</div>
@@ -654,6 +683,12 @@ export default function StockOverviewPage() {
                 </table>
               )}
             </div>
+            <TablePagination
+              currentPage={dmgPage}
+              totalItems={filteredDamaged.length}
+              pageSize={50}
+              onPageChange={setDmgPage}
+            />
           </div>
         </>
       )}

@@ -5,6 +5,7 @@ import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { getBelowDlReport } from '../../../api/endpoints/reports.api'
 import { getUsers } from '../../../api/endpoints/users.api'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const fINR = (v) => {
@@ -21,6 +22,9 @@ export default function BelowDlReportPage() {
   const [loading,   setLoading]   = useState(true)
   const [search,    setSearch]    = useState('')
   const [salesMgrId, setSalesMgrId] = useState('')
+  const [page, setPage]           = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, salesMgrId])
 
   const fetchReport = useCallback(async () => {
     setLoading(true)
@@ -145,7 +149,7 @@ export default function BelowDlReportPage() {
                     <p className="text-xs text-surface-500 mt-1">No transactions sold below DL match your filters.</p>
                   </td>
                 </tr>
-              ) : items.map(item => (
+              ) : items.slice((page - 1) * 50, page * 50).map(item => (
                 <tr key={item.id} className="table-row-hover">
                   <td className="px-6 py-4">
                     <div className="font-semibold text-surface-900 dark:text-surface-50">{item.partNumber}</div>
@@ -174,6 +178,12 @@ export default function BelowDlReportPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={items.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
 
         {/* Footer total */}
         {!loading && items.length > 0 && (

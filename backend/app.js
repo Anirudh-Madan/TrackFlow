@@ -22,6 +22,7 @@ const analyticsRoutes = require('./modules/analytics/analytics.routes');
 const purchaseOrdersRoutes = require('./modules/purchaseOrders/purchaseOrders.routes');
 const reportsRoutes = require('./modules/reports/reports.routes');
 const rbacRoutes = require('./modules/rbac/rbac.routes');
+const settingsRoutes = require('./modules/settings/settings.routes');
 
 const app = express();
 
@@ -31,7 +32,8 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
 
 // Routes
@@ -53,6 +55,7 @@ app.use('/api/v1/analytics',       analyticsRoutes);
 app.use('/api/v1/purchase-orders', purchaseOrdersRoutes);
 app.use('/api/v1/reports',         reportsRoutes);
 app.use('/api/v1/rbac',            rbacRoutes);
+app.use('/api/v1/settings',        settingsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -81,7 +81,6 @@ export default function Sidebar() {
           {/* Fulfilment */}
           <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
             <SidebarItem to="/im/orders/pending" icon={ShoppingCart} label="Pending Orders" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/im/challans" icon={FileText} label="Challans" collapsed={sidebarCollapsed} />
             <SidebarItem to="/im/reorder" icon={ClipboardList} label="Reorder List" collapsed={sidebarCollapsed} />
             <SidebarItem to="/im/purchase-requests" icon={Send} label="Purchase Orders" collapsed={sidebarCollapsed} />
           </SidebarGroup>
@@ -212,21 +211,20 @@ export default function Sidebar() {
 
         {/* Fulfilment */}
         <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders & Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/challans" icon={FileText} label="Delivery Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/purchase-orders" icon={FileUp} label="Purchase Orders" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/dispatch" icon={Truck} label="Dispatch" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Finance" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Intelligence */}
         <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
-          <CollapsibleGroup label="Reports" icon={BarChart3} collapsed={sidebarCollapsed} defaultOpen>
+          <SidebarItem to="/admin/reports" icon={BarChart3} label="Reports & AI Insights" collapsed={sidebarCollapsed} />
+          <CollapsibleGroup label="Other Reports" icon={BarChart3} collapsed={sidebarCollapsed}>
             <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/imports" icon={FileUp} label="Import History" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/suggestions" icon={Lightbulb} label="Suggestion Conversion" collapsed={sidebarCollapsed} />
           </CollapsibleGroup>
         </SidebarGroup>
 

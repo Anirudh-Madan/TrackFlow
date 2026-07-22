@@ -16,6 +16,7 @@ import {
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 const INITIAL_PAYMENTS = [
   {
@@ -104,7 +105,9 @@ const EMPTY_PAYMENT = {
 export default function PaymentsListPage() {
   const [payments, setPayments] = useState(INITIAL_PAYMENTS)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [page, setPage] = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, statusFilter])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_PAYMENT)
 
@@ -241,7 +244,7 @@ export default function PaymentsListPage() {
                   </td>
                 </tr>
               ) : (
-                filteredPayments.map((payment) => {
+                filteredPayments.slice((page - 1) * 50, page * 50).map((payment) => {
                   const StatusIcon = STATUS_CONFIG[payment.status]?.icon || Clock3
                   return (
                     <tr key={payment.id} className="hover:bg-surface-50/70 dark:hover:bg-surface-800/70">
@@ -286,6 +289,12 @@ export default function PaymentsListPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={filteredPayments.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
 
       <div className="card p-5">

@@ -1,0 +1,1 @@
+import{i as e,t}from"./react-B8IZ02wI.js";import{Jn as n}from"./index-CBXxf4yW.js";var r=e(t(),1);function i(){let e=n();return(0,r.useEffect)(()=>{e(`/products`,{replace:!0})},[e]),null}export{i as default};

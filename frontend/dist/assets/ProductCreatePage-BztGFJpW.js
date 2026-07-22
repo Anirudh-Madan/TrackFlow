@@ -1,1 +1,0 @@
-import{i as e,t}from"./react-B8IZ02wI.js";import{Wn as n}from"./index-DOCD3_Ca.js";var r=e(t(),1);function i(){let e=n();return(0,r.useEffect)(()=>{e(`/products`,{replace:!0})},[e]),null}export{i as default};

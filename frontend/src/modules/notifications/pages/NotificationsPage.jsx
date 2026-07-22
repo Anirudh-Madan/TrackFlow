@@ -7,6 +7,7 @@ import {
 import Button from '../../../components/ui/Button'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
+import TablePagination from '../../../components/data/TablePagination'
 import { useNotificationStore } from '../../../store/notificationStore'
 import {
   getNotifications, markNotificationRead, markAllRead, getUnreadCount,
@@ -36,6 +37,9 @@ export default function NotificationsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [page, setPage]     = useState(1)
+
+  useEffect(() => { setPage(1) }, [filter])
 
   const refreshCount = useCallback(async () => {
     try {
@@ -110,7 +114,7 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(n => {
+          {filtered.slice((page - 1) * 50, page * 50).map(n => {
             const meta = TYPE_META[n.type] || TYPE_META.GENERAL
             const Icon = meta.icon
             return (
@@ -127,6 +131,12 @@ export default function NotificationsPage() {
               </button>
             )
           })}
+          <TablePagination
+            currentPage={page}
+            totalItems={filtered.length}
+            pageSize={50}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>
