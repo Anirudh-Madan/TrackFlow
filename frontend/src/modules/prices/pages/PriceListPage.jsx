@@ -12,6 +12,7 @@ import {
   deleteProduct,
   bulkImportProducts,
 } from '../../../api/endpoints/products.api'
+import { getVendors } from '../../../api/endpoints/parties.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
@@ -36,14 +37,15 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Price Record Schema ──────────────────────────────────────────────────────
 const priceRecordSchema = z.object({
-  name:                 z.string().min(1, 'Description is required').max(150),
+  name:                 z.string().optional().or(z.literal('')),
   sku:                  z.string().min(1, 'Part Number is required').max(50),
-  purchase_price:       z.coerce.number().min(0, 'DN must be ≥ 0'),
-  dealer_landing_price: z.coerce.number().min(0).optional().or(z.literal('')),
-  gst_rate:             z.coerce.number().min(0, 'GST % must be ≥ 0').max(100, 'GST cannot exceed 100%'),
+  purchase_price:       z.coerce.number().min(0, 'DN must be ≥ 0').optional().or(z.literal('')),
+  dealer_landing_price: z.coerce.number().min(0, 'DL must be ≥ 0').optional().or(z.literal('')),
+  gst_rate:             z.coerce.number().min(0, 'GST % must be ≥ 0').max(100, 'GST cannot exceed 100%').optional().or(z.literal('')).default(18.00),
   planner:              z.string().optional().or(z.literal('')),
   supplier:             z.string().optional().or(z.literal('')),
 })
@@ -113,9 +115,13 @@ function ErrorBanner({ msg }) {
 
 export default function PriceListPage() {
   const [products, setProducts]         = useState([])
+  const [vendors, setVendors]           = useState([])
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
+  const [page, setPage]                 = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, supplierFilter])
 
   // Modals
   const [isRecordOpen, setIsRecordOpen]     = useState(false)
@@ -128,6 +134,7 @@ export default function PriceListPage() {
 
   // Excel / CSV Importer states
   const [isImportOpen, setIsImportOpen]       = useState(false)
+  const [selectedImportSupplier, setSelectedImportSupplier] = useState('')
   const [importing, setImporting]             = useState(false)
   const [importFileName, setImportFileName]   = useState('')
   const [parsedImportData, setParsedImportData] = useState([])
@@ -154,11 +161,14 @@ export default function PriceListPage() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const res = await getProducts()
-      if (res.success) {
-        setProducts(res.data || [])
+      const [pRes, vRes] = await Promise.all([getProducts(), getVendors()])
+      if (pRes.success) {
+        setProducts(pRes.data || [])
       } else {
-        toast.error(res.error || 'Failed to fetch price list')
+        toast.error(pRes.error || 'Failed to fetch price list')
+      }
+      if (vRes.success) {
+        setVendors(vRes.data || [])
       }
     } catch (err) {
       toast.error(err.message || 'Error loading price records')
@@ -232,13 +242,14 @@ export default function PriceListPage() {
     try {
       const payload = {
         ...data,
-        dealer_landing_price: data.dealer_landing_price !== '' ? parseFloat(data.dealer_landing_price) : null,
+        name:                 data.name?.trim() || null,
+        purchase_price:       data.purchase_price !== '' && data.purchase_price != null ? parseFloat(data.purchase_price) : null,
+        dealer_landing_price: data.dealer_landing_price !== '' && data.dealer_landing_price != null ? parseFloat(data.dealer_landing_price) : null,
+        gst_rate:             data.gst_rate !== '' && data.gst_rate != null ? parseFloat(data.gst_rate) : 18.00,
+        planner:              data.planner?.trim() || null,
+        supplier:             data.supplier?.trim() || null,
       }
       
-      if (!editRecord) {
-        payload.selling_price = payload.dealer_landing_price || payload.purchase_price * 1.2
-      }
-
       const res = editRecord
         ? await updateProduct(editRecord.id, payload)
         : await createProduct(payload)
@@ -327,12 +338,13 @@ export default function PriceListPage() {
 
         // ── Header matching via shared utility ──────────────────────────────
         const rawHeaders = Object.keys(rawRows[0] || {})
-        const { fieldMap, unmatchedHeaders: unmatched, matchLog } = matchHeaders(rawHeaders, detectedSupplier)
+        const supplierName = selectedImportSupplier || detectedSupplier
+        const { fieldMap, unmatchedHeaders: unmatched, matchLog } = matchHeaders(rawHeaders, supplierName)
 
         // Always log matching detail — invaluable for debugging supplier files
         console.group('[Import – Prices] Header matching result')
         console.log('File            :', file.name)
-        console.log('Detected supplier:', detectedSupplier)
+        console.log('Supplier        :', supplierName)
         console.log('Raw headers      :', matchLog.received)
         console.log('Matched fields   :', matchLog.matched)
         console.log('Unmatched headers:', matchLog.unmatched)
@@ -350,8 +362,8 @@ export default function PriceListPage() {
             dealer_landing_price: r.dealer_landing_price ?? '',
             selling_price:        r.selling_price        ?? '',
             quantity:             r.quantity             ?? '',
-            gst_rate:             r.gst_rate             ?? '',
-            supplier:             r.supplier             || detectedSupplier,
+            gst_rate:             r.gst_rate !== '' && r.gst_rate !== undefined && r.gst_rate !== null ? r.gst_rate : '18.00',
+            supplier:             selectedImportSupplier || r.supplier || supplierName,
           }))
           .filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
 
@@ -499,23 +511,30 @@ export default function PriceListPage() {
 
     setImporting(true)
     try {
-      const res = await bulkImportProducts({
-        items: validPayloadItems,
-        stock_mode: importStockMode,
-        effective_from: importEffectiveFrom,
-        notes: importNotes
-      })
+      const BATCH_SIZE = 200
+      let totalImported = 0
 
-      if (res.success) {
-        toast.success(res.message || 'Bulk import successful!')
-        setParsedImportData([])
-        setImportFileName('')
-        setImportNotes('')
-        setIsImportOpen(false)
-        fetchAll()
-      } else {
-        toast.error(res.error || 'Import failed')
+      for (let i = 0; i < validPayloadItems.length; i += BATCH_SIZE) {
+        const batch = validPayloadItems.slice(i, i + BATCH_SIZE)
+        const res = await bulkImportProducts({
+          items: batch,
+          stock_mode: importStockMode,
+          effective_from: importEffectiveFrom,
+          notes: importNotes
+        })
+
+        if (!res.success) {
+          throw new Error(res.error || `Failed on batch starting at row ${i + 1}`)
+        }
+        totalImported += batch.length
       }
+
+      toast.success(`Successfully imported ${totalImported} records!`)
+      setParsedImportData([])
+      setImportFileName('')
+      setImportNotes('')
+      setIsImportOpen(false)
+      fetchAll()
     } catch (err) {
       toast.error(err.message || 'Error occurred during import')
     } finally {
@@ -561,14 +580,17 @@ export default function PriceListPage() {
             />
           </div>
 
-          <div className="relative w-full sm:w-48">
+          <div className="relative w-full sm:w-56">
             <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
             <select
               value={supplierFilter}
               onChange={e => setSupplierFilter(e.target.value)}
               className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
             >
-              <option value="">All Sources</option>
+              <option value="">All Suppliers / Sources</option>
+              {vendors.map(v => (
+                <option key={v.id} value={v.company_name}>{v.company_name}</option>
+              ))}
               <option value="Cummins">Cummins</option>
               <option value="Meritor">Meritor</option>
               <option value="Other">Other</option>
@@ -618,7 +640,7 @@ export default function PriceListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                {filteredRecords.map(p => (
+                {filteredRecords.slice((page - 1) * 50, page * 50).map(p => (
                   <tr key={p.id} className="table-row-hover">
                     <td className="px-6 py-4 font-mono text-xs font-medium text-surface-600 dark:text-surface-400">
                       {p.sku}
@@ -674,6 +696,12 @@ export default function PriceListPage() {
             </table>
           )}
         </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={filteredRecords.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* ── Add/Edit Record Modal ─────────────────────────────────────── */}
@@ -720,7 +748,10 @@ export default function PriceListPage() {
                 {...recordForm.register('supplier')}
                 className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
               >
-                <option value="">— Select Source —</option>
+                <option value="">— Select Supplier —</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.company_name}>{v.company_name}</option>
+                ))}
                 <option value="Cummins">Cummins</option>
                 <option value="Meritor">Meritor</option>
                 <option value="Other">Other</option>
@@ -821,6 +852,30 @@ export default function PriceListPage() {
         size="lg"
       >
         <div className="space-y-5">
+          {/* Supplier / Vendor Selection (Required) */}
+          <div className="p-4 rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/10 space-y-2">
+            <label className="text-xs font-semibold text-surface-900 dark:text-surface-100 flex items-center gap-1.5">
+              <Truck className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+              Select Supplier / Vendor for this Price List <span className="text-danger-500">*</span>
+            </label>
+            <select
+              value={selectedImportSupplier}
+              onChange={e => setSelectedImportSupplier(e.target.value)}
+              className="input-base bg-white dark:bg-surface-900"
+            >
+              <option value="">— Choose Vendor / Supplier —</option>
+              {vendors.map(v => (
+                <option key={v.id} value={v.company_name}>{v.company_name}</option>
+              ))}
+              <option value="Cummins">Cummins</option>
+              <option value="Meritor">Meritor</option>
+              <option value="Other">Other</option>
+            </select>
+            <p className="text-[11px] text-surface-500 dark:text-surface-400">
+              Choosing a supplier tags all imported price records under this vendor and applies vendor-specific column mappings.
+            </p>
+          </div>
+
           {/* Dropzone */}
           <div
             {...getImportRootProps()}

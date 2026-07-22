@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require('uuid');
 const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
 const { notify } = require('../../services/notification.service');
 
@@ -19,11 +20,18 @@ exports.createOrder = async (req, res, next) => {
       items,
       supplier,
       challan_number,
+      bill_number,
       order_date,
       customer_name,
       company_name,
-      customer_company
+      customer_company,
+      notes,
     } = req.body; // items: [{ product_id, quantity, sm_price }]
+
+    if (!bill_number || !bill_number.trim()) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
+    }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       await t.rollback();
@@ -108,6 +116,24 @@ exports.createOrder = async (req, res, next) => {
       gst_amount,
       grand_total,
       credit_hold,
+    }, { transaction: t });
+
+    // Create corresponding Challan entry
+    const share_token = uuidv4().replace(/-/g, '');
+    const challanNo = challan_number || `CHN-${order_number.replace('ORD-', '')}`;
+    await Challan.create({
+      challan_number: challanNo,
+      order_id: order.id,
+      party_id: party_id || null,
+      party_name: customer_name || company_name || customer_company || null,
+      supplier: supplier || null,
+      bill_number: bill_number.trim(),
+      grand_total: grand_total,
+      created_by: req.user.id,
+      share_token,
+      status: 'active',
+      is_returned: false,
+      generated_at: finalOrderDate,
     }, { transaction: t });
 
     for (const item of itemsToCreate) {

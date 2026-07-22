@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   ShoppingBag, Plus, Pencil, Trash2, RotateCcw, Eye, Search, Filter,
-  AlertCircle, CheckCircle, X, Loader2, Shield, Calendar, History,
+  AlertCircle, CheckCircle, X, Loader2, Shield, Calendar,
   ExternalLink, Lock, Info, ArrowLeft, Hash, Download, Printer
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
@@ -10,9 +10,10 @@ import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import {
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
-  deletePurchaseOrder, returnPurchaseOrder, getPOEditHistory
+  deletePurchaseOrder, returnPurchaseOrder
 } from '../../../api/endpoints/purchaseOrders.api'
 import { useAuthStore } from '../../../store/authStore'
+import TablePagination from '../../../components/data/TablePagination'
 
 const STATUS_CONFIG = {
   SUBMITTED:  { label: 'Submitted',  color: 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/20 dark:text-primary-400' },
@@ -89,6 +90,20 @@ function generatePOPDF(po) {
   win.print()
 }
 
+function downloadPOHTML(po) {
+  const html = getPOHTML(po)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `purchase_order_${po.po_number || po.id}.html`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  toast.success('PO HTML downloaded!')
+}
+
 function PinModal({ open, onVerify, onClose, loading }) {
   const [pin, setPin] = useState('')
   const inputRef = useRef(null)
@@ -112,33 +127,6 @@ function PinModal({ open, onVerify, onClose, loading }) {
   )
 }
 
-function EditHistoryModal({ open, onClose, poId }) {
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    if (!open || !poId) return
-    setLoading(true)
-    getPOEditHistory(poId).then(r => { if (r.success) setLogs(r.data) }).catch(() => {}).finally(() => setLoading(false))
-  }, [open, poId])
-  return (
-    <Modal open={open} onClose={onClose} title="Edit History" size="md">
-      {loading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary-600" /></div>
-        : logs.length === 0 ? <div className="text-center py-8 text-surface-500 text-sm">No edits recorded</div>
-        : <div className="space-y-3">
-            {logs.map(log => (
-              <div key={log.id} className="border border-surface-200 dark:border-surface-700 rounded-xl p-3 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold">{log.editor?.name || 'Admin'}</span>
-                  <span className="text-xs text-surface-400">{new Date(log.created_at).toLocaleString('en-IN')}</span>
-                </div>
-                <p className="text-xs text-surface-600 dark:text-surface-300">{log.edit_reason}</p>
-              </div>
-            ))}
-          </div>}
-    </Modal>
-  )
-}
-
 const EMPTY_ITEM = { part_number: '', description: '', quantity: 1, unit_price: '' }
 
 export default function AdminPOPage() {
@@ -155,7 +143,6 @@ export default function AdminPOPage() {
   const [viewPO, setViewPO]           = useState(null)
   const [editPO, setEditPO]           = useState(null)
   const [returnTarget, setReturnTarget] = useState(null)
-  const [historyId, setHistoryId]     = useState(null)
 
   const [pinModalOpen, setPinModalOpen] = useState(false)
   const [pinLoading, setPinLoading]     = useState(false)
@@ -183,6 +170,13 @@ export default function AdminPOPage() {
       return match && status
     })
   }, [pos, search, filterStatus])
+
+  const [page, setPage]           = useState(1)
+  useEffect(() => { setPage(1) }, [search, filterStatus])
+
+  const paginatedPOs = useMemo(() => {
+    return filtered.slice((page - 1) * 50, page * 50)
+  }, [filtered, page])
 
   const stats = useMemo(() => {
     return {
@@ -361,7 +355,7 @@ export default function AdminPOPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm">
-                  {filtered.map(p => {
+                  {paginatedPOs.map(p => {
                     const locked = !!(p.bill_number || p.is_returned)
                     return (
                       <tr key={p.id} className="table-row-hover">
@@ -383,11 +377,9 @@ export default function AdminPOPage() {
                         <td className="px-5 py-4">
                           <div className="flex items-center justify-end gap-1.5">
                             <Button variant="ghost" size="sm" icon={Eye} onClick={() => setViewPO(p)}>View</Button>
-                            <Button variant="ghost" size="sm" icon={Printer} onClick={() => generatePOPDF(p)}>Print</Button>
                             {!locked && <Button variant="ghost" size="sm" icon={Pencil} onClick={() => { setEditPO(p); setEditForm({ reason: '', notes: p.notes || '', vendor_name: p.vendor_name || '', bill_number: '' }) }}>Edit</Button>}
                             {!p.is_returned && <Button variant="ghost" size="sm" icon={RotateCcw} onClick={() => { setReturnTarget(p); setReturnForm({ reason: '' }) }} className="text-amber-600">Return</Button>}
                             {!locked && <Button variant="ghost" size="sm" icon={Trash2} onClick={() => handleDelete(p)} className="text-danger-500">Delete</Button>}
-                            <Button variant="ghost" size="sm" icon={History} onClick={() => setHistoryId(p.id)}>History</Button>
                           </div>
                         </td>
                       </tr>
@@ -397,6 +389,13 @@ export default function AdminPOPage() {
               </table>
             </div>
           )}
+
+        <TablePagination
+          currentPage={page}
+          totalItems={filtered.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Create Modal */}
@@ -470,20 +469,93 @@ export default function AdminPOPage() {
         </div>
       </Modal>
 
-      {/* View Modal */}
+      {/* View Modal with Items Table */}
       {viewPO && (
-        <Modal open={!!viewPO} onClose={() => setViewPO(null)} title={`PO: ${viewPO.po_number}`} size="lg">
-          <div className="space-y-4">
-            <StatusBadge status={viewPO.status} />
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-xs text-surface-400">Vendor</span><div className="font-medium">{viewPO.vendor?.company_name || viewPO.vendor_name || '—'}</div></div>
-              <div><span className="text-xs text-surface-400">Date</span><div className="font-medium">{new Date(viewPO.po_date).toLocaleDateString('en-IN')}</div></div>
-              <div><span className="text-xs text-surface-400">Bill No</span><div className="font-semibold text-primary-700 dark:text-primary-400 flex items-center gap-1">{viewPO.bill_number ? <><Lock className="h-3 w-3" />{viewPO.bill_number}</> : '—'}</div></div>
-              <div><span className="text-xs text-surface-400">Notes</span><div>{viewPO.notes || '—'}</div></div>
-              {viewPO.is_returned && <div className="col-span-2"><span className="text-xs text-surface-400">Return Reason</span><div className="text-amber-600">{viewPO.return_reason}</div></div>}
+        <Modal open={!!viewPO} onClose={() => setViewPO(null)} title={`Purchase Order: ${viewPO.po_number}`} size="lg">
+          <div className="space-y-5">
+            {/* Header summary strip */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-surface-200 dark:border-surface-700">
+              <div>
+                <span className="text-xs text-surface-400 block">PO Number</span>
+                <div className="text-lg font-bold font-mono text-primary-700 dark:text-primary-400">
+                  {viewPO.po_number}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-surface-400 block">PO Date</span>
+                <div className="text-sm font-semibold">
+                  {new Date(viewPO.po_date).toLocaleDateString('en-IN')}
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-surface-400 block">Bill Number</span>
+                <div className="text-sm font-semibold text-primary-700 dark:text-primary-400 flex items-center gap-1">
+                  {viewPO.bill_number ? <><Lock className="h-3 w-3 text-warning-500" />Locked: #{viewPO.bill_number}</> : '—'}
+                </div>
+              </div>
+              <div>
+                <StatusBadge status={viewPO.status} />
+              </div>
             </div>
+
+            {/* Meta Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs card p-4">
+              <div>
+                <span className="text-surface-400 block">Vendor / Supplier</span>
+                <span className="font-semibold text-surface-800 dark:text-surface-200">{viewPO.vendor?.company_name || viewPO.vendor_name || '—'}</span>
+              </div>
+              <div>
+                <span className="text-surface-400 block">Total Amount</span>
+                <span className="font-bold text-primary-700 dark:text-primary-400">₹{parseFloat(viewPO.total || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {viewPO.notes && (
+              <div className="text-xs p-3 rounded-lg bg-surface-50 dark:bg-surface-800/40 border border-surface-200 dark:border-surface-700">
+                <span className="font-semibold text-surface-500">Notes: </span>{viewPO.notes}
+              </div>
+            )}
+
+            {viewPO.is_returned && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                <strong>Return Reason: </strong>{viewPO.return_reason || 'PO returned'}
+              </div>
+            )}
+
+            {/* Line Items Table */}
+            {(viewPO.items && viewPO.items.length > 0) && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-surface-500">Items List</h4>
+                <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-surface-50 dark:bg-surface-800 text-surface-500 uppercase font-semibold">
+                      <tr>
+                        <th className="p-2.5">Part No</th>
+                        <th className="p-2.5">Description</th>
+                        <th className="p-2.5 text-right">Qty</th>
+                        <th className="p-2.5 text-right">Unit Price</th>
+                        <th className="p-2.5 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
+                      {viewPO.items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="p-2.5 font-mono text-primary-700 dark:text-primary-400">{item.part_number || item.product?.sku || '—'}</td>
+                          <td className="p-2.5">{item.description || item.product?.name || '—'}</td>
+                          <td className="p-2.5 text-right font-semibold">{item.quantity}</td>
+                          <td className="p-2.5 text-right">₹{parseFloat(item.unit_price || 0).toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-bold">₹{parseFloat(item.total || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2 border-t border-surface-100 dark:border-surface-700">
               <Button variant="secondary" onClick={() => setViewPO(null)}>Close</Button>
+              <Button variant="secondary" icon={Download} onClick={() => downloadPOHTML(viewPO)}>Download HTML</Button>
               <Button icon={Printer} onClick={() => generatePOPDF(viewPO)}>Print PDF</Button>
             </div>
           </div>
@@ -491,7 +563,6 @@ export default function AdminPOPage() {
       )}
 
       <PinModal open={pinModalOpen} onVerify={handlePinVerified} onClose={() => { setPinModalOpen(false); setPendingAction(null) }} loading={pinLoading} />
-      <EditHistoryModal open={!!historyId} onClose={() => setHistoryId(null)} poId={historyId} />
     </div>
   )
 }

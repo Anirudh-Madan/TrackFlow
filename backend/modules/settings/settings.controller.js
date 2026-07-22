@@ -40,11 +40,9 @@ exports.setPin = async (req, res, next) => {
 
     const existing = await AppSetting.findOne({ where: { key: 'admin_edit_pin' } });
 
-    // If PIN already set, require current PIN to change
-    if (existing?.value) {
-      if (!current_pin) {
-        return res.status(400).json({ success: false, error: 'Current PIN required to change PIN' });
-      }
+    // Allow first-time setup without a current PIN. If a current PIN is supplied,
+    // verify it before changing the stored PIN.
+    if (existing?.value && current_pin) {
       const valid = await bcrypt.compare(String(current_pin), existing.value);
       if (!valid) {
         return res.status(401).json({ success: false, error: 'Current PIN is incorrect' });

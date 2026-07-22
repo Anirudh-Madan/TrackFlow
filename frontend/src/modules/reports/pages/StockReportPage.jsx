@@ -6,6 +6,7 @@ import Button from '../../../components/ui/Button'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { getStockReport } from '../../../api/endpoints/reports.api'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const fINR = (v) => new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', maximumFractionDigits:2 }).format(v ?? 0)
@@ -30,6 +31,7 @@ const COLOR_MAP = {
 export default function StockReportPage() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [page,    setPage]    = useState(1)
 
   const fetchData = async () => {
     setLoading(true)
@@ -112,7 +114,7 @@ export default function StockReportPage() {
                     <tr>
                       <td colSpan="4" className="px-6 py-10 text-center text-surface-400">No supplier data found.</td>
                     </tr>
-                  ) : (data.supplierBreakdown ?? []).map((row, i) => (
+                  ) : (data.supplierBreakdown ?? []).slice((page - 1) * 50, page * 50).map((row, i) => (
                     <tr key={i} className="table-row-hover">
                       <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50 uppercase text-xs tracking-wide">{row.name}</td>
                       <td className="px-6 py-4 text-right font-mono">{fNum(row.parts)}</td>
@@ -133,6 +135,12 @@ export default function StockReportPage() {
                 )}
               </table>
             </div>
+            <TablePagination
+              currentPage={page}
+              totalItems={(data.supplierBreakdown ?? []).length}
+              pageSize={50}
+              onPageChange={setPage}
+            />
           </div>
         </>
       )}

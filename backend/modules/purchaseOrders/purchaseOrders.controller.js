@@ -40,13 +40,20 @@ async function adjustStock(productId, qty, type, reference, performedBy, notes, 
   }, { transaction: t });
 }
 
+function genInvoiceNumber() {
+  const d = new Date();
+  const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const rand = String(Math.floor(10000 + Math.random() * 90000));
+  return `INV-${ym}-${rand}`;
+}
+
 function buildIncludes() {
   return [
-    { model: Vendor, as: 'vendor', attributes: ['id', 'company_name', 'gst'] },
-    { model: User,   as: 'creator', attributes: ['id', 'name'] },
+    { model: Vendor, as: 'vendor', required: false, attributes: ['id', 'company_name', 'gst'] },
+    { model: User,   as: 'creator', required: false, attributes: ['id', 'name'] },
     { model: User,   as: 'returner', required: false, attributes: ['id', 'name'] },
-    { model: PurchaseOrderItem, as: 'items',
-      include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'dealer_landing_price'] }] },
+    { model: PurchaseOrderItem, as: 'items', required: false,
+      include: [{ model: Product, as: 'product', required: false, attributes: ['id', 'name', 'sku', 'dealer_landing_price'] }] },
   ];
 }
 
@@ -119,22 +126,24 @@ exports.getOrderItems = async (req, res, next) => {
 };
 
 // ── POST /api/v1/purchase-orders — Admin creates PO ──────────────────────────
-// Body: { pin, vendor_id?, vendor_name?, po_date, notes?, bill_number, items: [{part_number, description, quantity, unit_price, product_id?}] }
+// Body: { pin, vendor_id?, vendor_name?, po_date, notes?, bill_number, invoice_number?, items: [{part_number, description, quantity, unit_price, product_id?}] }
 exports.create = async (req, res, next) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
+  const roleName = typeof req.user?.role === 'object' ? req.user.role.name : req.user?.role;
 
-  const { pin, vendor_id, vendor_name, po_date, notes, bill_number, items } = req.body;
+  const { pin, vendor_id, vendor_name, po_date, notes, bill_number, invoice_number, items } = req.body;
 
-  if (!pin) return res.status(400).json({ success: false, error: 'Admin PIN is required' });
   if (!bill_number?.trim()) return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
   if (!items?.length) return res.status(400).json({ success: false, error: 'At least one item is required' });
 
-  const pinCheck = await verifyAdminPin(pin);
-  if (!pinCheck.ok) return res.status(401).json({ success: false, error: pinCheck.message, code: pinCheck.code });
+  if (pin) {
+    const pinCheck = await verifyAdminPin(pin);
+    if (!pinCheck.ok) return res.status(401).json({ success: false, error: pinCheck.message, code: pinCheck.code });
+  }
 
   const t = await sequelize.transaction();
   try {
-    const po_number  = genPONumber();
+    const po_number   = genPONumber();
+    const inv_number  = invoice_number?.trim() || genInvoiceNumber();
     const share_token = genShareToken();
 
     let resolvedVendorName = vendor_name || null;
@@ -152,17 +161,37 @@ exports.create = async (req, res, next) => {
       const total = +(qty * price).toFixed(2);
       subtotal += total;
 
-      let product_id = item.product_id || null;
-      if (!product_id && item.part_number) {
-        const found = await Product.findOne({ where: { sku: item.part_number.trim().toUpperCase() }, transaction: t });
-        if (found) product_id = found.id;
+      let product_id  = item.product_id || null;
+      let part_number = item.part_number ? item.part_number.trim().toUpperCase() : null;
+      let description = item.description ? item.description.trim() : null;
+
+      if (product_id) {
+        const prod = await Product.findByPk(product_id, { transaction: t });
+        if (prod) {
+          if (!part_number) part_number = prod.sku || null;
+          if (!description) description = prod.name || null;
+        }
+      } else if (part_number) {
+        const found = await Product.findOne({ where: { sku: part_number }, transaction: t });
+        if (found) {
+          product_id = found.id;
+          if (!description) description = found.name || null;
+        }
       }
 
-      itemsToCreate.push({ product_id, part_number: item.part_number || null, description: item.description || null, unit_price: price, quantity: qty, total });
+      itemsToCreate.push({
+        product_id,
+        part_number,
+        description,
+        unit_price: price,
+        quantity: qty,
+        total,
+      });
     }
 
     const po = await PurchaseOrder.create({
       po_number,
+      invoice_number: inv_number,
       share_token,
       vendor_id:   vendor_id || null,
       vendor_name: resolvedVendorName,
@@ -179,8 +208,8 @@ exports.create = async (req, res, next) => {
       await PurchaseOrderItem.create({ purchase_order_id: po.id, ...item }, { transaction: t });
     }
 
+    const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes(), transaction: t });
     await t.commit();
-    const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes() });
     res.status(201).json({ success: true, data: result });
   } catch (err) {
     await t.rollback();
@@ -283,8 +312,8 @@ exports.returnPO = async (req, res, next) => {
     await po.update({ is_returned: true, return_reason: reason.trim(), returned_at: new Date(), returned_by: req.user.id, status: 'RETURNED' }, { transaction: t });
     await POEditLog.create({ po_id: po.id, edited_by: req.user.id, edit_reason: `RETURN: ${reason.trim()}`, changed_fields: { status: { from: po.status, to: 'RETURNED' } } }, { transaction: t });
 
+    const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes(), transaction: t });
     await t.commit();
-    const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes() });
     res.json({ success: true, data: result, message: 'PO returned and stock restored' });
   } catch (err) { await t.rollback(); next(err); }
 };

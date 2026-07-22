@@ -215,6 +215,7 @@ function printChallan(data, items, user) {
         </div>
         <div class="grid">
           <div><div class="label">Supplier</div><div class="value">${data.supplier || '-'}</div></div>
+          <div><div class="label">Bill Number</div><div class="value">${data.bill_number || '-'}</div></div>
           <div><div class="label">Customer Name</div><div class="value">${data.customer_name || '-'}</div></div>
           <div><div class="label">Customer Company</div><div class="value">${data.customer_company || '-'}</div></div>
           <div><div class="label">Sales Manager</div><div class="value">${user?.name || '-'}</div></div>
@@ -323,7 +324,23 @@ function ProductDropdown({ products, value, onSelect }) {
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 function ItemRow({ item, index, products, onChange, onRemove }) {
-  const lineTotal = fmtNum(item.sell_price) * fmtNum(item.qty)
+  const currentDl = item.dl_price !== '' && item.dl_price != null ? item.dl_price : (item.sell_price || '')
+  const currentSellPrice = currentDl
+  const lineTotal = fmtNum(currentSellPrice) * fmtNum(item.qty)
+
+  const handleDlPriceChange = (val) => {
+    onChange(index, {
+      dl_price: val,
+      sell_price: val, // Auto-calculated equal to DL price
+    })
+  }
+
+  const handleQtyChange = (val) => {
+    onChange(index, {
+      qty: val,
+      sell_price: item.dl_price !== '' ? item.dl_price : item.sell_price,
+    })
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative">
@@ -333,14 +350,17 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
         <ProductDropdown
           products={products}
           value={item.product_id}
-          onSelect={p => onChange(index, {
-            product_id: p.id,
-            product_name: p.name,
-            part_number: item.part_number || p.sku || '',
-            description: item.description || p.name || '',
-            dl_price: p.dealer_landing_price != null ? String(p.dealer_landing_price) : '',
-            sell_price: item.sell_price || String(p.selling_price || ''),
-          })}
+          onSelect={p => {
+            const dl = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '')
+            onChange(index, {
+              product_id: p.id,
+              product_name: p.name,
+              part_number: item.part_number || p.sku || '',
+              description: item.description || p.name || '',
+              dl_price: dl,
+              sell_price: dl, // Auto calculated from product
+            })
+          }}
         />
       </div>
 
@@ -370,7 +390,7 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
         />
       </div>
 
-      {/* DL Price */}
+      {/* DL Price (Editable) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">DL Price</label>
         <div className="relative">
@@ -380,39 +400,38 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
             min="0"
             step="0.01"
             value={item.dl_price}
-            onChange={e => onChange(index, { dl_price: e.target.value })}
+            onChange={e => handleDlPriceChange(e.target.value)}
             placeholder="0.00"
             className={inputCls('pl-6 text-xs')}
           />
         </div>
       </div>
 
-      {/* Qty */}
+      {/* Qty (Editable) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Qty <span className="text-danger-500">*</span></label>
         <input
           type="number"
           min="1"
           value={item.qty}
-          onChange={e => onChange(index, { qty: e.target.value })}
+          onChange={e => handleQtyChange(e.target.value)}
           placeholder="1"
           className={inputCls('text-xs')}
         />
       </div>
 
-      {/* Selling Price per Unit */}
+      {/* Selling Price per Unit (Non-editable / Auto-calculated) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
           <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={item.sell_price}
-            onChange={e => onChange(index, { sell_price: e.target.value })}
+            type="text"
+            disabled
+            readOnly
+            value={currentSellPrice !== '' && currentSellPrice != null ? Number(currentSellPrice).toFixed(2) : '0.00'}
             placeholder="0.00"
-            className={inputCls('pl-6 text-xs')}
+            className={roInputCls + ' pl-6 text-xs font-mono font-medium'}
           />
         </div>
       </div>
@@ -477,6 +496,10 @@ function PreviewModal({ open, onClose, onConfirm, submitting, data, items, user 
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Challan No.</p>
               <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.challan_number}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Bill Number</p>
+              <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.bill_number || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Date</p>
@@ -611,6 +634,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Challan header state
   const [challanNumber] = useState(genChallanNo)
+  const [billNumber, setBillNumber] = useState('')
   const [orderDate, setOrderDate] = useState(todayStr)
   const [supplier, setSupplier] = useState('')
   const [supplierId, setSupplierId] = useState('')
@@ -663,6 +687,10 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Validate and open preview
   const handlePreview = () => {
+    if (!billNumber.trim()) {
+      toast.error('Bill Number is required')
+      return
+    }
     if (!customerName.trim()) {
       toast.error('Customer Name is required')
       return
@@ -677,12 +705,17 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Actual submit
   const handleSubmit = async () => {
+    if (!billNumber.trim()) {
+      toast.error('Bill Number is required')
+      return
+    }
     const validItems = items.filter(it => (it.product_id || it.part_number?.trim()) && Number(it.qty) > 0)
     setSubmitting(true)
     try {
       const res = await createOrder({
         supplier: supplier || undefined,
         challan_number: challanNumber,
+        bill_number: billNumber.trim(),
         order_date: orderDate,
         customer_name: customerName,
         customer_company: customerCompany || undefined,
@@ -720,7 +753,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
         onClose={() => setShowPreview(false)}
         onConfirm={handleSubmit}
         submitting={submitting}
-        data={{ challan_number: challanNumber, order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
+        data={{ challan_number: challanNumber, bill_number: billNumber.trim(), order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
         items={items}
         user={user}
       />
@@ -768,6 +801,19 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-surface-400 bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded font-medium">AUTO</span>
               </div>
+            </Field>
+
+            {/* Bill Number */}
+            <Field label="Bill Number" required>
+              <input
+                type="text"
+                required
+                value={billNumber}
+                onChange={e => setBillNumber(e.target.value)}
+                placeholder="Enter bill number"
+                className={inputCls('font-mono')}
+                id="bill-number-input"
+              />
             </Field>
 
             {/* Date */}

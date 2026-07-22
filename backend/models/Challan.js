@@ -17,7 +17,7 @@ const Challan = sequelize.define('Challan', {
     allowNull: true,   // nullable for standalone (admin-created) challans
   },
   // ── Standalone challan fields (admin-created) ──────────────────────────
-  party_id:    { type: DataTypes.BIGINT.UNSIGNED, allowNull: true },
+  party_id:    { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   party_name:  { type: DataTypes.STRING(200),     allowNull: true },
   supplier:    { type: DataTypes.STRING(150),      allowNull: true },
   grand_total: { type: DataTypes.DECIMAL(14, 2),  allowNull: true },

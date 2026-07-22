@@ -23,17 +23,15 @@ import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
 import * as XLSX from 'xlsx'
 import { matchHeaders, applyMapping, buildRowsFromSheet } from '../../../utils/headerMatcher'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const productSchema = z.object({
-  name:                 z.string().min(1, 'Product name/description is required').max(150),
-  sku:                  z.string().min(1, 'Part Number/SKU is required').max(50),
+  name:                 z.string().optional().or(z.literal('')),
+  sku:                  z.string().min(1, 'Part No is required').max(50),
   category_id:          z.string().optional().or(z.literal('')),
-  uom_id:               z.string().optional().or(z.literal('')),
-  purchase_price:       z.coerce.number().min(0, 'Must be ≥ 0'),
-  dealer_landing_price: z.coerce.number().min(0).optional().or(z.literal('')),
-  selling_price:        z.coerce.number().min(0, 'Must be ≥ 0'),
-  reorder_threshold:    z.coerce.number().int().min(0).optional(),
+  purchase_price:       z.coerce.number().min(0, 'Must be ≥ 0').optional().or(z.literal('')),
+  dealer_landing_price: z.coerce.number().min(0, 'Must be ≥ 0').optional().or(z.literal('')),
   remarks:              z.string().optional().or(z.literal('')),
   planner:              z.string().optional().or(z.literal('')),
   location:             z.string().optional().or(z.literal('')),
@@ -203,6 +201,13 @@ export default function ProductsListPage() {
   const [pricingSearch, setPricingSearch] = useState('')
   const [activeTab, setActiveTab]       = useState('catalogue')
 
+  // Pagination state
+  const [page, setPage]                 = useState(1)
+  const [pricingPage, setPricingPage]   = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, catFilter, supplierFilter])
+  useEffect(() => { setPricingPage(1) }, [pricingSearch])
+
   // Product modals
   const [isProdOpen, setIsProdOpen]     = useState(false)
   const [isProdDelete, setIsProdDelete] = useState(false)
@@ -234,7 +239,7 @@ export default function ProductsListPage() {
   // ── Forms ──────────────────────────────────────────────────────────────────
   const prodForm = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: { name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 },
+    defaultValues: { name: '', sku: '', category_id: '', purchase_price: '', dealer_landing_price: '', remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 },
   })
 
   const catForm = useForm({
@@ -251,6 +256,44 @@ export default function ProductsListPage() {
     resolver: zodResolver(pricingSchema),
     defaultValues: { product_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, effective_from: '', effective_to: '', notes: '' },
   })
+
+  // ── Lookup dictionary of active products by SKU ────────────────────────────
+  const productDict = useMemo(() => {
+    const dict = {}
+    products.forEach(p => {
+      if (p.sku) dict[p.sku.toUpperCase()] = p
+    })
+    return dict
+  }, [products])
+
+  // ── Auto-fetch DL Price and Price List details when typing SKU/Part No ─────
+  const watchSku = prodForm.watch('sku')
+  useEffect(() => {
+    if (!editProduct && watchSku && watchSku.trim()) {
+      const skuUpper = watchSku.trim().toUpperCase()
+      const existingRecord = productDict[skuUpper]
+      if (existingRecord) {
+        if (existingRecord.dealer_landing_price != null && !prodForm.getValues('dealer_landing_price')) {
+          prodForm.setValue('dealer_landing_price', parseFloat(existingRecord.dealer_landing_price))
+        }
+        if (existingRecord.purchase_price != null && !prodForm.getValues('purchase_price')) {
+          prodForm.setValue('purchase_price', parseFloat(existingRecord.purchase_price))
+        }
+        if (existingRecord.name && !prodForm.getValues('name')) {
+          prodForm.setValue('name', existingRecord.name)
+        }
+        if (existingRecord.planner && !prodForm.getValues('planner')) {
+          prodForm.setValue('planner', existingRecord.planner)
+        }
+        if (existingRecord.supplier && !prodForm.getValues('supplier')) {
+          prodForm.setValue('supplier', existingRecord.supplier)
+        }
+        if (existingRecord.gst_rate != null && (!prodForm.getValues('gst_rate') || prodForm.getValues('gst_rate') === 18)) {
+          prodForm.setValue('gst_rate', parseFloat(existingRecord.gst_rate))
+        }
+      }
+    }
+  }, [watchSku, editProduct, productDict, prodForm])
 
   // ── Data fetch ─────────────────────────────────────────────────────────────
   const fetchAll = async () => {
@@ -274,6 +317,10 @@ export default function ProductsListPage() {
 
   // ── Filtered lists ─────────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => products.filter(p => {
+    // Only show products for which stock is available
+    const hasAvailableStock = parseFloat(p.available || 0) > 0 || parseFloat(p.on_hand || 0) > 0
+    if (!hasAvailableStock) return false
+
     const q = search.toLowerCase()
     const matchSearch = !search ||
       (p.name && p.name.toLowerCase().includes(q)) ||
@@ -298,7 +345,7 @@ export default function ProductsListPage() {
   const openCreateProduct = () => {
     setEditProduct(null)
     setProdError(null)
-    prodForm.reset({ name: '', sku: '', category_id: '', uom_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, reorder_threshold: 0, remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 })
+    prodForm.reset({ name: '', sku: '', category_id: '', purchase_price: '', dealer_landing_price: '', remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 })
     setIsProdOpen(true)
   }
 
@@ -306,14 +353,11 @@ export default function ProductsListPage() {
     setEditProduct(p)
     setProdError(null)
     prodForm.reset({
-      name:                 p.name,
-      sku:                  p.sku,
+      name:                 p.name || '',
+      sku:                  p.sku || '',
       category_id:          p.category_id ? String(p.category_id) : '',
-      uom_id:               p.uom_id ? String(p.uom_id) : '',
-      purchase_price:       parseFloat(p.purchase_price) || 0,
-      dealer_landing_price: p.dealer_landing_price ? parseFloat(p.dealer_landing_price) : '',
-      selling_price:        parseFloat(p.selling_price) || 0,
-      reorder_threshold:    p.reorder_threshold || 0,
+      purchase_price:       p.purchase_price != null ? parseFloat(p.purchase_price) : '',
+      dealer_landing_price: p.dealer_landing_price != null ? parseFloat(p.dealer_landing_price) : '',
       remarks:              p.remarks || '',
       planner:              p.planner || '',
       location:             p.location || '',
@@ -326,12 +370,22 @@ export default function ProductsListPage() {
   const onProductSubmit = async (data) => {
     setProdError(null)
     try {
+      let derivedPlanner = data.planner || ''
+      if (data.category_id) {
+        const selectedCat = categories.find(c => String(c.id) === String(data.category_id))
+        if (selectedCat) {
+          derivedPlanner = selectedCat.name || getCategoryLabel(selectedCat)
+        }
+      }
       const payload = {
         ...data,
+        name:                 data.name?.trim() || null,
+        sku:                  data.sku.trim(),
         category_id:          data.category_id ? parseInt(data.category_id) : null,
-        uom_id:               data.uom_id ? parseInt(data.uom_id) : null,
-        dealer_landing_price: data.dealer_landing_price !== '' ? data.dealer_landing_price : null,
-        gst_rate:             data.gst_rate !== '' ? parseFloat(data.gst_rate) : null,
+        purchase_price:       data.purchase_price !== '' && data.purchase_price != null ? parseFloat(data.purchase_price) : null,
+        dealer_landing_price: data.dealer_landing_price !== '' && data.dealer_landing_price != null ? parseFloat(data.dealer_landing_price) : null,
+        gst_rate:             data.gst_rate !== '' && data.gst_rate != null ? parseFloat(data.gst_rate) : null,
+        planner:              derivedPlanner || null,
       }
       const res = editProduct
         ? await updateProduct(editProduct.id, payload)
@@ -506,15 +560,6 @@ export default function ProductsListPage() {
     }
   }
 
-  // Create lookup dictionary of active products by SKU
-  const productDict = useMemo(() => {
-    const dict = {}
-    products.forEach(p => {
-      dict[p.sku?.toUpperCase()] = p
-    });
-    return dict
-  }, [products])
-
   const onImportDrop = (acceptedFiles) => {
     const file = acceptedFiles[0]
     if (!file) return
@@ -669,24 +714,41 @@ export default function ProductsListPage() {
         errors.push('Stock Quantity must be a number')
       }
 
+      if (hasQty && !isNaN(parseFloat(item.quantity)) && parseFloat(item.quantity) > 0) {
+        const rowHasPricing = (item.dealer_landing_price !== '' && item.dealer_landing_price !== null) ||
+                              (item.purchase_price !== '' && item.purchase_price !== null) ||
+                              (item.selling_price !== '' && item.selling_price !== null)
+        const dbHasPricing = dbProduct?.dealer_landing_price != null || dbProduct?.purchase_price != null || dbProduct?.selling_price != null
+        const inPriceList = rowHasPricing || dbHasPricing
+        if (!inPriceList) {
+          errors.push('Stock cannot be added for a product that is not in the price list')
+        }
+      }
+
       if (!hasPurchase && !hasSelling && !hasQty && item.gst_rate === '' && !isNewProduct) {
         errors.push('No prices, GST %, or stock levels specified for update')
       }
 
-      const importName = item.name?.trim() || item.sku?.trim()
+      const importName = item.name?.trim() || dbProduct?.name || item.sku?.trim()
+      const dlPrice = (item.dealer_landing_price !== '' && item.dealer_landing_price !== null) 
+        ? item.dealer_landing_price 
+        : (dbProduct?.dealer_landing_price ?? '')
+      const purchasePrice = (item.purchase_price !== '' && item.purchase_price !== null) 
+        ? item.purchase_price 
+        : (dbProduct?.purchase_price ?? '')
 
       return {
         id: index,
         sku: item.sku,
         name: importName,
-        planner: item.planner,
-        location: item.location,
-        supplier: item.supplier,
-        purchase_price: item.purchase_price,
-        dealer_landing_price: item.dealer_landing_price,
+        planner: item.planner || dbProduct?.planner,
+        location: item.location || dbProduct?.location,
+        supplier: item.supplier || dbProduct?.supplier,
+        purchase_price: purchasePrice,
+        dealer_landing_price: dlPrice,
         selling_price: item.selling_price,
         quantity: item.quantity,
-        gst_rate: item.gst_rate,
+        gst_rate: item.gst_rate || dbProduct?.gst_rate,
         dbProduct,
         isNewProduct,
         isValid: errors.length === 0,
@@ -737,23 +799,30 @@ export default function ProductsListPage() {
 
     setImporting(true)
     try {
-      const res = await bulkImportProducts({
-        items: validPayloadItems,
-        stock_mode: importStockMode,
-        effective_from: importEffectiveFrom,
-        notes: importNotes
-      })
+      const BATCH_SIZE = 200
+      let totalImported = 0
 
-      if (res.success) {
-        toast.success(res.message || 'Bulk import successful!')
-        setParsedImportData([])
-        setImportFileName('')
-        setImportNotes('')
-        setIsImportOpen(false)
-        fetchAll()
-      } else {
-        toast.error(res.error || 'Import failed')
+      for (let i = 0; i < validPayloadItems.length; i += BATCH_SIZE) {
+        const batch = validPayloadItems.slice(i, i + BATCH_SIZE)
+        const res = await bulkImportProducts({
+          items: batch,
+          stock_mode: importStockMode,
+          effective_from: importEffectiveFrom,
+          notes: importNotes
+        })
+
+        if (!res.success) {
+          throw new Error(res.error || `Failed on batch starting at row ${i + 1}`)
+        }
+        totalImported += batch.length
       }
+
+      toast.success(`Successfully imported ${totalImported} records!`)
+      setParsedImportData([])
+      setImportFileName('')
+      setImportNotes('')
+      setIsImportOpen(false)
+      fetchAll()
     } catch (err) {
       toast.error(err.message || 'Error occurred during import')
     } finally {
@@ -776,340 +845,179 @@ export default function ProductsListPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-6">
 
-      {/* ── Products Tabs ───────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-6">
-        <div className="flex border-b border-surface-200 dark:border-surface-700 gap-6">
-          <button
-            type="button"
-            onClick={() => { setActiveTab('catalogue'); setSearch(''); setPricingSearch('') }}
-            className={cn(
-              'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
-              activeTab === 'catalogue'
-                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-            )}
-            id="catalogue-tab"
-          >
-            <Package className="h-4 w-4" />
-            Catalogue
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('pricing'); setSearch(''); setPricingSearch('') }}
-            className={cn(
-              'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2',
-              activeTab === 'pricing'
-                ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-            )}
-            id="pricing-tab"
-          >
-            <TrendingUp className="h-4 w-4" />
-            Pricing
-          </button>
+      {/* ── Products Header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
+            Product Catalogue
+          </h1>
+          <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+            Browse and manage the product catalogue, categories, and reorder levels.
+          </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
-              {activeTab === 'catalogue' ? 'Product Catalogue' : 'Pricing Versions'}
-            </h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-              {activeTab === 'catalogue'
-                ? 'Browse and manage the product catalogue, categories, and reorder levels.'
-                : 'Versioned price records with effective dates for each product.'}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 items-center">
-            <Button variant="secondary" size="sm" icon={Layers} onClick={() => { catForm.reset({ name: '', parent_id: '', description: '' }); setEditCatId(null); setIsCatOpen(true) }}>
-              Categories
-            </Button>
-            <Button variant="secondary" size="sm" icon={Ruler} onClick={() => { uomForm.reset({ name: '', code: '', description: '' }); setEditUomId(null); setIsUomOpen(true) }}>
-              Units (UOM)
-            </Button>
-            {activeTab === 'catalogue' && (
-              <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
-                Import CSV / Excel
-              </Button>
-            )}
-            {activeTab === 'catalogue' ? (
-              <Button icon={Plus} size="md" onClick={openCreateProduct} className="w-full sm:w-auto">
-                Add Product
-              </Button>
-            ) : (
-              <Button icon={Plus} size="md" onClick={() => openCreatePricing()} className="w-full sm:w-auto">
-                Add Pricing
-              </Button>
-            )}
-          </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Button variant="secondary" size="sm" icon={Layers} onClick={() => { catForm.reset({ name: '', parent_id: '', description: '' }); setEditCatId(null); setIsCatOpen(true) }}>
+            Categories
+          </Button>
+          <Button variant="secondary" size="md" icon={FileSpreadsheet} onClick={() => { setParsedImportData([]); setImportFileName(''); setIsImportOpen(true) }} className="w-full sm:w-auto">
+            Import CSV / Excel
+          </Button>
+          <Button icon={Plus} size="md" onClick={openCreateProduct} className="w-full sm:w-auto">
+            Add Product
+          </Button>
         </div>
       </div>
 
-      {activeTab === 'catalogue' && (
-        <>
-          {/* Filters */}
-          <div className="card overflow-hidden">
-            <div className="p-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50 flex flex-col sm:flex-row gap-3 items-center">
-              <div className="relative w-full sm:max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search by part no, desc, planner, loc..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="input-base pl-9 py-1.5"
-                />
-              </div>
-
-              <div className="relative w-full sm:w-48">
-                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
-                <select
-                  value={catFilter}
-                  onChange={e => setCatFilter(e.target.value)}
-                  className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
-                >
-                  <option value="">All Categories</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{getCategoryLabel(c)}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="relative w-full sm:w-48">
-                <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
-                <select
-                  value={supplierFilter}
-                  onChange={e => setSupplierFilter(e.target.value)}
-                  className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
-                >
-                  <option value="">All Suppliers</option>
-                  <option value="Cummins">Cummins</option>
-                  <option value="Meritor">Meritor</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              {(catFilter || supplierFilter) && (
-                <button onClick={() => { setCatFilter(''); setSupplierFilter(''); }} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
-                  <X className="h-3.5 w-3.5" /> Clear filters
-                </button>
-              )}
-
-              <div className="text-xs text-surface-500 font-medium ml-auto shrink-0">
-                {filteredProducts.length} of {products.length} products
-              </div>
-            </div>
-
-            {/* Products Table */}
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="p-8 space-y-4">
-                  {[1,2,3].map(i => <div key={i} className="h-16 bg-surface-100 dark:bg-surface-800 animate-pulse rounded" />)}
-                </div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="p-12 text-center">
-                  <Package className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600 mb-3" />
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No products found</h3>
-                  <p className="text-xs text-surface-500 mt-1">
-                    {search || catFilter ? 'Try adjusting your filters.' : 'Add your first product to get started.'}
-                  </p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                      <th className="px-6 py-3.5">Part Number</th>
-                      <th className="px-6 py-3.5">Description</th>
-                      <th className="px-6 py-3.5">Planner</th>
-                      <th className="px-6 py-3.5">Location</th>
-                      <th className="px-6 py-3.5">Qty</th>
-                      <th className="px-6 py-3.5">DL Price</th>
-                      <th className="px-6 py-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                    {filteredProducts.map(p => (
-                      <tr key={p.id} className="table-row-hover">
-                        <td className="px-6 py-4 font-mono text-xs font-medium text-surface-600 dark:text-surface-400">{p.sku}</td>
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-surface-900 dark:text-surface-50">{p.name}</div>
-                          {p.remarks && <div className="text-xs text-surface-400 mt-0.5 line-clamp-1 italic">{p.remarks}</div>}
-                          <div className="flex gap-2 mt-1">
-                            {p.category && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300">
-                                {getCategoryLabel(p.category)}
-                              </span>
-                            )}
-                            {p.supplier && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50">
-                                {p.supplier}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 font-medium text-surface-800 dark:text-surface-200">{p.planner || '—'}</td>
-                        <td className="px-6 py-4 font-mono text-xs text-surface-600 dark:text-surface-400">{p.location || '—'}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1">
-                            <div className="font-semibold text-surface-900 dark:text-surface-50">
-                              {p.available != null ? parseFloat(p.available).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'}
-                              <span className="text-xs text-surface-500 font-normal ml-1">{p.uom?.code || 'units'}</span>
-                            </div>
-                            <div className="flex">
-                              {p.available <= 0 ? (
-                                <Badge variant="danger" dot size="sm">Out of Stock</Badge>
-                              ) : p.is_low_stock ? (
-                                <Badge variant="warning" dot size="sm">Low Stock</Badge>
-                              ) : (
-                                <Badge variant="success" dot size="sm">In Stock</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(p.dealer_landing_price || p.purchase_price)}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => openCreatePricing(p.id)}
-                              className="p-1.5 rounded-lg text-surface-400 hover:text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20 transition-colors"
-                              title="Add pricing version"
-                            >
-                              <TrendingUp className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => openEditProduct(p)}
-                              className="p-1.5 rounded-lg text-surface-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                              title="Edit product"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => { setActiveProduct(p); setIsProdDelete(true) }}
-                              className="p-1.5 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
-                              title="Delete product"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {activeTab === 'pricing' && (
-        <>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">Pricing Versions</h1>
-              <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-                Versioned price records with effective date ranges per product.
-              </p>
-            </div>
+      {/* Filters & Products Table */}
+      <div className="card overflow-hidden">
+        <div className="p-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50 flex flex-col sm:flex-row gap-3 items-center">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by part no, desc, planner, loc..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="input-base pl-9 py-1.5"
+            />
           </div>
 
-          <div className="card overflow-hidden">
-            <div className="p-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50 flex flex-col sm:flex-row gap-3 items-center">
-              <div className="relative w-full sm:max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search by product name or SKU..."
-                  value={pricingSearch}
-                  onChange={e => setPricingSearch(e.target.value)}
-                  className="input-base pl-9 py-1.5"
-                />
-              </div>
-              <div className="text-xs text-surface-500 font-medium ml-auto shrink-0">
-                {filteredPricing.length} records
-              </div>
-            </div>
+          <div className="relative w-full sm:w-48">
+            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+            <select
+              value={catFilter}
+              onChange={e => setCatFilter(e.target.value)}
+              className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+            >
+              <option value="">All Categories</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{getCategoryLabel(c)}</option>
+              ))}
+            </select>
+          </div>
 
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="p-8 space-y-4">
-                  {[1,2,3].map(i => <div key={i} className="h-16 bg-surface-100 dark:bg-surface-800 animate-pulse rounded" />)}
-                </div>
-              ) : filteredPricing.length === 0 ? (
-                <div className="p-12 text-center">
-                  <TrendingUp className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600 mb-3" />
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No pricing records</h3>
-                  <p className="text-xs text-surface-500 mt-1">Add a pricing version from the Products tab or click "Add Pricing".</p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                      <th className="px-6 py-3.5">Product</th>
-                      <th className="px-6 py-3.5">Purchase ₹</th>
-                      <th className="px-6 py-3.5">Dealer Landing ₹</th>
-                      <th className="px-6 py-3.5">Selling ₹</th>
-                      <th className="px-6 py-3.5">Effective From</th>
-                      <th className="px-6 py-3.5">Effective To</th>
-                      <th className="px-6 py-3.5">Notes</th>
-                      <th className="px-6 py-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                    {filteredPricing.map(pr => (
-                      <tr key={pr.id} className="table-row-hover">
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-surface-900 dark:text-surface-50">{pr.product?.name || '—'}</div>
-                          <div className="text-xs font-mono text-surface-400 mt-0.5">{pr.product?.sku}</div>
-                        </td>
-                        <td className="px-6 py-4">{fmt(pr.purchase_price)}</td>
-                        <td className="px-6 py-4">{pr.dealer_landing_price ? fmt(pr.dealer_landing_price) : <span className="text-surface-400">—</span>}</td>
-                        <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(pr.selling_price)}</td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center gap-1 text-xs">
-                            <Calendar className="h-3 w-3 text-surface-400" />
-                            {pr.effective_from}
+          <div className="relative w-full sm:w-48">
+            <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400 pointer-events-none" />
+            <select
+              value={supplierFilter}
+              onChange={e => setSupplierFilter(e.target.value)}
+              className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+            >
+              <option value="">All Suppliers</option>
+              <option value="Cummins">Cummins</option>
+              <option value="Meritor">Meritor</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          {(catFilter || supplierFilter) && (
+            <button onClick={() => { setCatFilter(''); setSupplierFilter(''); }} className="flex items-center gap-1 text-xs text-surface-500 hover:text-danger-600 transition-colors shrink-0">
+              <X className="h-3.5 w-3.5" /> Clear filters
+            </button>
+          )}
+
+          <div className="text-xs text-surface-500 font-medium ml-auto shrink-0">
+            Showing {filteredProducts.length} product(s) with available stock
+          </div>
+        </div>
+
+        {/* Products Table */}
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="p-8 space-y-4">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-12 bg-surface-100 dark:bg-surface-800 animate-pulse rounded" />)}
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="p-12 text-center">
+              <Package className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600 mb-3" />
+              <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No products with available stock</h3>
+              <p className="text-xs text-surface-500 mt-1">Products without available stock are hidden on this page.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
+                  <th className="px-6 py-3.5">Part Number</th>
+                  <th className="px-6 py-3.5">Description</th>
+                  <th className="px-6 py-3.5">Planner</th>
+                  <th className="px-6 py-3.5">Location</th>
+                  <th className="px-6 py-3.5">Available Stock</th>
+                  <th className="px-6 py-3.5">DL Price</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
+                {filteredProducts.slice((page - 1) * 50, page * 50).map(p => (
+                  <tr key={p.id} className="table-row-hover">
+                    <td className="px-6 py-4 font-mono text-xs font-medium text-surface-600 dark:text-surface-400">{p.sku}</td>
+                    <td className="px-6 py-4">
+                      <div className="font-semibold text-surface-900 dark:text-surface-50">{p.name || '—'}</div>
+                      {p.remarks && <div className="text-xs text-surface-400 mt-0.5 line-clamp-1 italic">{p.remarks}</div>}
+                      <div className="flex gap-2 mt-1">
+                        {p.category && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300">
+                            {getCategoryLabel(p.category)}
                           </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {pr.effective_to ? (
-                            <span className="inline-flex items-center gap-1 text-xs">
-                              <Calendar className="h-3 w-3 text-surface-400" />
-                              {pr.effective_to}
-                            </span>
-                          ) : <span className="text-xs text-success-600 dark:text-success-400 font-medium">Current</span>}
-                        </td>
-                        <td className="px-6 py-4 text-xs text-surface-500 max-w-[160px] line-clamp-1 italic">
-                          {pr.notes || '—'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => openEditPricing(pr)}
-                              className="p-1.5 rounded-lg text-surface-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                              title="Edit pricing"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => { setActivePricing(pr); setIsPricingDelete(true) }}
-                              className="p-1.5 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
-                              title="Delete pricing record"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+                        )}
+                        {p.supplier && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50">
+                            {p.supplier}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-medium text-surface-800 dark:text-surface-200">{p.planner || '—'}</td>
+                    <td className="px-6 py-4 font-mono text-xs text-surface-600 dark:text-surface-400">{p.location || '—'}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <div className="font-semibold text-surface-900 dark:text-surface-50">
+                          {p.available != null ? parseFloat(p.available).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '0'}
+                          <span className="text-xs text-surface-500 font-normal ml-1">units</span>
+                        </div>
+                        <div className="flex">
+                          {p.available <= 0 ? (
+                            <Badge variant="danger" dot size="sm">Out of Stock</Badge>
+                          ) : p.is_low_stock ? (
+                            <Badge variant="warning" dot size="sm">Low Stock</Badge>
+                          ) : (
+                            <Badge variant="success" dot size="sm">In Stock</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">{fmt(p.dealer_landing_price || p.purchase_price)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEditProduct(p)}
+                          className="p-1.5 rounded-lg text-surface-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                          title="Edit product"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { setActiveProduct(p); setIsProdDelete(true) }}
+                          className="p-1.5 rounded-lg text-surface-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
+                          title="Delete product"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={filteredProducts.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* PRODUCT CREATE / EDIT MODAL */}
@@ -1117,66 +1025,48 @@ export default function ProductsListPage() {
       <Modal
         open={isProdOpen}
         onClose={() => setIsProdOpen(false)}
-        title={editProduct ? `Edit: ${editProduct.name}` : 'Add New Product'}
-        description="Define product identity, classification, pricing, and inventory thresholds."
+        title={editProduct ? `Edit: ${editProduct.name || editProduct.sku}` : 'Add New Product'}
+        description="Define part details, classification/planner, pricing, and location."
         size="lg"
       >
         <form onSubmit={prodForm.handleSubmit(onProductSubmit)} className="space-y-4" noValidate>
           <ErrorBanner msg={prodError} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input {...prodForm.register('name')} label="Product Name" placeholder="e.g. Copper Wire 1.5mm" required error={prodForm.formState.errors.name?.message} icon={Package} />
-            <Input {...prodForm.register('sku')} label="SKU Code" placeholder="e.g. CW-1.5-RED" required error={prodForm.formState.errors.sku?.message} />
+            <Input {...prodForm.register('sku')} label="Part No" placeholder="e.g. PN-1.5-RED" required error={prodForm.formState.errors.sku?.message} />
+            <Input {...prodForm.register('name')} label="Description" placeholder="e.g. Copper Wire 1.5mm (Optional)" error={prodForm.formState.errors.name?.message} icon={Package} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Category */}
+            {/* Category / Planner */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-surface-700 dark:text-surface-300 flex items-center gap-1">
-                <Tag className="h-3.5 w-3.5 text-surface-400" /> Category
+                <Tag className="h-3.5 w-3.5 text-surface-400" /> Category / Planner
               </label>
-                <select
-                  {...prodForm.register('category_id')}
-                  className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
-                >
-                <option value="">— No Category —</option>
+              <select
+                {...prodForm.register('category_id')}
+                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+              >
+                <option value="">— Select Category / Planner —</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{getCategoryLabel(c)}</option>)}
               </select>
             </div>
 
-            {/* UOM */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-surface-700 dark:text-surface-300 flex items-center gap-1">
-                <Ruler className="h-3.5 w-3.5 text-surface-400" /> Unit of Measure
-              </label>
-              <select
-                {...prodForm.register('uom_id')}
-                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
-              >
-                <option value="">— No UOM —</option>
-                {uoms.map(u => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input {...prodForm.register('purchase_price')} label="Purchase Price (₹)" type="number" step="0.01" required error={prodForm.formState.errors.purchase_price?.message} />
-            <Input {...prodForm.register('dealer_landing_price')} label="Dealer Landing Price (₹)" type="number" step="0.01" error={prodForm.formState.errors.dealer_landing_price?.message} />
-            <Input {...prodForm.register('selling_price')} label="Selling Price (₹)" type="number" step="0.01" required error={prodForm.formState.errors.selling_price?.message} />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input {...prodForm.register('gst_rate')} label="GST Rate (%)" type="number" step="0.01" error={prodForm.formState.errors.gst_rate?.message} />
-            <Input {...prodForm.register('planner')} label="Planner" placeholder="e.g. Cummins Planner" error={prodForm.formState.errors.planner?.message} />
             <Input {...prodForm.register('location')} label="Location" placeholder="e.g. Shelf A-3" error={prodForm.formState.errors.location?.message} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input {...prodForm.register('purchase_price')} label="Purchase Price (₹)" type="number" step="0.01" error={prodForm.formState.errors.purchase_price?.message} />
+            <Input {...prodForm.register('dealer_landing_price')} label="Dealer Landing Price (₹)" type="number" step="0.01" error={prodForm.formState.errors.dealer_landing_price?.message} />
+            <Input {...prodForm.register('gst_rate')} label="GST Rate (%)" type="number" step="0.01" error={prodForm.formState.errors.gst_rate?.message} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5 sm:col-span-1">
               <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Supplier</label>
               <select
                 {...prodForm.register('supplier')}
-                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2050/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
+                className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
               >
                 <option value="">— Select Supplier —</option>
                 <option value="Cummins">Cummins</option>
@@ -1185,8 +1075,6 @@ export default function ProductsListPage() {
               </select>
             </div>
           </div>
-
-          <Input {...prodForm.register('reorder_threshold')} label="Reorder Threshold (units)" type="number" placeholder="e.g. 50" error={prodForm.formState.errors.reorder_threshold?.message} />
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Remarks</label>
@@ -1270,47 +1158,7 @@ export default function ProductsListPage() {
         </div>
       </Modal>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* UOM MANAGEMENT MODAL */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      <ManageListModal
-        open={isUomOpen}
-        onClose={() => setIsUomOpen(false)}
-        title="Manage Units of Measure"
-        icon={Ruler}
-        items={uoms}
-        form={uomForm}
-        editId={editUomId}
-        onSave={onUomSave}
-        onEdit={onUomEdit}
-        onDelete={(u) => { setDeleteUomTarget(u); setIsUomDeleteOpen(true) }}
-        renderRow={(u) => (
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-900/50 shrink-0">
-              {u.code}
-            </span>
-            <span className="text-sm font-medium text-surface-900 dark:text-surface-50">{u.name}</span>
-          </div>
-        )}
-        renderForm={(form) => (
-          <div className="grid grid-cols-2 gap-3">
-            <Input {...form.register('name')} label="Name" placeholder="e.g. Kilogram" required error={form.formState.errors.name?.message} />
-            <Input {...form.register('code')} label="Code" placeholder="e.g. KG" required error={form.formState.errors.code?.message} />
-          </div>
-        )}
-      />
 
-      <Modal open={isUomDeleteOpen} onClose={() => setIsUomDeleteOpen(false)} title="Delete UOM" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-surface-600 dark:text-surface-300">
-            Delete <strong className="text-surface-900 dark:text-surface-50">{deleteUomTarget?.name} ({deleteUomTarget?.code})</strong>?
-          </p>
-          <div className="flex justify-end gap-3 pt-2 border-t border-surface-100 dark:border-surface-700">
-            <Button variant="secondary" onClick={() => setIsUomDeleteOpen(false)}>Cancel</Button>
-            <Button variant="danger" icon={Trash2} onClick={confirmDeleteUOM}>Delete</Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* PRICING CREATE / EDIT MODAL */}

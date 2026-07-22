@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Zod Schema ───────────────────────────────────────────────────────────────
 const customerSchema = z.object({
@@ -202,6 +203,9 @@ export default function CustomersPage() {
   const [allUsers, setAllUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+
+  useEffect(() => { setPage(1) }, [search])
 
   const [editCustomer, setEditCustomer] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -391,7 +395,7 @@ export default function CustomersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm">
-                  {filteredCustomers.map(cust => (
+                  {filteredCustomers.slice((page - 1) * 50, page * 50).map(cust => (
                     <tr key={cust.id} className="hover:bg-surface-50/60 dark:hover:bg-surface-800/40 transition-colors group">
                       <td className="px-5 py-4">
                         <div className="font-semibold text-surface-900 dark:text-surface-50">{cust.company_name}</div>
@@ -456,6 +460,12 @@ export default function CustomersPage() {
               </table>
             </div>
           )}
+          <TablePagination
+            currentPage={page}
+            totalItems={filteredCustomers.length}
+            pageSize={50}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

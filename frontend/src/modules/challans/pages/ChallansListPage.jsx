@@ -200,10 +200,10 @@ export default function ChallansListPage() {
     setLoading(true)
     try {
       const res = await getChallans()
-      if (res.success) {
-        setChallans(res.data)
+      if (res?.success) {
+        setChallans(res.data || [])
       } else {
-        toast.error(res.error || 'Failed to fetch challans')
+        toast.error(res?.error || 'Failed to fetch challans')
       }
     } catch (err) {
       toast.error('Failed to load challans list')

@@ -58,6 +58,7 @@ function buildIncludes() {
     { model: Customer, as: 'party', required: false, attributes: ['id', 'company_name'] },
     { model: User, as: 'creator', attributes: ['id', 'name'] },
     { model: User, as: 'returner', required: false, attributes: ['id', 'name'] },
+    { model: ChallanEditLog, as: 'editHistory', required: false, include: [{ model: User, as: 'editor', attributes: ['id', 'name'] }] },
   ];
 }
 
@@ -70,7 +71,10 @@ exports.getChallans = async (req, res, next) => {
       paranoid: true,
     });
     return res.json({ success: true, data: challans });
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('getChallans error:', err);
+    next(err);
+  }
 };
 
 // ── GET /api/v1/challans/:id ─────────────────────────────────────────────────
@@ -115,13 +119,16 @@ exports.getEditHistory = async (req, res, next) => {
 // ── POST /api/v1/challans — Admin creates standalone challan ─────────────────
 // Body: { pin, party_id?, party_name?, supplier?, bill_number, notes?, items: [{product_id, sku, qty, price}] }
 exports.createChallan = async (req, res, next) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
-
   const { pin, party_id, party_name, supplier, bill_number, notes, items } = req.body;
 
-  if (!pin) return res.status(400).json({ success: false, error: 'Admin PIN is required' });
   if (!bill_number?.trim()) return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
   if (!items?.length) return res.status(400).json({ success: false, error: 'At least one item is required' });
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Admin only' });
+  }
+
+  if (!pin) return res.status(400).json({ success: false, error: 'Admin PIN is required' });
 
   const pinCheck = await verifyAdminPin(pin);
   if (!pinCheck.ok) return res.status(401).json({ success: false, error: pinCheck.message, code: pinCheck.code });
@@ -356,6 +363,10 @@ exports.returnChallan = async (req, res, next) => {
       );
     }
 
+    const returnNote = challan.bill_number 
+      ? `RETURN (Bill #${challan.bill_number} returned): ${reason.trim()}`
+      : `RETURN: ${reason.trim()}`;
+
     await challan.update({
       is_returned:   true,
       return_reason: reason.trim(),
@@ -364,17 +375,34 @@ exports.returnChallan = async (req, res, next) => {
       status:        'returned',
     }, { transaction: t });
 
-    // Log the return
+    // Log the return in edit history
     await ChallanEditLog.create({
       challan_id:  challan.id,
       edited_by:   req.user.id,
-      edit_reason: `RETURN: ${reason.trim()}`,
-      changed_fields: { status: { from: 'active', to: 'returned' } },
+      edit_reason: returnNote,
+      changed_fields: { 
+        status: { from: challan.status || 'active', to: 'returned' },
+        ...(challan.bill_number ? { bill_status: { from: 'billed', to: 'returned' } } : {})
+      },
     }, { transaction: t });
+
+    // If linked to an Order, update order status to returned
+    if (challan.order_id) {
+      const order = await Order.findByPk(challan.order_id, { transaction: t });
+      if (order) {
+        await order.update({ status: 'returned' }, { transaction: t });
+      }
+    }
 
     await t.commit();
     const result = await Challan.findByPk(challan.id, { include: buildIncludes() });
-    return res.json({ success: true, data: result, message: 'Challan returned and stock restored' });
+    return res.json({ 
+      success: true, 
+      data: result, 
+      message: challan.bill_number 
+        ? `Challan and Bill #${challan.bill_number} returned, stock restored.` 
+        : 'Challan returned and stock restored.' 
+    });
   } catch (err) {
     await t.rollback();
     next(err);

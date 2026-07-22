@@ -261,11 +261,21 @@ exports.createAdjustment = async (req, res, next) => {
     const product = await Product.findByPk(product_id);
     if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
 
+    const { Pricing } = require('../../models');
+    const pricingCount = await Pricing.count({ where: { product_id }, transaction: t });
+    const inPriceList = product.dealer_landing_price != null || product.purchase_price != null || product.selling_price != null || pricingCount > 0;
+
     await ensureStockRows(product_id);
 
     const soh = await StockOnHand.findOne({ where: { product_id }, transaction: t, lock: true });
     const qtyBefore = parseFloat(soh.quantity);
     const qtyAfter  = parseFloat(new_quantity);
+
+    if (!inPriceList && qtyAfter > 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: `Stock cannot be added for product '${product.sku}' because it is not in the price list.` });
+    }
+
     const delta     = qtyAfter - qtyBefore;
 
     await soh.update({ quantity: qtyAfter }, { transaction: t });

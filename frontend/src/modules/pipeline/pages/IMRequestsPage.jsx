@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
+import TablePagination from '../../../components/data/TablePagination'
 import {
   getPartRequests, acknowledgeRequest, reorderRequest, closeRequest,
 } from '../../../api/endpoints/partRequests.api'
@@ -23,6 +24,9 @@ export default function IMRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
   const [filter, setFilter] = useState('all')
+  const [page, setPage]     = useState(1)
+
+  useEffect(() => { setPage(1) }, [filter])
   const [newPartModal, setNewPartModal] = useState(null)
   const [npForm, setNpForm] = useState({ sku: '', selling_price: '', purchase_price: '' })
 
@@ -91,7 +95,7 @@ export default function IMRequestsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(r => {
+          {filtered.slice((page - 1) * 50, page * 50).map(r => {
             const meta = STATUS_META[r.status]
             const isNew = r.type === 'NEW_PART'
             return (
@@ -126,6 +130,12 @@ export default function IMRequestsPage() {
               </div>
             )
           })}
+          <TablePagination
+            currentPage={page}
+            totalItems={filtered.length}
+            pageSize={50}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

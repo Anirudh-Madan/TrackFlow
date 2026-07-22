@@ -67,6 +67,8 @@ async function run() {
   await addColumnIfNotExists(qi, 'purchase_order', 'returned_at',   { type: DataTypes.DATE, allowNull: true });
   await addColumnIfNotExists(qi, 'purchase_order', 'returned_by',   { type: DataTypes.BIGINT.UNSIGNED, allowNull: true });
   await addColumnIfNotExists(qi, 'purchase_order', 'share_token',   { type: DataTypes.STRING(64), allowNull: true, unique: true });
+  await addColumnIfNotExists(qi, 'purchase_order', 'deleted_at',    { type: DataTypes.DATE, allowNull: true });
+
 
   // Extend purchase_order status ENUM
   try {

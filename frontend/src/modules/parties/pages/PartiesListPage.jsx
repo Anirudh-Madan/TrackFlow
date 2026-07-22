@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Zod Validation Schemas ──────────────────────────────────────────────────
 const customerSchema = z.object({
@@ -43,6 +44,9 @@ export default function PartiesListPage() {
   const [users, setUsers]         = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
+  const [page, setPage]           = useState(1)
+
+  useEffect(() => { setPage(1) }, [search, activeTab])
 
   // Modals state
   const [isCustomerOpen, setIsCustomerOpen] = useState(false)
@@ -390,7 +394,7 @@ export default function PartiesListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                  {filteredCustomers.map(cust => (
+                  {filteredCustomers.slice((page - 1) * 50, page * 50).map(cust => (
                     <tr key={cust.id} className="table-row-hover">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-surface-900 dark:text-surface-50">{cust.company_name}</div>
@@ -472,7 +476,7 @@ export default function PartiesListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                  {filteredVendors.map(vend => (
+                  {filteredVendors.slice((page - 1) * 50, page * 50).map(vend => (
                     <tr key={vend.id} className="table-row-hover">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-surface-900 dark:text-surface-50">{vend.company_name}</div>
@@ -532,6 +536,12 @@ export default function PartiesListPage() {
             )
           )}
         </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={activeTab === 'customers' ? filteredCustomers.length : filteredVendors.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* ── Customer Form Modal ─────────────────────────────────────────────── */}

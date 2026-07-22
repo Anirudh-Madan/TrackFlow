@@ -14,6 +14,7 @@ import { cn } from '../../../utils/cn'
 import { getOrders, approveOrder, flagOrder, returnOrder } from '../../../api/endpoints/orders.api'
 import { useAuthStore } from '../../../store/authStore'
 import toast from 'react-hot-toast'
+import TablePagination from '../../../components/data/TablePagination'
 
 const ORDER_STATUS_CONFIG = {
   pending:    { label: 'Pending',    color: 'bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-900/20 dark:text-warning-400 dark:border-warning-900/40', icon: Clock },
@@ -42,7 +43,10 @@ export default function OrdersListPage() {
 
   const [search, setSearch]             = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage]                 = useState(1)
   const [viewOrder, setViewOrder]       = useState(null)
+
+  useEffect(() => { setPage(1) }, [search, filterStatus])
   
   // Real data state
   const [orders, setOrders] = useState([])
@@ -162,6 +166,19 @@ export default function OrdersListPage() {
         {isAdmin ? (
           <>
             <button
+              onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'orders' || activeTab === 'challans'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-orders-tab-btn"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Orders List
+            </button>
+            <button
               onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
                 'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
@@ -173,45 +190,6 @@ export default function OrdersListPage() {
             >
               <Plus className="h-4 w-4" />
               New Challan
-            </button>
-            <button
-              onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'orders'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="admin-orders-tab-btn"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Orders List
-            </button>
-            <button
-              onClick={() => { setActiveTab('order-history'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'order-history'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="admin-order-history-tab-btn"
-            >
-              <FileText className="h-4 w-4" />
-              Order History
-            </button>
-            <button
-              onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'challans'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="admin-challans-tab-btn"
-            >
-              <Truck className="h-4 w-4" />
-              Delivery Challans
             </button>
           </>
         ) : isSM ? (
@@ -277,7 +255,7 @@ export default function OrdersListPage() {
 
       {activeTab === 'order-history' ? (
         <OrderHistoryPage isTab={true} />
-      ) : activeTab === 'challans' ? (
+      ) : activeTab === 'challans' || (isAdmin && activeTab === 'orders') ? (
         isAdmin ? <AdminChallanPage /> : <ChallansListPage />
       ) : activeTab === 'new-challan' ? (
         <div className="pt-6">
@@ -285,7 +263,7 @@ export default function OrdersListPage() {
             isModal={false}
             preselectedPartyId={preselectedPartyId}
             onSuccess={() => {
-              setActiveTab(isAdmin ? 'challans' : 'my-orders');
+              setActiveTab(isAdmin ? 'orders' : 'my-orders');
               fetchOrdersList();
             }}
           />
@@ -386,7 +364,7 @@ export default function OrdersListPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                    {filteredOrders.map(o => {
+                    {filteredOrders.slice((page - 1) * 50, page * 50).map(o => {
                       const statusKey = o.status.toLowerCase()
                       const statusConfig = ORDER_STATUS_CONFIG[statusKey] || { label: o.status, color: 'bg-surface-100', icon: AlertCircle }
                       const StatusIcon = statusConfig.icon
@@ -443,6 +421,12 @@ export default function OrdersListPage() {
                 </table>
               )}
             </div>
+            <TablePagination
+              currentPage={page}
+              totalItems={filteredOrders.length}
+              pageSize={50}
+              onPageChange={setPage}
+            />
           </div>
         </div>
       )}

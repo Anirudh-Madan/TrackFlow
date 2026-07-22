@@ -9,6 +9,7 @@ import Input from '../../../components/ui/Input'
 import { Plus, Search, MapPin, AlertCircle, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 const regionSchema = z.object({
@@ -20,7 +21,10 @@ export default function RegionsPage() {
   const [regions, setRegions] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+  useEffect(() => { setPage(1) }, [searchTerm])
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [activeRegion, setActiveRegion] = useState(null)
@@ -198,7 +202,7 @@ export default function RegionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
-                {filteredRegions.map(region => (
+                {filteredRegions.slice((page - 1) * 50, page * 50).map(region => (
                   <tr key={region.id} className="table-row-hover">
                     {/* Name */}
                     <td className="px-6 py-4">
@@ -247,6 +251,12 @@ export default function RegionsPage() {
             </table>
           )}
         </div>
+        <TablePagination
+          currentPage={page}
+          totalItems={filteredRegions.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* ── Create Region Modal ────────────────────────────────────────────── */}

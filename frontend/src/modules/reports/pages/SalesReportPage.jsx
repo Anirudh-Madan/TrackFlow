@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { getSalesReport } from '../../../api/endpoints/reports.api'
+import TablePagination from '../../../components/data/TablePagination'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const formatDateLocal = (d) => {
@@ -71,6 +72,9 @@ export default function SalesReportPage() {
   const [customE, setCustomE] = useState(end)
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [smPage,  setSmPage]  = useState(1)
+
+  useEffect(() => { setSmPage(1) }, [start, end])
 
   const fetchReport = useCallback(async (s, e) => {
     setLoading(true)
@@ -185,11 +189,11 @@ export default function SalesReportPage() {
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
                   {(data.salesmanPerformance ?? []).length === 0 ? (
                     <tr><td colSpan="6" className="px-6 py-10 text-center text-surface-400">No salesman data for this period.</td></tr>
-                  ) : (data.salesmanPerformance ?? []).map((sm, i) => {
+                  ) : (data.salesmanPerformance ?? []).slice((smPage - 1) * 50, smPage * 50).map((sm, i) => {
                     const margin = sm.revenue > 0 ? (sm.profit / sm.revenue) * 100 : 0
                     return (
                       <tr key={sm.id} className="table-row-hover">
-                        <td className="px-6 py-4 text-surface-400 font-mono text-xs">{i + 1}</td>
+                        <td className="px-6 py-4 text-surface-400 font-mono text-xs">{(smPage - 1) * 50 + i + 1}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 flex items-center justify-center font-bold text-xs shrink-0">
@@ -212,6 +216,12 @@ export default function SalesReportPage() {
                 </tbody>
               </table>
             </div>
+            <TablePagination
+              currentPage={smPage}
+              totalItems={(data.salesmanPerformance ?? []).length}
+              pageSize={50}
+              onPageChange={setSmPage}
+            />
           </div>
 
           {/* ── 2-col: Supplier breakdown + Top parts ─────────────────── */}

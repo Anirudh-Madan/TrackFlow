@@ -20,7 +20,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!isAdmin) return
     getSettings()
-      .then(r => { if (r.success) setPinSet(r.data.pin_set) })
+      .then((res) => {
+        if (res?.success) setPinSet(res.data?.pin_set)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [isAdmin])
@@ -41,17 +43,18 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       const body = { new_pin: form.new_pin }
-      if (pinSet) body.current_pin = form.current_pin
-      const res = await setAdminPin(body)
-      if (res.success) {
+      if (form.current_pin.trim()) body.current_pin = form.current_pin
+      const response = await setAdminPin(body)
+      const payload = response?.data ?? response
+      if (payload.success) {
         toast.success(pinSet ? 'PIN updated successfully!' : 'Admin PIN has been set!')
         setPinSet(true)
         setForm({ current_pin: '', new_pin: '', confirm_pin: '' })
       } else {
-        toast.error(res.error || 'Failed to set PIN')
+        toast.error(payload.error || 'Failed to set PIN')
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to set PIN')
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to set PIN')
     } finally {
       setSaving(false)
     }
@@ -95,7 +98,7 @@ export default function SettingsPage() {
               <div>
                 <h2 className="font-semibold text-surface-900 dark:text-surface-50">Admin Edit PIN</h2>
                 <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
-                  This PIN is required to create, edit, or delete challans and purchase orders.
+                  This PIN is required to create, edit, or delete challans and purchase orders. Leave the current PIN field blank for first-time setup.
                 </p>
                 <span className={cn(
                   'inline-flex items-center gap-1 text-xs font-medium mt-2 px-2 py-0.5 rounded-full',
@@ -123,8 +126,7 @@ export default function SettingsPage() {
                       value={form.current_pin}
                       onChange={handleChange}
                       className="input-base pl-9 pr-10"
-                      placeholder="Enter current PIN"
-                      required={pinSet}
+                      placeholder="Leave blank for first-time setup"
                       id="current-pin"
                     />
                     <button type="button" onClick={() => toggleShow('current')} className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600">

@@ -3,11 +3,15 @@ import { Link } from 'react-router-dom'
 import { getInwards } from '../../../api/endpoints/inward.api'
 import { Plus, Search, Calendar, FileText, FileDown, ArrowUpRight, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
+import TablePagination from '../../../components/data/TablePagination'
 
 export default function InwardListPage() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+
+  useEffect(() => { setPage(1) }, [search])
 
   useEffect(() => {
     async function loadInwards() {
@@ -87,7 +91,7 @@ export default function InwardListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-200 dark:divide-surface-800">
-                {entries.map(e => (
+                {entries.slice((page - 1) * 50, page * 50).map(e => (
                   <tr key={e.id} className="hover:bg-surface-50/50 dark:hover:bg-surface-800/20 transition-colors">
                     <td className="px-6 py-4">
                       <span className="font-mono text-sm font-bold text-surface-900 dark:text-surface-50">{e.entry_number}</span>
@@ -124,6 +128,12 @@ export default function InwardListPage() {
             </table>
           </div>
         )}
+        <TablePagination
+          currentPage={page}
+          totalItems={entries.length}
+          pageSize={50}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   )
