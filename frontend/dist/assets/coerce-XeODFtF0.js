@@ -1,1 +1,0 @@
-import{c as e,t}from"./index-CBXxf4yW.js";function n(n){return e(t,n)}export{n as t};

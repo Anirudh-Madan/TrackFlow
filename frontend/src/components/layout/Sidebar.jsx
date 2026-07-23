@@ -21,6 +21,7 @@ import {
   BarChart3,
   TrendingUp,
   ClipboardList,
+  Activity,
   FileUp,
   Lightbulb,
   Bell,
@@ -198,6 +199,12 @@ export default function Sidebar() {
             label="Users & Roles"
             collapsed={sidebarCollapsed}
           />
+          <SidebarItem
+            to="/admin/activity-logs"
+            icon={Activity}
+            label="Activity Logs"
+            collapsed={sidebarCollapsed}
+          />
         </SidebarGroup>
 
         {/* Operations */}
@@ -224,7 +231,6 @@ export default function Sidebar() {
             <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
           </CollapsibleGroup>
         </SidebarGroup>
 

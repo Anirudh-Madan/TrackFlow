@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import ChallansListPage from '../../challans/pages/ChallansListPage'
 import AdminChallanPage from '../../challans/pages/AdminChallanPage'
+import BillsListPage from '../../challans/pages/BillsListPage'
 import OrderNewPage from './OrderNewPage'
 import OrderHistoryPage from './OrderHistoryPage'
 import {
@@ -169,7 +170,7 @@ export default function OrdersListPage() {
               onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
                 'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'orders' || activeTab === 'challans'
+                activeTab === 'orders'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
               )}
@@ -177,6 +178,32 @@ export default function OrdersListPage() {
             >
               <ShoppingCart className="h-4 w-4" />
               Orders List
+            </button>
+            <button
+              onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'challans'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-challans-tab-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Delivery Challans
+            </button>
+            <button
+              onClick={() => { setActiveTab('bills'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'bills'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="admin-bills-tab-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Bills Tab
             </button>
             <button
               onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
@@ -249,13 +276,41 @@ export default function OrdersListPage() {
               <ShoppingCart className="h-4 w-4" />
               Orders List
             </button>
+            <button
+              onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'challans'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="challans-tab-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Delivery Challans
+            </button>
+            <button
+              onClick={() => { setActiveTab('bills'); setSearch(''); setFilterStatus('all'); }}
+              className={cn(
+                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
+                activeTab === 'bills'
+                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
+                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
+              )}
+              id="bills-tab-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Bills Tab
+            </button>
           </>
         )}
       </div>
 
-      {activeTab === 'order-history' ? (
+      {activeTab === 'bills' ? (
+        <BillsListPage />
+      ) : activeTab === 'order-history' ? (
         <OrderHistoryPage isTab={true} />
-      ) : activeTab === 'challans' || (isAdmin && activeTab === 'orders') ? (
+      ) : activeTab === 'challans' ? (
         isAdmin ? <AdminChallanPage /> : <ChallansListPage />
       ) : activeTab === 'new-challan' ? (
         <div className="pt-6">

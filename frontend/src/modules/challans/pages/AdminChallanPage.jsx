@@ -11,7 +11,8 @@ import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import {
   getChallans, createChallan, updateChallan, deleteChallan,
-  returnChallan, getChallanEditHistory, checkPartAvailability
+  returnChallan, getChallanEditHistory, checkPartAvailability,
+  setBillNumber, approveChallan
 } from '../../../api/endpoints/challans.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
@@ -180,7 +181,8 @@ function PartRow({ item, index, onChange, onRemove }) {
           onChange(index, 'name', res.product.name || '')
           if (res.product.dealer_landing_price != null) {
             const unitPrice = parseFloat(res.product.dealer_landing_price) || 0
-            onChange(index, 'price', unitPrice)
+            onChange(index, 'dl_price', unitPrice)
+            if (!item.price) onChange(index, 'price', unitPrice)
           }
         }
       } catch { setStatus(null) }
@@ -193,22 +195,49 @@ function PartRow({ item, index, onChange, onRemove }) {
     onChange(index, 'qty', qty)
   }
 
-  const lineTotal = (parseFloat(item.qty || 1) * parseFloat(item.price || 0)).toFixed(2)
+  const dl = parseFloat(item.dl_price || 0)
+  const sp = parseFloat(item.price || 0)
+  let marginBadge = null
+  if (dl > 0 && sp > 0) {
+    const pct = ((sp - dl) / dl) * 100
+    const formatted = Math.abs(pct).toFixed(1) + '%'
+    if (pct > 0) {
+      marginBadge = <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-50 dark:bg-success-900/30 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800 shrink-0" title={`+₹${(sp - dl).toFixed(2)} margin above DL price`}>+{formatted}</span>
+    } else if (pct < 0) {
+      marginBadge = <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger-50 dark:bg-danger-900/30 text-danger-700 dark:text-danger-400 border border-danger-200 dark:border-danger-800 shrink-0" title={`-₹${(dl - sp).toFixed(2)} discount below DL price`}>-{formatted}</span>
+    } else {
+      marginBadge = <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-100 dark:bg-surface-800 text-surface-500 border border-surface-200 dark:border-surface-700 shrink-0">0%</span>
+    }
+  }
+
+  const lineTotal = (parseFloat(item.qty || 1) * sp).toFixed(2)
 
   return (
-    <div className="grid grid-cols-12 gap-2 items-start">
-      <div className="col-span-3">
+    <div className="grid grid-cols-12 gap-2 items-center">
+      <div className="col-span-2">
         <div className="relative">
           <input type="text" value={item.sku} onChange={e => handleSkuChange(e.target.value.toUpperCase())}
-            className={cn('input-base text-xs', status === 'in_stock' && 'border-success-400', status === 'not_found' && 'border-danger-400')} placeholder="Part No *" />
+            className={cn('input-base text-xs font-mono', status === 'in_stock' && 'border-success-400', status === 'not_found' && 'border-danger-400')} placeholder="Part No *" />
           {checking && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-surface-400" />}
         </div>
       </div>
-      <div className="col-span-3"><input type="text" value={item.name} onChange={e => onChange(index, 'name', e.target.value)} className="input-base text-xs" placeholder="Description" /></div>
-      <div className="col-span-2"><input type="number" value={item.qty} min={1} onChange={e => handleQtyChange(e.target.value)} className="input-base text-xs" placeholder="Qty *" /></div>
-      <div className="col-span-2"><input type="number" value={item.price} min={0} step={0.01} onChange={e => onChange(index, 'price', e.target.value)} className="input-base text-xs" placeholder="Price/unit" /></div>
-      <div className="col-span-1 text-xs text-primary-700 dark:text-primary-400 pt-2 font-bold whitespace-nowrap">₹{lineTotal}</div>
-      <div className="col-span-1 flex justify-center pt-1"><button type="button" onClick={() => onRemove(index)} className="text-danger-400 hover:text-danger-600 p-1"><X className="h-4 w-4" /></button></div>
+      <div className="col-span-2"><input type="text" value={item.name} onChange={e => onChange(index, 'name', e.target.value)} className="input-base text-xs" placeholder="Description" /></div>
+      <div className="col-span-2">
+        <div className="relative">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
+          <input type="text" disabled readOnly value={dl ? dl.toFixed(2) : '0.00'} className="input-base text-xs pl-5 bg-surface-100 dark:bg-surface-800 font-mono text-surface-500 cursor-not-allowed" placeholder="DL Price" title="DL Price (non-editable)" />
+        </div>
+      </div>
+      <div className="col-span-1"><input type="number" value={item.qty} min={1} onChange={e => handleQtyChange(e.target.value)} className="input-base text-xs text-center" placeholder="Qty *" /></div>
+      <div className="col-span-3 flex items-center gap-1.5">
+        <div className="relative flex-1">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
+          <input type="number" value={item.price} min={0} step={0.01} onChange={e => onChange(index, 'price', e.target.value)} className="input-base text-xs pl-5 font-mono font-medium" placeholder="Selling Price" />
+        </div>
+        {marginBadge}
+      </div>
+      <div className="col-span-1 text-xs text-primary-700 dark:text-primary-400 font-bold whitespace-nowrap">₹{lineTotal}</div>
+      <div className="col-span-1 flex justify-center"><button type="button" onClick={() => onRemove(index)} className="text-danger-400 hover:text-danger-600 p-1"><X className="h-4 w-4" /></button></div>
     </div>
   )
 }
@@ -241,7 +270,7 @@ function EditHistoryModal({ open, onClose, challanId }) {
   )
 }
 
-const EMPTY_ITEM = { sku: '', name: '', qty: 1, price: '' }
+const EMPTY_ITEM = { sku: '', name: '', qty: 1, dl_price: '', price: '' }
 
 export default function AdminChallanPage() {
   const { user } = useAuthStore()
@@ -262,16 +291,39 @@ export default function AdminChallanPage() {
   const [viewChallan, setViewChallan] = useState(null)
   const [editChallan, setEditChallan] = useState(null)
   const [returnTarget, setReturnTarget] = useState(null)
+  const [billModalTarget, setBillModalTarget] = useState(null)
+  const [billModalValue, setBillModalValue]   = useState('')
   const [historyId, setHistoryId]     = useState(null)
 
   const [pinModalOpen, setPinModalOpen] = useState(false)
   const [pinLoading, setPinLoading]     = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
 
-  const [form, setForm] = useState({ party_name: '', supplier: '', bill_number: '', notes: '', items: [{ ...EMPTY_ITEM }] })
+  const [form, setForm] = useState({ party_name: '', supplier: '', notes: '', items: [{ ...EMPTY_ITEM }] })
   const [editForm, setEditForm]     = useState({ reason: '', notes: '', supplier: '', party_name: '', bill_number: '' })
   const [returnForm, setReturnForm] = useState({ reason: '' })
   const [submitting, setSubmitting] = useState(false)
+
+  const handleSaveBillNumber = async (e) => {
+    e.preventDefault()
+    if (!billModalTarget || !billModalValue.trim()) { toast.error('Please enter a bill number'); return }
+    setSubmitting(true)
+    try {
+      const res = await setBillNumber(billModalTarget.id, { bill_number: billModalValue.trim() })
+      if (res.success) {
+        toast.success(`Bill number updated to #${billModalValue.trim()} everywhere!`)
+        setBillModalTarget(null)
+        setBillModalValue('')
+        fetchChallansList()
+      } else {
+        toast.error(res.error || 'Failed to set bill number')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to set bill number')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const fetchChallansList = useCallback(async () => {
     setLoading(true)
@@ -312,17 +364,11 @@ export default function AdminChallanPage() {
 
   const handlePreview = (e) => {
     e.preventDefault()
-    if (!form.bill_number.trim()) { toast.error('Bill number is mandatory'); return }
     if (form.items.some(i => !i.sku.trim())) { toast.error('All items must have a Part No'); return }
     setShowPreview(true)
   }
 
   const handleSubmitCreate = () => {
-    if (!form.bill_number.trim()) {
-      toast.error('Bill number is mandatory')
-      return
-    }
-
     requirePin(async (pin) => {
       setSubmitting(true)
       try {
@@ -330,7 +376,7 @@ export default function AdminChallanPage() {
           pin,
           party_name:  form.party_name.trim() || undefined,
           supplier:    form.supplier.trim() || undefined,
-          bill_number: form.bill_number.trim(),
+          bill_number: form.bill_number.trim() || undefined,
           notes:       form.notes.trim() || undefined,
           items: form.items.map(i => ({ sku: i.sku.trim().toUpperCase(), qty: parseInt(i.qty), price: parseFloat(i.price) || undefined })),
         }
@@ -526,17 +572,17 @@ export default function AdminChallanPage() {
                     return (
                       <tr key={c.id} className="table-row-hover">
                         <td className="px-5 py-4">
-                          <div className="font-mono font-bold text-surface-900 dark:text-surface-50 text-xs flex items-center gap-1.5">
-                            {c.challan_number}
+                          <div className="font-mono font-bold text-surface-900 dark:text-surface-50 text-xs flex items-center gap-1.5 flex-wrap">
+                            <span>{c.challan_number}</span>
                             {hasBill && (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold" title={`Bill #${c.bill_number}`}>
-                                <Lock className="h-3 w-3 text-warning-500" />
-                                {c.bill_number}
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-bold font-mono text-xs border border-indigo-100/80 dark:border-indigo-900/40" title={`Bill #${c.bill_number}`}>
+                                <Lock className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span>{c.bill_number}</span>
                               </span>
                             )}
                           </div>
                           {c.share_token && (
-                            <a href={`/challan/view/${c.share_token}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-surface-400 hover:text-primary-500 mt-0.5">
+                            <a href={`/challan/view/${c.share_token}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-primary-500 mt-1">
                               <ExternalLink className="h-3 w-3" /> Link
                             </a>
                           )}
@@ -613,15 +659,14 @@ export default function AdminChallanPage() {
       {/* Create Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Delivery Challan" size="xl">
         <form onSubmit={handlePreview} className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div><label className="label-base">Party Name</label><input type="text" value={form.party_name} onChange={e => setForm(f => ({ ...f, party_name: e.target.value }))} className="input-base" placeholder="Customer / party name" /></div>
             <div><label className="label-base">Supplier</label><input type="text" value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} className="input-base" placeholder="Supplier name" /></div>
-            <div><label className="label-base">Bill Number <span className="text-danger-500">*</span></label><input type="text" value={form.bill_number} onChange={e => setForm(f => ({ ...f, bill_number: e.target.value }))} className="input-base" placeholder="Enter bill number" required /></div>
             <div><label className="label-base">Notes</label><input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-base" placeholder="Optional notes" /></div>
           </div>
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-surface-500 uppercase pb-1 border-b border-surface-200 dark:border-surface-700">
-              <div className="col-span-3">Part No *</div><div className="col-span-3">Description</div><div className="col-span-2">Qty *</div><div className="col-span-2">Price/Unit</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
+              <div className="col-span-2">Part No *</div><div className="col-span-2">Description</div><div className="col-span-2">DL Price</div><div className="col-span-1 text-center">Qty *</div><div className="col-span-3">Selling Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
             </div>
             {form.items.map((item, i) => (
               <PartRow key={i} item={item} index={i} onChange={updateItem} onRemove={removeItem} />
@@ -641,10 +686,9 @@ export default function AdminChallanPage() {
       {/* Preview Modal */}
       <Modal open={showPreview} onClose={() => setShowPreview(false)} title="Preview Challan" size="lg">
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700 grid grid-cols-2 gap-3 text-sm">
+          <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700 grid grid-cols-3 gap-3 text-sm">
             <div><span className="text-xs text-surface-400">Party:</span><div className="font-medium">{form.party_name || '—'}</div></div>
             <div><span className="text-xs text-surface-400">Supplier:</span><div className="font-medium">{form.supplier || '—'}</div></div>
-            <div><span className="text-xs text-surface-400">Bill No:</span><div className="font-semibold text-primary-700 dark:text-primary-400">{form.bill_number}</div></div>
             <div><span className="text-xs text-surface-400">Notes:</span><div className="font-medium">{form.notes || '—'}</div></div>
           </div>
           <div className="flex gap-2 justify-end pt-2">
@@ -853,6 +897,38 @@ export default function AdminChallanPage() {
           </div>
         </Modal>
       )}
+
+      {/* Write Bill Number Modal */}
+      <Modal open={!!billModalTarget} onClose={() => setBillModalTarget(null)} title="Write / Update Bill Number" size="md">
+        {billModalTarget && (
+          <form onSubmit={handleSaveBillNumber} className="space-y-4">
+            <div className="p-3 rounded-xl bg-primary-50 dark:bg-primary-950/30 border border-primary-100 dark:border-primary-900/30 text-xs text-primary-800 dark:text-primary-300">
+              <p className="font-semibold mb-1">Pipeline: Stock Checked → Bill Created → Write Bill Number</p>
+              <p className="text-surface-600 dark:text-surface-400">
+                Writing this bill number will link it to <strong>{billModalTarget.challan_number}</strong> and update it across the system.
+              </p>
+            </div>
+
+            <div>
+              <label className="label-base">Bill Number <span className="text-danger-500">*</span></label>
+              <input
+                type="text"
+                required
+                value={billModalValue}
+                onChange={e => setBillModalValue(e.target.value)}
+                className="input-base font-mono"
+                placeholder="e.g. BILL-2026-001"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setBillModalTarget(null)}>Cancel</Button>
+              <Button type="submit" variant="primary" loading={submitting}>Save & Update Everywhere</Button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <PinModal open={pinModalOpen} onVerify={handlePinVerified} onClose={() => { setPinModalOpen(false); setPendingAction(null) }} loading={pinLoading} />
       <EditHistoryModal open={!!historyId} onClose={() => setHistoryId(null)} challanId={historyId} />

@@ -85,7 +85,9 @@ export const adminRoutes = [
   { path: 'reports',             element: <Wrap><ReportsPage /></Wrap> },
   { path: 'reports/sales',       element: <Wrap><SalesReportPage /></Wrap> },
   { path: 'reports/stock',       element: <Wrap><StockReportPage /></Wrap> },
+  { path: 'reports/activity',    element: <Wrap><AuditLogPage /></Wrap> },
   { path: 'reports/audit',       element: <Wrap><AuditLogPage /></Wrap> },
+  { path: 'activity-logs',        element: <Wrap><AuditLogPage /></Wrap> },
   { path: 'reports/below-dl',    element: <Wrap><BelowDlReportPage /></Wrap> },
 
   // Settings (Admin PIN, Gemini API info)

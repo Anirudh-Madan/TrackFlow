@@ -49,56 +49,90 @@ export function normalizeKey(str) {
 
 export const FIELD_ALIASES = {
   sku: [
-    'sku', 'sku_code', 'product_sku', 'item_sku',
-    'part_number', 'part_no', 'partno', 'part no',
-    'item_code', 'item_no', 'item no', 'product_code',
-    'code', 'article_no', 'article no', 'article_number',
-    'ref', 'reference', 'part',
+    'sku', 'sku_code', 'product_sku', 'item_sku', 'part_sku',
+    'part_number', 'part_no', 'partno', 'part no', 'part_num', 'part_id',
+    'partnumber', 'part number', 'part_code',
+    'item_code', 'item_no', 'itemno', 'item no', 'item_number', 'item_id',
+    'product_code', 'product_no', 'prod_code', 'prod_no',
+    'code', 'article_no', 'article no', 'article_number', 'art_no',
+    'ref', 'reference', 'ref_no', 'reference_no', 'part_ref',
+    'material_no', 'material_number', 'material_code',
+    'oem_part_no', 'oem_no', 'oem_part_number',
   ],
   name: [
     'description', 'desc', 'name', 'product_name', 'item_name',
-    'item_description', 'product_description', 'product description',
-    'material_description', 'material description', 'material',
-    'details', 'item_details',
+    'part_description', 'part description', 'part_desc', 'part desc', 'part_name', 'part name', 'partname',
+    'item_description', 'item description', 'item_desc', 'item desc',
+    'product_description', 'product description', 'product_desc',
+    'material_description', 'material description', 'material_desc', 'material desc', 'material',
+    'details', 'item_details', 'part_details', 'part details',
+    'description_of_goods', 'description of goods', 'goods_description',
+    'particulars', 'item_particulars', 'item particulars',
+    'nomenclature', 'specification', 'specifications', 'specs',
+    'part_info', 'product_info', 'short_description', 'long_description',
+    'item', 'title', 'product', 'part',
   ],
   planner: [
     'planner', 'plan', 'planned_by', 'buyer', 'buyer_name',
+    'planner_section', 'planner section', 'planner/section', 'planner_sec', 'planner sec',
+    'planner_code', 'planner code', 'planner_name', 'planner name', 'planner_no', 'planner no', 'planner_num', 'planner_id',
+    'section', 'sec', 'sec_name', 'section_name', 'section_code',
+    'category', 'part_category', 'part category', 'product_category', 'product category', 'prod_category', 'category_name',
+    'group', 'part_group', 'product_group', 'product group', 'prod_group', 'prod group', 'item_group', 'pg', 'p_g',
+    'division', 'segment', 'family', 'product_family', 'sub_group', 'sub_category',
   ],
   location: [
     'location', 'loc', 'bin', 'warehouse_location', 'bin_location',
-    'shelf', 'rack', 'store_location', 'wh_location',
+    'shelf', 'rack', 'store_location', 'wh_location', 'rack_no', 'bin_no',
   ],
   purchase_price: [
-    'purchase_price', 'purchase price', 'purchase',
-    'buy_price', 'buy price', 'cost_price', 'cost price', 'cost',
-    'dn', 'dn_price', 'dn price', 'dealer_net', 'dealer net',
-    'net_price', 'net price', 'basic_price', 'basic price',
+    'new_casl_dn_price', 'new casl dn price', 'new_casl_dn', 'new casl dn', 
+    'casl_dn_price', 'casl dn price', 'casl_dn', 'casl dn',
+    'new_dn_price', 'new dn price', 'new_dn', 'new dn', 
+    'new_purchase_price', 'new purchase price',
+    'old_casl_dn_price', 'old casl dn price', 'old_casl_dn', 'old casl dn',
+    'purchase_price', 'purchase price', 'purchase', 'pur_price',
+    'buy_price', 'buy price', 'buying_price', 'cost_price', 'cost price', 'cost',
+    'dn', 'dn_price', 'dn price', 'dealer_net', 'dealer net', 'dealer_net_price',
+    'net_price', 'net price', 'basic_price', 'basic price', 'ndp', 'net_dealer_price',
+    'unit_cost', 'unit cost', 'po_price', 'rate', 'unit_rate',
   ],
   dealer_landing_price: [
-    'dealer_landing_price', 'dealer landing price', 'dealer landing',
-    'landing_price', 'landing price', 'dealer_price', 'dealer price',
-    'dl_price', 'dl price', 'dl',
+    'new_casl_dl_price', 'new casl dl price', 'new_casl_dl', 'new casl dl', 
+    'casl_dl_price', 'casl dl price', 'casl_dl', 'casl dl',
+    'new_dl_price', 'new dl price', 'new_dl', 'new dl', 
+    'new_landing_price', 'new landing price',
+    'old_casl_dl_price', 'old casl dl price', 'old_casl_dl', 'old casl dl',
+    'dealer_landing_price', 'dealer landing price', 'dealer landing', 'dealer_landing',
+    'landing_price', 'landing price', 'landing', 'landed_price', 'landed_cost',
+    'dealer_price', 'dealer price', 'dl_price', 'dl price', 'dl', 'dl_rate',
+    'dp', 'dp_price', 'd_l_price', 'd_l',
   ],
   selling_price: [
-    'selling_price', 'selling price', 'selling',
-    'sell_price', 'sell price', 'mrp', 'price',
-    'list_price', 'list price', 'retail_price', 'retail price',
-    'customer_price', 'customer price',
+    'new_mrp_price', 'new mrp price', 'new_mrp', 'new mrp', 
+    'casl_mrp_price', 'casl mrp price', 'casl_mrp', 'casl mrp',
+    'new_selling_price', 'new selling price', 'new_sp', 'new sp',
+    'old_mrp_price', 'old mrp price', 'old_mrp', 'old mrp',
+    'selling_price', 'selling price', 'selling', 'sell_price', 'sell price',
+    'mrp', 'maximum_retail_price', 'mrp_price', 'mrp_rs', 'mrp_amount',
+    'price', 'unit_price', 'list_price', 'list price', 'retail_price', 'retail price',
+    'customer_price', 'customer price', 'sp', 'sp_price', 'sale_price',
   ],
   quantity: [
     'quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity',
-    'stock_on_hand', 'on_hand', 'count', 'units',
+    'stock_on_hand', 'on_hand', 'soh', 'count', 'units',
     'closing_qty', 'closing qty', 'closing_quantity', 'closing quantity',
-    'available_qty', 'available quantity', 'balance', 'balance_qty',
+    'opening_qty', 'opening_quantity', 'available_qty', 'available quantity',
+    'balance', 'balance_qty', 'current_stock', 'in_stock',
   ],
   gst_rate: [
-    'gst', 'gst_rate', 'gst rate', 'gst_percent', 'gst percent',
-    'gst_percentage', 'gst percentage', 'gst_perc',
-    'tax_rate', 'tax rate', 'tax', 'vat', 'vat_rate',
+    'gst', 'gst_rate', 'gst rate', 'gst_percent', 'gst percent', 'gst_%',
+    'gst_percentage', 'gst percentage', 'gst_perc', 'gst_per',
+    'tax_rate', 'tax rate', 'tax', 'vat', 'vat_rate', 'igst', 'cgst_sgst',
   ],
   supplier: [
     'supplier', 'vendor', 'vendor_name', 'vendor name',
-    'supplier_name', 'supplier name', 'make', 'brand',
+    'supplier_name', 'supplier name', 'make', 'brand', 'manufacturer', 'mfr',
   ],
 }
 
@@ -142,7 +176,6 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
     const internalField = _aliasLookup.get(normHeader)
 
     if (internalField) {
-      // Only take the first column that maps to a given internal field
       if (!fieldMap[internalField]) {
         fieldMap[internalField] = header
       }
@@ -150,6 +183,28 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
       unmatchedHeaders.push(header)
     }
   }
+
+  // ── Fuzzy Secondary Pass for unmapped fields ──────────────────────────────
+  const checkFallback = (field, keywords) => {
+    if (fieldMap[field]) return
+    for (let i = 0; i < unmatchedHeaders.length; i++) {
+      const header = unmatchedHeaders[i]
+      const norm = normalizeKey(header)
+      if (keywords.some(kw => norm.includes(kw))) {
+        fieldMap[field] = header
+        unmatchedHeaders.splice(i, 1)
+        break
+      }
+    }
+  }
+
+  checkFallback('name', ['desc', 'description', 'detail', 'particular', 'nomenclature', 'spec'])
+  checkFallback('planner', ['planner', 'plan', 'category', 'group', 'section', 'segment', 'family'])
+  checkFallback('sku', ['part', 'sku', 'code', 'article', 'number'])
+  checkFallback('purchase_price', ['new_casl_dn', 'new_dn', 'casl_dn', 'dn', 'purchase', 'cost', 'buy', 'net'])
+  checkFallback('dealer_landing_price', ['new_casl_dl', 'new_dl', 'casl_dl', 'landing', 'dl', 'dealer'])
+  checkFallback('selling_price', ['new_mrp', 'casl_mrp', 'mrp', 'sell', 'selling', 'price'])
+  checkFallback('quantity', ['qty', 'quantity', 'stock', 'soh', 'balance', 'count'])
 
   const matchLog = {
     supplierId,
@@ -193,53 +248,64 @@ export function applyMapping(rawRows, fieldMap) {
   })
 }
 
-// ── findActualHeaderRowIndex ───────────────────────────────────────────────────
+const HEADER_KEYWORD_TOKENS = [
+  'part', 'sku', 'code', 'item', 'desc', 'description', 'name',
+  'planner', 'plan', 'category', 'price', 'cost', 'dn', 'dl', 'mrp',
+  'gst', 'qty', 'stock', 'supplier', 'vendor', 'location', 'bin',
+  'details', 'particulars', 'serial', 'no', 'number', 'sec', 'section',
+  'group', 'make', 'brand', 'rate', 'unit', 'amount', 'hsn', 'sac'
+]
 
 /**
  * Scan rows parsed in array-mode (XLSX header:1) and return the index of the
- * first row that looks like a real column-header row.
+ * row that has the highest column-header keyword score.
  *
- * A row qualifies as a header row when it contains at least MIN_STRING_CELLS
- * non-empty, non-numeric string values — this filters out title rows, logo
- * rows, date rows, and blank rows that appear above the real table in many
- * supplier price-list formats.
- *
- * Stops scanning after maxScanRows (default 30) to avoid false positives in
- * large tables.
- *
- * Returns -1 if no qualifying row is found (safe fallback: use row 0).
+ * This robustly identifies the real data table header even when logos, titles,
+ * dates, or blank lines sit above the data table in Excel sheets.
  *
  * @param {Array[]}  arrayRows    - Rows from XLSX.utils.sheet_to_json(ws, { header: 1 })
- * @param {number}   [maxScanRows=30]
- * @param {number}   [minStringCells=2]
+ * @param {number}   [maxScanRows=35]
  * @returns {number}
  */
-export function findActualHeaderRowIndex(arrayRows, maxScanRows = 30, minStringCells = 2) {
+export function findActualHeaderRowIndex(arrayRows, maxScanRows = 35) {
   const limit = Math.min(arrayRows.length, maxScanRows)
+
+  let bestIndex = 0
+  let maxScore = -1
 
   for (let i = 0; i < limit; i++) {
     const row = arrayRows[i]
     if (!Array.isArray(row) || row.length === 0) continue
 
-    // Count cells that are non-empty strings and NOT purely numeric
-    let stringCellCount = 0
+    let score = 0
+    let validCellCount = 0
+
     for (const cell of row) {
       if (cell === null || cell === undefined || cell === '') continue
       const s = String(cell).trim()
       if (s.length === 0) continue
-      // Reject if the cell is just a number (dates, serials, prices in title rows)
-      if (!isNaN(Number(s))) continue
-      // Reject SheetJS placeholder names  (__EMPTY, __EMPTY_1, …)
       if (/^__EMPTY/.test(s)) continue
-      stringCellCount++
+
+      validCellCount++
+
+      const norm = normalizeKey(s)
+      if (!norm) continue
+
+      const isKeywordMatch = HEADER_KEYWORD_TOKENS.some(token => norm.includes(token))
+      if (isKeywordMatch) {
+        score += 3
+      } else if (isNaN(Number(s))) {
+        score += 1
+      }
     }
 
-    if (stringCellCount >= minStringCells) {
-      return i
+    if (validCellCount >= 2 && score > maxScore) {
+      maxScore = score
+      bestIndex = i
     }
   }
 
-  return -1
+  return bestIndex
 }
 
 // ── buildRowsFromSheet ─────────────────────────────────────────────────────────

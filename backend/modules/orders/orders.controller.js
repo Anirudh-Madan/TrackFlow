@@ -1,6 +1,25 @@
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
+const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, StockTransaction, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
 const { notify } = require('../../services/notification.service');
+
+async function adjustStock(productId, qty, type, reference, performedBy, notes, t) {
+  const stock = await StockOnHand.findOne({ where: { product_id: productId }, transaction: t, lock: true });
+  if (stock) {
+    const after = parseFloat(stock.quantity) + qty;
+    await stock.update({ quantity: after }, { transaction: t });
+    await StockTransaction.create({
+      product_id: productId,
+      type,
+      reference,
+      quantity_change: qty,
+      quantity_after: after,
+      performed_by: performedBy,
+      notes,
+    }, { transaction: t });
+    return after;
+  }
+  return 0;
+}
 
 // Helper to generate sequential order number: ORD-YYYYMM-XXXX
 function generateOrderNumber() {
@@ -28,10 +47,8 @@ exports.createOrder = async (req, res, next) => {
       notes,
     } = req.body; // items: [{ product_id, quantity, sm_price }]
 
-    if (!bill_number || !bill_number.trim()) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
-    }
+    // bill_number is NOT required at creation — IM writes it after checking stock and creating bill.
+    const billNo = bill_number && bill_number.trim() ? bill_number.trim() : null;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       await t.rollback();
@@ -61,20 +78,25 @@ exports.createOrder = async (req, res, next) => {
         return res.status(400).json({ success: false, error: 'Each item needs a Part Number or product selection, valid quantity, and selling price' });
       }
 
-      let base_price = 0;
-      let productName = description || part_number || 'Custom Item';
-      let snapshotDlPrice = dl_price != null ? parseFloat(dl_price) : 0;
-
+      let targetProd = null;
       if (product_id) {
-        const product = await Product.findByPk(product_id, { transaction: t });
-        if (!product) {
-          await t.rollback();
-          return res.status(404).json({ success: false, error: `Product with ID ${product_id} not found` });
-        }
-        base_price = parseFloat(product.selling_price || 0);
-        productName = description || product.name;
-        if (dl_price == null) snapshotDlPrice = parseFloat(product.dealer_landing_price || 0);
+        targetProd = await Product.findByPk(product_id, { transaction: t });
+      } else if (part_number) {
+        targetProd = await Product.findOne({ where: { sku: part_number.trim().toUpperCase() }, transaction: t });
       }
+
+      if (!targetProd) {
+        await t.rollback();
+        return res.status(400).json({
+          success: false,
+          error: `Product '${part_number || product_id}' is not in the Products catalog (http://localhost:5173/admin/products). Only products listed in the catalog can be ordered.`
+        });
+      }
+
+      const resolvedProductId = targetProd.id;
+      base_price = parseFloat(targetProd.selling_price || 0);
+      productName = description || targetProd.name || targetProd.sku;
+      if (dl_price == null) snapshotDlPrice = parseFloat(targetProd.dealer_landing_price || 0);
 
       // Snapshot base price & GST
       const gst_percent = 18.00; // Default GST 18%
@@ -82,8 +104,8 @@ exports.createOrder = async (req, res, next) => {
       subtotal += line_total;
 
       itemsToCreate.push({
-        product_id: product_id || null,
-        part_number: part_number || null,
+        product_id: resolvedProductId,
+        part_number: targetProd.sku,
         description: productName,
         dl_price: snapshotDlPrice,
         quantity: qty,
@@ -127,7 +149,7 @@ exports.createOrder = async (req, res, next) => {
       party_id: party_id || null,
       party_name: customer_name || company_name || customer_company || null,
       supplier: supplier || null,
-      bill_number: bill_number.trim(),
+      bill_number: billNo,
       grand_total: grand_total,
       created_by: req.user.id,
       share_token,
@@ -298,7 +320,11 @@ exports.approveOrder = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const order = await Order.findByPk(id, { transaction: t, lock: true });
+    const order = await Order.findByPk(id, {
+      include: [{ model: OrderItem, as: 'items' }],
+      transaction: t,
+      lock: true,
+    });
     if (!order) {
       await t.rollback();
       return res.status(404).json({ success: false, error: 'Order not found' });
@@ -323,18 +349,48 @@ exports.approveOrder = async (req, res, next) => {
       reason: 'Approved by Inventory Manager',
     }, { transaction: t });
 
-    // Generate Challan
-    const dateObj = new Date();
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const random = String(Math.floor(1000 + Math.random() * 9000));
-    const challan_number = `CHN-${year}${month}-${random}`;
+    // Find existing Challan or create new if not present
+    let challan = await Challan.findOne({ where: { order_id: order.id }, transaction: t });
+    let challan_number = challan?.challan_number;
 
-    await Challan.create({
-      challan_number,
-      order_id: order.id,
-      generated_at: new Date(),
-    }, { transaction: t });
+    if (challan) {
+      await challan.update({ status: 'active', generated_at: new Date() }, { transaction: t });
+    } else {
+      const dateObj = new Date();
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const random = String(Math.floor(1000 + Math.random() * 9000));
+      challan_number = `CHN-${year}${month}-${random}`;
+
+      challan = await Challan.create({
+        challan_number,
+        order_id: order.id,
+        party_id: order.party_id,
+        party_name: order.customer_name || order.company_name || order.customer_company,
+        supplier: order.supplier,
+        grand_total: order.grand_total,
+        created_by: req.user.id,
+        status: 'active',
+        generated_at: new Date(),
+      }, { transaction: t });
+    }
+
+    // Deduct stock for order items upon IM approval
+    if (order.items && order.items.length > 0) {
+      for (const item of order.items) {
+        if (item.product_id) {
+          await adjustStock(
+            item.product_id,
+            -Math.abs(item.quantity),
+            'dispatch',
+            challan_number || order.order_number,
+            req.user.id,
+            `Stock updated on IM approval for Order ${order.order_number}`,
+            t
+          );
+        }
+      }
+    }
 
     // Create Audit Log
     await AuditLog.create({
@@ -351,7 +407,11 @@ exports.approveOrder = async (req, res, next) => {
     }, { transaction: t });
 
     await t.commit();
-    return res.json({ success: true, message: 'Order approved successfully', data: { status: 'APPROVED', challan_number } });
+    return res.json({
+      success: true,
+      message: 'Order approved & stock updated. Bill generated in Bills tab.',
+      data: { status: 'APPROVED', challan_number, challan_id: challan?.id }
+    });
   } catch (error) {
     await t.rollback();
     return next(error);

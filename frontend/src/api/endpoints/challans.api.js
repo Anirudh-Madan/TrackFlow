@@ -8,4 +8,6 @@ export const updateChallan        = (id, body)  => client.put(`/challans/${id}`,
 export const deleteChallan        = (id, body)  => client.delete(`/challans/${id}`, { data: body })
 export const returnChallan        = (id, body)  => client.post(`/challans/${id}/return`, body)
 export const checkPartAvailability= (sku)       => client.get(`/challans/check-part?sku=${encodeURIComponent(sku)}`)
+export const setBillNumber       = (id, body)  => client.patch(`/challans/${id}/bill-number`, body)
+export const approveChallan       = (id, body)  => client.post(`/challans/${id}/approve`, body)
 export const getPublicChallan     = (token)     => client.get(`/challans/public/${token}`)

@@ -324,26 +324,37 @@ function ProductDropdown({ products, value, onSelect }) {
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 function ItemRow({ item, index, products, onChange, onRemove }) {
-  const currentDl = item.dl_price !== '' && item.dl_price != null ? item.dl_price : (item.sell_price || '')
-  const currentSellPrice = currentDl
-  const lineTotal = fmtNum(currentSellPrice) * fmtNum(item.qty)
+  const dl = fmtNum(item.dl_price)
+  const sp = item.sell_price !== '' && item.sell_price != null ? fmtNum(item.sell_price) : dl
+  const lineTotal = sp * fmtNum(item.qty)
 
-  const handleDlPriceChange = (val) => {
-    onChange(index, {
-      dl_price: val,
-      sell_price: val, // Auto-calculated equal to DL price
-    })
-  }
-
-  const handleQtyChange = (val) => {
-    onChange(index, {
-      qty: val,
-      sell_price: item.dl_price !== '' ? item.dl_price : item.sell_price,
-    })
+  let marginBadge = null
+  if (dl > 0 && sp > 0) {
+    const pct = ((sp - dl) / dl) * 100
+    const formatted = Math.abs(pct).toFixed(1) + '%'
+    if (pct > 0) {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-50 dark:bg-success-900/30 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800 shrink-0" title={`+₹${(sp - dl).toFixed(2)} margin above DL price`}>
+          +{formatted}
+        </span>
+      )
+    } else if (pct < 0) {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger-50 dark:bg-danger-900/30 text-danger-700 dark:text-danger-400 border border-danger-200 dark:border-danger-800 shrink-0" title={`-₹${(dl - sp).toFixed(2)} discount below DL price`}>
+          -{formatted}
+        </span>
+      )
+    } else {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-100 dark:bg-surface-800 text-surface-500 border border-surface-200 dark:border-surface-700 shrink-0">
+          0%
+        </span>
+      )
+    }
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_1.5fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative items-center">
       {/* Product / Part search */}
       <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Product</label>
@@ -351,58 +362,63 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
           products={products}
           value={item.product_id}
           onSelect={p => {
-            const dl = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '')
+            const dlVal = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '0')
+            const spVal = p.selling_price != null ? String(p.selling_price) : dlVal
             onChange(index, {
               product_id: p.id,
               product_name: p.name,
               part_number: item.part_number || p.sku || '',
               description: item.description || p.name || '',
-              dl_price: dl,
-              sell_price: dl, // Auto calculated from product
+              dl_price: dlVal,
+              sell_price: spVal || dlVal,
             })
           }}
         />
       </div>
 
-      {/* Part Number */}
+      {/* Part Number (Auto-filled from Catalog) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">
           Part No. <span className="text-danger-500">*</span>
         </label>
         <input
           type="text"
+          readOnly
+          disabled
           value={item.part_number}
-          onChange={e => onChange(index, { part_number: e.target.value })}
-          placeholder="e.g. SKU-001"
-          className={inputCls('text-xs font-mono')}
+          placeholder="Select Catalog Product"
+          className={roInputCls + ' text-xs font-mono'}
+          title="Auto-filled from catalog product"
         />
       </div>
 
-      {/* Description */}
+      {/* Description (Auto-filled from Catalog) */}
       <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Description</label>
         <input
           type="text"
+          readOnly
+          disabled
           value={item.description}
-          onChange={e => onChange(index, { description: e.target.value })}
-          placeholder="Item description"
-          className={inputCls('text-xs')}
+          placeholder="Catalog product description"
+          className={roInputCls + ' text-xs'}
+          title="Auto-filled from catalog product"
         />
       </div>
 
-      {/* DL Price (Editable) */}
+      {/* DL Price (NON-EDITABLE) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">DL Price</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
           <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={item.dl_price}
-            onChange={e => handleDlPriceChange(e.target.value)}
+            type="text"
+            disabled
+            readOnly
+            value={item.dl_price !== '' && item.dl_price != null ? Number(item.dl_price).toFixed(2) : '0.00'}
             placeholder="0.00"
-            className={inputCls('pl-6 text-xs')}
+            className={roInputCls + ' pl-6 text-xs font-mono'}
+            title="DL Price (non-editable)"
           />
         </div>
       </div>
@@ -414,25 +430,34 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
           type="number"
           min="1"
           value={item.qty}
-          onChange={e => handleQtyChange(e.target.value)}
+          onChange={e => onChange(index, { qty: e.target.value })}
           placeholder="1"
           className={inputCls('text-xs')}
         />
       </div>
 
-      {/* Selling Price per Unit (Non-editable / Auto-calculated) */}
+      {/* Selling Price per Unit (EDITABLE + MARGIN BOX) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
-          <input
-            type="text"
-            disabled
-            readOnly
-            value={currentSellPrice !== '' && currentSellPrice != null ? Number(currentSellPrice).toFixed(2) : '0.00'}
-            placeholder="0.00"
-            className={roInputCls + ' pl-6 text-xs font-mono font-medium'}
-          />
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
+          <div className="lg:hidden">{marginBadge}</div>
+        </div>
+        <div className="relative flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.sell_price}
+              onChange={e => onChange(index, { sell_price: e.target.value })}
+              placeholder="0.00"
+              className={inputCls('pl-6 text-xs font-mono font-medium')}
+            />
+          </div>
+          <div className="hidden lg:block shrink-0">
+            {marginBadge}
+          </div>
         </div>
       </div>
 
@@ -496,10 +521,6 @@ function PreviewModal({ open, onClose, onConfirm, submitting, data, items, user 
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Challan No.</p>
               <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.challan_number}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Bill Number</p>
-              <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.bill_number || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Date</p>
@@ -634,7 +655,6 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Challan header state
   const [challanNumber] = useState(genChallanNo)
-  const [billNumber, setBillNumber] = useState('')
   const [orderDate, setOrderDate] = useState(todayStr)
   const [supplier, setSupplier] = useState('')
   const [supplierId, setSupplierId] = useState('')
@@ -681,21 +701,17 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
     setItems(prev => prev.length === 1 ? [BLANK_ITEM()] : prev.filter((_, i) => i !== index))
   }
 
-  const subtotal = items.reduce((acc, it) => acc + fmtNum(it.sell_price) * fmtNum(it.qty), 0)
+  const subtotal = items.reduce((acc, it) => acc + (it.sell_price !== '' && it.sell_price != null ? fmtNum(it.sell_price) : fmtNum(it.dl_price)) * fmtNum(it.qty), 0)
   const gst = subtotal * 0.18
   const grand = subtotal + gst
 
   // Validate and open preview
   const handlePreview = () => {
-    if (!billNumber.trim()) {
-      toast.error('Bill Number is required')
-      return
-    }
     if (!customerName.trim()) {
       toast.error('Customer Name is required')
       return
     }
-    const validItems = items.filter(it => it.part_number?.trim() && Number(it.qty) > 0)
+    const validItems = items.filter(it => (it.product_id || it.part_number?.trim()) && Number(it.qty) > 0)
     if (validItems.length === 0) {
       toast.error('Add at least one item with a Part Number and Qty')
       return
@@ -705,17 +721,12 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Actual submit
   const handleSubmit = async () => {
-    if (!billNumber.trim()) {
-      toast.error('Bill Number is required')
-      return
-    }
     const validItems = items.filter(it => (it.product_id || it.part_number?.trim()) && Number(it.qty) > 0)
     setSubmitting(true)
     try {
       const res = await createOrder({
         supplier: supplier || undefined,
         challan_number: challanNumber,
-        bill_number: billNumber.trim(),
         order_date: orderDate,
         customer_name: customerName,
         customer_company: customerCompany || undefined,
@@ -727,7 +738,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
           description: it.description || undefined,
           dl_price: it.dl_price !== '' ? parseFloat(it.dl_price) : undefined,
           quantity: parseInt(it.qty),
-          sm_price: parseFloat(it.sell_price) || 0,
+          sm_price: parseFloat(it.sell_price) || parseFloat(it.dl_price) || 0,
         })),
       })
 
@@ -753,7 +764,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
         onClose={() => setShowPreview(false)}
         onConfirm={handleSubmit}
         submitting={submitting}
-        data={{ challan_number: challanNumber, bill_number: billNumber.trim(), order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
+        data={{ challan_number: challanNumber, order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
         items={items}
         user={user}
       />
@@ -801,19 +812,6 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-surface-400 bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded font-medium">AUTO</span>
               </div>
-            </Field>
-
-            {/* Bill Number */}
-            <Field label="Bill Number" required>
-              <input
-                type="text"
-                required
-                value={billNumber}
-                onChange={e => setBillNumber(e.target.value)}
-                placeholder="Enter bill number"
-                className={inputCls('font-mono')}
-                id="bill-number-input"
-              />
             </Field>
 
             {/* Date */}

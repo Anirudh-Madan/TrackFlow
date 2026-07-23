@@ -721,13 +721,58 @@ exports.supplierWise = async (req, res, next) => {
 exports.activityLog = async (req, res, next) => {
   try {
     const { AuditLog } = require('../../models');
-    const { user_id, startDate, endDate, limit = 100 } = req.query;
+    const { Op } = require('sequelize');
+    const { user_id, role, module: mod, action_type, startDate, endDate, search, limit = 500 } = req.query;
+
     const where = {};
     if (user_id) where.actor_id = user_id;
-    if (startDate && endDate) where.created_at = { [Op.between]: [startDate + ' 00:00:00', endDate + ' 23:59:59'] };
+    if (role && role !== 'all') where.actor_role = role;
+    if (mod && mod !== 'all') where.module = mod;
+    if (action_type && action_type !== 'all') where.action_type = action_type;
 
-    const logs = await AuditLog.findAll({ where, order: [['created_at', 'DESC']], limit: parseInt(limit) });
-    res.json({ success: true, data: logs });
+    if (startDate && endDate) {
+      where.created_at = { [Op.between]: [new Date(startDate + 'T00:00:00'), new Date(endDate + 'T23:59:59')] };
+    }
+
+    if (search && search.trim()) {
+      const q = `%${search.trim().toLowerCase()}%`;
+      where[Op.or] = [
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('actor_name')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('module')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('action_type')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('actor_role')), 'LIKE', q),
+      ];
+    }
+
+    const logs = await AuditLog.findAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+    });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayLogs = await AuditLog.findAll({
+      where: { created_at: { [Op.gte]: todayStart } },
+      attributes: ['actor_id', 'action_type'],
+    });
+
+    const totalCount = await AuditLog.count();
+    const todayCount = todayLogs.length;
+    const uniqueActorsToday = new Set(todayLogs.map(l => l.actor_id)).size;
+    const criticalCount = todayLogs.filter(l => ['delete', 'approve', 'flag', 'price_update', 'password_reset'].includes(l.action_type)).length;
+
+    res.json({
+      success: true,
+      data: logs,
+      stats: {
+        total: totalCount,
+        today: todayCount,
+        activeUsersToday: uniqueActorsToday,
+        criticalToday: criticalCount,
+      }
+    });
   } catch (err) { next(err); }
 };
 

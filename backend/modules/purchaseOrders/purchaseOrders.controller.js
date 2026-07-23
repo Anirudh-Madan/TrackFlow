@@ -165,19 +165,24 @@ exports.create = async (req, res, next) => {
       let part_number = item.part_number ? item.part_number.trim().toUpperCase() : null;
       let description = item.description ? item.description.trim() : null;
 
+      let foundProd = null;
       if (product_id) {
-        const prod = await Product.findByPk(product_id, { transaction: t });
-        if (prod) {
-          if (!part_number) part_number = prod.sku || null;
-          if (!description) description = prod.name || null;
-        }
+        foundProd = await Product.findByPk(product_id, { transaction: t });
       } else if (part_number) {
-        const found = await Product.findOne({ where: { sku: part_number }, transaction: t });
-        if (found) {
-          product_id = found.id;
-          if (!description) description = found.name || null;
-        }
+        foundProd = await Product.findOne({ where: { sku: part_number }, transaction: t });
       }
+
+      if (!foundProd) {
+        await t.rollback();
+        return res.status(400).json({
+          success: false,
+          error: `Part No '${part_number || product_id || 'Unknown'}' is not in the Products catalog (http://localhost:5173/admin/products). Only products listed in the catalog can be ordered.`
+        });
+      }
+
+      product_id = foundProd.id;
+      if (!part_number) part_number = foundProd.sku;
+      if (!description) description = foundProd.name || null;
 
       itemsToCreate.push({
         product_id,

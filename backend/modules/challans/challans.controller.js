@@ -117,11 +117,11 @@ exports.getEditHistory = async (req, res, next) => {
 };
 
 // ── POST /api/v1/challans — Admin creates standalone challan ─────────────────
-// Body: { pin, party_id?, party_name?, supplier?, bill_number, notes?, items: [{product_id, sku, qty, price}] }
+// Body: { pin, party_id?, party_name?, supplier?, notes?, items: [{product_id, sku, qty, price}] }
+// bill_number is NOT required at creation — IM sets it after stock is checked and bill is raised.
 exports.createChallan = async (req, res, next) => {
-  const { pin, party_id, party_name, supplier, bill_number, notes, items } = req.body;
+  const { pin, party_id, party_name, supplier, notes, items } = req.body;
 
-  if (!bill_number?.trim()) return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
   if (!items?.length) return res.status(400).json({ success: false, error: 'At least one item is required' });
 
   if (req.user.role !== 'admin') {
@@ -186,10 +186,10 @@ exports.createChallan = async (req, res, next) => {
     const challan = await Challan.create({
       challan_number,
       share_token,
-      party_id:   party_id || null,
-      party_name: party_name?.trim() || null,
-      supplier:   supplier?.trim() || null,
-      bill_number: bill_number.trim(),
+      party_id:    party_id || null,
+      party_name:  party_name?.trim() || null,
+      supplier:    supplier?.trim() || null,
+      bill_number: null,             // set later by IM after stock check
       notes:       notes?.trim() || null,
       status:      'active',
       is_returned: false,
@@ -229,14 +229,15 @@ exports.createChallan = async (req, res, next) => {
   }
 };
 
-// ── PUT /api/v1/challans/:id — Admin edits challan ───────────────────────────
-// Body: { pin, reason, notes?, supplier?, party_name?, bill_number?, status? }
+// ── PUT /api/v1/challans/:id — Admin edits challan (notes, supplier, party_name, status)
+// bill_number is NOT editable here — use PATCH /:id/bill-number instead.
+// Body: { pin, reason, notes?, supplier?, party_name?, status? }
 exports.updateChallan = async (req, res, next) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
 
-  const { pin, reason, notes, supplier, party_name, bill_number, status } = req.body;
+  const { pin, reason, notes, supplier, party_name, status } = req.body;
 
-  if (!pin)    return res.status(400).json({ success: false, error: 'Admin PIN is required' });
+  if (!pin)            return res.status(400).json({ success: false, error: 'Admin PIN is required' });
   if (!reason?.trim()) return res.status(400).json({ success: false, error: 'Edit reason is required' });
 
   const pinCheck = await verifyAdminPin(pin);
@@ -245,29 +246,25 @@ exports.updateChallan = async (req, res, next) => {
   try {
     const challan = await Challan.findByPk(req.params.id);
     if (!challan) return res.status(404).json({ success: false, error: 'Challan not found' });
-
     if (challan.is_returned) return res.status(400).json({ success: false, error: 'Returned challans cannot be edited' });
-    if (challan.bill_number) return res.status(400).json({ success: false, error: 'Challans with a bill number are locked for editing' });
 
     const changedFields = {};
-    if (notes      !== undefined && notes      !== challan.notes)       changedFields.notes       = { from: challan.notes,       to: notes };
-    if (supplier   !== undefined && supplier   !== challan.supplier)    changedFields.supplier    = { from: challan.supplier,    to: supplier };
-    if (party_name !== undefined && party_name !== challan.party_name)  changedFields.party_name  = { from: challan.party_name,  to: party_name };
-    if (bill_number !== undefined && bill_number !== challan.bill_number) changedFields.bill_number = { from: challan.bill_number, to: bill_number };
-    if (status     !== undefined && status     !== challan.status)      changedFields.status      = { from: challan.status,      to: status };
+    if (notes      !== undefined && notes      !== challan.notes)       changedFields.notes      = { from: challan.notes,      to: notes };
+    if (supplier   !== undefined && supplier   !== challan.supplier)    changedFields.supplier   = { from: challan.supplier,   to: supplier };
+    if (party_name !== undefined && party_name !== challan.party_name)  changedFields.party_name = { from: challan.party_name, to: party_name };
+    if (status     !== undefined && status     !== challan.status)      changedFields.status     = { from: challan.status,     to: status };
 
     await challan.update({
-      notes:        notes       !== undefined ? notes       : challan.notes,
-      supplier:     supplier    !== undefined ? supplier    : challan.supplier,
-      party_name:   party_name  !== undefined ? party_name  : challan.party_name,
-      bill_number:  bill_number !== undefined ? bill_number : challan.bill_number,
-      status:       status      !== undefined ? status      : challan.status,
+      notes:       notes       !== undefined ? notes       : challan.notes,
+      supplier:    supplier    !== undefined ? supplier    : challan.supplier,
+      party_name:  party_name  !== undefined ? party_name  : challan.party_name,
+      status:      status      !== undefined ? status      : challan.status,
     });
 
     await ChallanEditLog.create({
-      challan_id: challan.id,
-      edited_by:  req.user.id,
-      edit_reason: reason.trim(),
+      challan_id:     challan.id,
+      edited_by:      req.user.id,
+      edit_reason:    reason.trim(),
       changed_fields: changedFields,
     });
 
@@ -276,7 +273,143 @@ exports.updateChallan = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── DELETE /api/v1/challans/:id — Admin deletes (restores stock) ──────────────
+// ── PATCH /api/v1/challans/:id/bill-number — IM (or admin) sets the bill number
+// Called after IM has approved the challan, checked stock, and the physical bill is created.
+// Body: { bill_number }
+exports.setBillNumber = async (req, res, next) => {
+  const roleName = typeof req.user?.role === 'object' ? req.user.role.name : req.user?.role;
+  if (!['admin', 'inventory_manager'].includes(roleName)) {
+    return res.status(403).json({ success: false, error: 'Admin or Inventory Manager only' });
+  }
+
+  const { bill_number } = req.body;
+  if (!bill_number?.trim()) {
+    return res.status(400).json({ success: false, error: 'Bill number is required' });
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const challan = await Challan.findByPk(req.params.id, { transaction: t });
+    if (!challan) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: 'Challan not found' });
+    }
+    if (challan.is_returned || challan.status === 'returned') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Returned bills/challans cannot be updated' });
+    }
+
+    const prev = challan.bill_number;
+    const newBillNo = bill_number.trim();
+    await challan.update({ bill_number: newBillNo }, { transaction: t });
+
+    // Sync with order if linked
+    if (challan.order_id) {
+      try {
+        const order = await Order.findByPk(challan.order_id, { transaction: t });
+        if (order) {
+          await OrderStatusHistory.create({
+            order_id: order.id,
+            from_status: order.status,
+            to_status: order.status,
+            changed_by: req.user.id,
+            reason: `Bill number updated to ${newBillNo}`,
+          }, { transaction: t });
+        }
+      } catch (hErr) {
+        console.warn('OrderStatusHistory warning:', hErr.message);
+      }
+    }
+
+    try {
+      await ChallanEditLog.create({
+        challan_id:     challan.id,
+        edited_by:      req.user.id,
+        edit_reason:    prev ? `Bill number updated from ${prev} to ${newBillNo}` : `Bill number set: ${newBillNo}`,
+        changed_fields: { bill_number: { from: prev || null, to: newBillNo } },
+      }, { transaction: t });
+    } catch (lErr) {
+      console.warn('ChallanEditLog warning:', lErr.message);
+    }
+
+    await t.commit();
+
+    const result = await Challan.findByPk(challan.id, { include: buildIncludes() });
+    return res.json({ success: true, data: result, message: 'Bill number updated everywhere.' });
+  } catch (err) {
+    await t.rollback();
+    next(err);
+  }
+};
+
+// ── POST /api/v1/challans/:id/approve — IM approves challan after checking stock
+exports.approveChallan = async (req, res, next) => {
+  const role = req.user.role;
+  if (!['admin', 'inventory_manager'].includes(role)) {
+    return res.status(403).json({ success: false, error: 'Admin or Inventory Manager only' });
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const challan = await Challan.findByPk(req.params.id, {
+      include: buildIncludes(),
+      transaction: t,
+      lock: true,
+    });
+
+    if (!challan) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: 'Challan not found' });
+    }
+    if (challan.is_returned) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Returned challans cannot be approved' });
+    }
+
+    // Adjust stock if order items exist
+    if (challan.order?.items?.length) {
+      for (const item of challan.order.items) {
+        if (item.product_id) {
+          await adjustStock(
+            item.product_id,
+            -Math.abs(item.quantity),
+            'dispatch',
+            challan.challan_number,
+            req.user.id,
+            `Stock updated on IM approval for Challan ${challan.challan_number}`,
+            t
+          );
+        }
+      }
+    }
+
+    await challan.update({ status: 'active' }, { transaction: t });
+
+    if (challan.order_id) {
+      const order = await Order.findByPk(challan.order_id, { transaction: t });
+      if (order && order.status === 'PENDING') {
+        await order.update({ status: 'APPROVED' }, { transaction: t });
+      }
+    }
+
+    await ChallanEditLog.create({
+      challan_id: challan.id,
+      edited_by: req.user.id,
+      edit_reason: 'IM checked stock and approved. Stock updated, bill status ready.',
+      changed_fields: { status: { from: challan.status, to: 'active' } },
+    }, { transaction: t });
+
+    await t.commit();
+
+    const result = await Challan.findByPk(challan.id, { include: buildIncludes() });
+    return res.json({ success: true, data: result, message: 'Challan stock checked & updated. Ready for bill number.' });
+  } catch (err) {
+    await t.rollback();
+    next(err);
+  }
+};
+
+
 // Body: { pin }
 exports.deleteChallan = async (req, res, next) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
@@ -292,13 +425,9 @@ exports.deleteChallan = async (req, res, next) => {
     const challan = await Challan.findByPk(req.params.id, { transaction: t });
     if (!challan) { await t.rollback(); return res.status(404).json({ success: false, error: 'Challan not found' }); }
 
-    if (challan.bill_number) {
+    if (challan.is_returned || challan.status === 'returned') {
       await t.rollback();
-      return res.status(400).json({ success: false, error: 'Challans with a bill number cannot be deleted' });
-    }
-    if (challan.is_returned) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'Returned challans cannot be deleted' });
+      return res.status(400).json({ success: false, error: 'Returned bills/challans cannot be deleted and must remain in permanent record.' });
     }
 
     // Restore stock — pull from StockTransaction logs for this challan

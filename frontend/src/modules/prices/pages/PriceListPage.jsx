@@ -142,6 +142,7 @@ export default function PriceListPage() {
   const [importEffectiveFrom, setImportEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
   const [importStockMode, setImportStockMode] = useState('relative')
   const [unmatchedHeaders, setUnmatchedHeaders] = useState([])  // columns the file had that we couldn't map
+  const [matchedFields, setMatchedFields]     = useState({})    // successfully mapped fields for display
 
   // Forms hook
   const recordForm = useForm({
@@ -294,6 +295,7 @@ export default function PriceListPage() {
 
     setImportFileName(file.name)
     setUnmatchedHeaders([])   // reset on each new file
+    setMatchedFields({})      // reset matched fields display
     const fileExtension = file.name.split('.').pop().toLowerCase()
     const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls'
 
@@ -304,8 +306,15 @@ export default function PriceListPage() {
         if (isExcel) {
           const data = new Uint8Array(e.target.result)
           const workbook = XLSX.read(data, { type: 'array' })
-          const firstSheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[firstSheetName]
+          let targetSheetName = workbook.SheetNames[0]
+          for (const sName of workbook.SheetNames) {
+            const normSName = sName.toLowerCase()
+            if (normSName.includes('price') || normSName.includes('part') || normSName.includes('catalog') || normSName.includes('data') || normSName.includes('master') || normSName.includes('item')) {
+              targetSheetName = sName
+              break
+            }
+          }
+          const worksheet = workbook.Sheets[targetSheetName]
           // Parse in array mode first so we can detect the real header row
           // (avoids __EMPTY_N placeholders when title/logo rows sit above data)
           const allArrayRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
@@ -341,13 +350,16 @@ export default function PriceListPage() {
         const supplierName = selectedImportSupplier || detectedSupplier
         const { fieldMap, unmatchedHeaders: unmatched, matchLog } = matchHeaders(rawHeaders, supplierName)
 
+        // Store matched fields for display
+        setMatchedFields(fieldMap)
+
         // Always log matching detail — invaluable for debugging supplier files
         console.group('[Import – Prices] Header matching result')
         console.log('File            :', file.name)
         console.log('Supplier        :', supplierName)
-        console.log('Raw headers      :', matchLog.received)
-        console.log('Matched fields   :', matchLog.matched)
-        console.log('Unmatched headers:', matchLog.unmatched)
+        console.log('Raw headers     :', matchLog.received)
+        console.log('Matched fields  :', JSON.stringify(matchLog.matched, null, 2))
+        console.log('Unmatched headers:', JSON.stringify(matchLog.unmatched, null, 2))
         console.groupEnd()
 
         // ── Build normalised rows ───────────────────────────────────────────
@@ -378,11 +390,12 @@ export default function PriceListPage() {
             fieldMap,
           })
           toast.error(
-            `No matching columns found. Received: [${matchLog.received.join(', ')}]. Check console for details.`
+            `No valid data rows found. We need at least: Part Number or SKU. Check browser console for details.`,
+            { duration: 6000 }
           )
         } else if (unmatched.length > 0) {
           toast.success(
-            `Parsed ${normalizedRows.length} rows (${detectedSupplier}). ${unmatched.length} column(s) not recognised — see warning below.`
+            `Parsed ${normalizedRows.length} rows (${detectedSupplier}). ${unmatched.length} column(s) not recognised — see console for details.`
           )
         } else {
           toast.success(`Successfully parsed ${normalizedRows.length} rows (${detectedSupplier}).`)
@@ -447,13 +460,14 @@ export default function PriceListPage() {
         errors.push('No prices, GST %, or stock levels specified for update')
       }
 
-      const importName = item.name?.trim() || item.sku?.trim()
+      const importName = item.name?.trim() || dbProduct?.name || item.sku?.trim()
+      const importPlanner = item.planner?.trim() || dbProduct?.planner || ''
 
       return {
         id: index,
         sku: item.sku,
         name: importName,
-        planner: item.planner,
+        planner: importPlanner,
         location: item.location,
         supplier: item.supplier,
         purchase_price: item.purchase_price,
@@ -846,6 +860,8 @@ export default function PriceListPage() {
           setIsImportOpen(false)
           setParsedImportData([])
           setImportFileName('')
+          setMatchedFields({})
+          setUnmatchedHeaders([])
         }}
         title="Import Price Records"
         description="Upload an Excel (.xlsx, .xls) or CSV file containing part net prices and tax mappings."
@@ -936,6 +952,19 @@ export default function PriceListPage() {
           {/* Preview list */}
           {parsedImportData.length > 0 && (
             <div className="space-y-2">
+              {/* Column Matching Summary */}
+              {Object.keys(matchedFields).length > 0 && (
+                <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/50 rounded-lg text-[11px] text-success-700 dark:text-success-300 flex gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-success-500 dark:text-success-400" />
+                  <div>
+                    <strong>Successfully mapped {Object.keys(matchedFields).length} field(s):</strong>{' '}
+                    <span className="font-mono">
+                      {Object.entries(matchedFields).map(([field, header]) => `${header} → ${field}`).join(', ')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between items-center text-xs font-medium text-surface-500 px-1">
                 <span>Data Preview</span>
                 <span className="text-right">
@@ -974,20 +1003,19 @@ export default function PriceListPage() {
                       return (
                         <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
                           <td className="px-4 py-2">
-                            <span className="font-mono font-medium block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
-                            {item.dbProduct ? (
-                              <span className="text-[10px] text-surface-400">{item.dbProduct.name}</span>
-                            ) : (
-                              <span className="text-[10px] text-primary-500 italic">Will create: {item.name}</span>
-                            )}
+                            <span className="font-mono font-bold block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
+                            <span className="text-[11px] font-medium text-surface-600 dark:text-surface-300 block">{item.name || '—'}</span>
                           </td>
                           <td className="px-4 py-2">
                             <div className="space-y-0.5">
-                              {item.planner && (
-                                <div>
-                                  <span className="text-surface-400">Planner: </span>
-                                  <span>{item.planner}</span>
+                              {item.planner ? (
+                                <div className="mb-0.5">
+                                  <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                    Planner: {item.planner}
+                                  </span>
                                 </div>
+                              ) : (
+                                <span className="text-surface-400 text-[10px] italic">No Planner</span>
                               )}
                               {item.purchase_price && (
                                 <div>
@@ -1081,6 +1109,8 @@ export default function PriceListPage() {
                   setIsImportOpen(false)
                   setParsedImportData([])
                   setImportFileName('')
+                  setMatchedFields({})
+                  setUnmatchedHeaders([])
                 }}
                 disabled={importing}
                 className="w-full sm:w-auto"

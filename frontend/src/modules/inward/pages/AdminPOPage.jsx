@@ -12,6 +12,7 @@ import {
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
   deletePurchaseOrder, returnPurchaseOrder
 } from '../../../api/endpoints/purchaseOrders.api'
+import { getProducts } from '../../../api/endpoints/products.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
 
@@ -134,28 +135,36 @@ export default function AdminPOPage() {
   const isAdmin = user?.role === 'admin' || user?.role?.name === 'admin'
 
   const [pos, setPos]             = useState([])
+  const [products, setProducts]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filterStatus, setFilter] = useState('all')
 
-  const [showCreate, setShowCreate]   = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
-  const [viewPO, setViewPO]           = useState(null)
-  const [editPO, setEditPO]           = useState(null)
+  const [showCreate, setShowCreate]     = useState(false)
+  const [showPreview, setShowPreview]   = useState(false)
+  const [viewPO, setViewPO]             = useState(null)
+  const [editPO, setEditPO]             = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [returnTarget, setReturnTarget] = useState(null)
 
-  const [pinModalOpen, setPinModalOpen] = useState(false)
-  const [pinLoading, setPinLoading]     = useState(false)
-  const [pendingAction, setPendingAction] = useState(null)
+  // PIN modal — pinFor tells us which action to run on confirm
+  const [pinOpen, setPinOpen]       = useState(false)
+  const [pinFor, setPinFor]         = useState(null) // 'create' | 'edit' | 'delete' | 'return'
+  const [pinLoading, setPinLoading] = useState(false)
 
-  const [form, setForm] = useState({ vendor_name: '', po_date: new Date().toISOString().split('T')[0], notes: '', bill_number: '', items: [{ ...EMPTY_ITEM }] })
+  const [form, setForm]           = useState({ vendor_name: '', po_date: new Date().toISOString().split('T')[0], notes: '', bill_number: '', items: [{ ...EMPTY_ITEM }] })
   const [editForm, setEditForm]   = useState({ reason: '', notes: '', vendor_name: '', bill_number: '' })
   const [returnForm, setReturnForm] = useState({ reason: '' })
   const [submitting, setSubmitting] = useState(false)
 
   const fetchPOs = useCallback(async () => {
     setLoading(true)
-    try { const res = await getPurchaseOrders(); if (res.success) setPos(res.data) }
+    try {
+      const res = await getPurchaseOrders()
+      if (res.success) setPos(res.data)
+      const pRes = await getProducts()
+      if (pRes.success) setProducts(pRes.data)
+    }
     catch { toast.error('Failed to load purchase orders') }
     finally { setLoading(false) }
   }, [])
@@ -187,16 +196,6 @@ export default function AdminPOPage() {
     }
   }, [pos])
 
-  const requirePin = (action) => { setPendingAction(() => action); setPinModalOpen(true) }
-
-  const handlePinVerified = async (pin) => {
-    if (!pendingAction) return
-    setPinLoading(true)
-    try { await pendingAction(pin); setPinModalOpen(false); setPendingAction(null) }
-    catch (err) { toast.error(err.response?.data?.error || err.message || 'PIN verification failed') }
-    finally { setPinLoading(false) }
-  }
-
   const updateItem = (index, field, value) => {
     setForm(f => { const items = [...f.items]; items[index] = { ...items[index], [field]: value }; return { ...f, items } })
   }
@@ -210,53 +209,64 @@ export default function AdminPOPage() {
     setShowPreview(true)
   }
 
-  const handleSubmitCreate = () => {
-    requirePin(async (pin) => {
-      setSubmitting(true)
-      try {
+  // PIN confirmation: open modal for a specific action
+  const openPin = (action) => { setPinFor(action); setPinOpen(true) }
+  const closePin = () => { setPinOpen(false); setPinFor(null) }
+
+  const handlePinConfirmed = async (pin) => {
+    setPinLoading(true)
+    try {
+      if (pinFor === 'create') {
         const body = {
           pin,
-          vendor_name:  form.vendor_name.trim() || undefined,
-          po_date:      form.po_date,
-          notes:        form.notes.trim() || undefined,
-          bill_number:  form.bill_number.trim(),
-          items: form.items.map(i => ({ part_number: i.part_number.trim().toUpperCase(), description: i.description, quantity: parseInt(i.quantity), unit_price: parseFloat(i.unit_price) || 0 })),
+          vendor_name: form.vendor_name.trim() || undefined,
+          po_date:     form.po_date,
+          notes:       form.notes.trim() || undefined,
+          bill_number: form.bill_number.trim(),
+          items: form.items.map(i => ({
+            part_number: i.part_number.trim().toUpperCase(),
+            description: i.description,
+            quantity:    parseInt(i.quantity),
+            unit_price:  parseFloat(i.unit_price) || 0,
+          })),
         }
         const res = await createPurchaseOrder(body)
         if (res.success) {
           toast.success(`PO ${res.data.po_number} created!`)
-          setShowPreview(false); setShowCreate(false)
-          fetchPOs()
+          closePin(); setShowPreview(false); setShowCreate(false); fetchPOs()
         } else { toast.error(res.error || 'Failed to create PO') }
-      } catch (err) { toast.error(err.response?.data?.error || 'Failed to create PO'); throw err }
-      finally { setSubmitting(false) }
-    })
+      } else if (pinFor === 'edit') {
+        const res = await updatePurchaseOrder(editPO.id, { pin, ...editForm })
+        if (res.success) { toast.success('PO updated'); closePin(); setEditPO(null); fetchPOs() }
+        else { toast.error(res.error || 'Failed to update') }
+      } else if (pinFor === 'delete') {
+        const res = await deletePurchaseOrder(deleteTarget.id, { pin })
+        if (res.success) { toast.success('PO deleted'); closePin(); setDeleteTarget(null); fetchPOs() }
+        else { toast.error(res.error || 'Cannot delete') }
+      } else if (pinFor === 'return') {
+        const res = await returnPurchaseOrder(returnTarget.id, { pin, reason: returnForm.reason })
+        if (res.success) { toast.success('PO returned'); closePin(); setReturnTarget(null); fetchPOs() }
+        else { toast.error(res.error || 'Failed to return') }
+      }
+    } catch (err) {
+      toast.error(err.message || 'Action failed')
+    } finally {
+      setPinLoading(false)
+    }
   }
+
+  const handleSubmitCreate = () => openPin('create')
 
   const handleEdit = () => {
     if (!editForm.reason.trim()) { toast.error('Edit reason is required'); return }
-    requirePin(async (pin) => {
-      const res = await updatePurchaseOrder(editPO.id, { pin, ...editForm })
-      if (res.success) { toast.success('PO updated'); setEditPO(null); fetchPOs() }
-      else { toast.error(res.error || 'Failed to update'); throw new Error(res.error) }
-    })
+    openPin('edit')
   }
 
-  const handleDelete = (po) => {
-    requirePin(async (pin) => {
-      const res = await deletePurchaseOrder(po.id, { pin })
-      if (res.success) { toast.success('PO deleted'); fetchPOs() }
-      else { toast.error(res.error || 'Cannot delete'); throw new Error(res.error) }
-    })
-  }
+  const handleDelete = (po) => { setDeleteTarget(po); openPin('delete') }
 
   const handleReturn = () => {
     if (!returnForm.reason.trim()) { toast.error('Return reason is required'); return }
-    requirePin(async (pin) => {
-      const res = await returnPurchaseOrder(returnTarget.id, { pin, reason: returnForm.reason })
-      if (res.success) { toast.success('PO returned and stock restored'); setReturnTarget(null); fetchPOs() }
-      else { toast.error(res.error || 'Failed to return'); throw new Error(res.error) }
-    })
+    openPin('return')
   }
 
   const exportPOsCSV = () => {
@@ -356,11 +366,22 @@ export default function AdminPOPage() {
                 </thead>
                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm">
                   {paginatedPOs.map(p => {
-                    const locked = !!(p.bill_number || p.is_returned)
+                    const isReturned  = p.is_returned || p.status === 'RETURNED'
+                    const hasBill     = !!p.bill_number
+                    const isEditable  = !isReturned && !hasBill
+                    const isDeletable = !isReturned && !hasBill
+                    const isReturnable = !isReturned
                     return (
                       <tr key={p.id} className="table-row-hover">
                         <td className="px-5 py-4">
-                          <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{p.po_number}</div>
+                          <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs flex items-center gap-1.5">
+                            {p.po_number}
+                            {hasBill && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold" title={`Bill #${p.bill_number}`}>
+                                <Lock className="h-3 w-3 text-warning-500" />{p.bill_number}
+                              </span>
+                            )}
+                          </div>
                           {p.share_token && (
                             <a href={`/po/view/${p.share_token}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-xs text-surface-400 hover:text-primary-500 mt-0.5">
                               <ExternalLink className="h-3 w-3" /> Share link
@@ -375,11 +396,48 @@ export default function AdminPOPage() {
                         <td className="px-5 py-4"><StatusBadge status={p.status} /></td>
                         <td className="px-5 py-4 font-semibold text-xs">₹{parseFloat(p.total || 0).toFixed(2)}</td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button variant="ghost" size="sm" icon={Eye} onClick={() => setViewPO(p)}>View</Button>
-                            {!locked && <Button variant="ghost" size="sm" icon={Pencil} onClick={() => { setEditPO(p); setEditForm({ reason: '', notes: p.notes || '', vendor_name: p.vendor_name || '', bill_number: '' }) }}>Edit</Button>}
-                            {!p.is_returned && <Button variant="ghost" size="sm" icon={RotateCcw} onClick={() => { setReturnTarget(p); setReturnForm({ reason: '' }) }} className="text-amber-600">Return</Button>}
-                            {!locked && <Button variant="ghost" size="sm" icon={Trash2} onClick={() => handleDelete(p)} className="text-danger-500">Delete</Button>}
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              icon={Eye}
+                              onClick={() => setViewPO(p)}
+                              title="View PO details"
+                            >
+                              View
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              icon={Pencil}
+                              disabled={!isEditable}
+                              title={isReturned ? 'Returned POs cannot be edited' : hasBill ? 'POs with a bill number cannot be edited' : 'Edit PO'}
+                              onClick={() => { setEditPO(p); setEditForm({ reason: '', notes: p.notes || '', vendor_name: p.vendor_name || '', bill_number: '' }) }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              icon={RotateCcw}
+                              disabled={!isReturnable}
+                              title={isReturned ? 'PO is already returned' : hasBill ? `Return PO & associated Bill #${p.bill_number}` : 'Return PO'}
+                              onClick={() => { setReturnTarget(p); setReturnForm({ reason: '' }) }}
+                              className={cn(isReturnable && 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20')}
+                            >
+                              {isReturned ? 'Returned' : 'Return'}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              icon={Trash2}
+                              disabled={!isDeletable}
+                              title={isReturned ? 'Returned POs cannot be deleted' : hasBill ? 'POs with a bill number cannot be deleted' : 'Delete PO'}
+                              onClick={() => handleDelete(p)}
+                              className={cn(isDeletable && 'text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20')}
+                            >
+                              Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -412,13 +470,50 @@ export default function AdminPOPage() {
               <div className="col-span-3">Part No *</div><div className="col-span-3">Description</div><div className="col-span-2">Qty</div><div className="col-span-2">Unit Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
             </div>
             {form.items.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-3"><input type="text" value={item.part_number} onChange={e => updateItem(i, 'part_number', e.target.value.toUpperCase())} className="input-base text-xs" placeholder="Part No" /></div>
-                <div className="col-span-3"><input type="text" value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} className="input-base text-xs" placeholder="Description" /></div>
-                <div className="col-span-2"><input type="number" value={item.quantity} min={1} onChange={e => updateItem(i, 'quantity', e.target.value)} className="input-base text-xs" /></div>
-                <div className="col-span-2"><input type="number" value={item.unit_price} min={0} step={0.01} onChange={e => updateItem(i, 'unit_price', e.target.value)} className="input-base text-xs" /></div>
-                <div className="col-span-1 text-xs font-medium">{item.quantity && item.unit_price ? `₹${(parseFloat(item.quantity) * parseFloat(item.unit_price)).toFixed(0)}` : '—'}</div>
-                <div className="col-span-1 flex justify-center"><button type="button" onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))} className="text-danger-400 hover:text-danger-600"><X className="h-4 w-4" /></button></div>
+              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-surface-50/50 dark:bg-surface-800/20 p-2 rounded-xl border border-surface-200 dark:border-surface-700">
+                <div className="col-span-3">
+                  <select
+                    className="input-base text-xs font-mono bg-white dark:bg-surface-900"
+                    value={item.product_id || ''}
+                    onChange={e => {
+                      const selId = e.target.value
+                      const p = products.find(prod => String(prod.id) === String(selId))
+                      if (p) {
+                        setForm(f => {
+                          const items = [...f.items]
+                          items[i] = {
+                            ...items[i],
+                            product_id: p.id,
+                            part_number: p.sku,
+                            description: p.name || p.sku,
+                            unit_price: p.purchase_price != null ? p.purchase_price : (p.dealer_landing_price != null ? p.dealer_landing_price : '0')
+                          }
+                          return { ...f, items }
+                        })
+                      }
+                    }}
+                  >
+                    <option value="">— Select Catalog Part —</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.sku} – {p.name || 'No Name'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-3">
+                  <input type="text" readOnly disabled value={item.description} className="input-base text-xs bg-surface-100 dark:bg-surface-800 cursor-not-allowed" placeholder="Description" />
+                </div>
+                <div className="col-span-2">
+                  <input type="number" value={item.quantity} min={1} onChange={e => updateItem(i, 'quantity', e.target.value)} className="input-base text-xs" />
+                </div>
+                <div className="col-span-2">
+                  <input type="number" value={item.unit_price} min={0} step={0.01} onChange={e => updateItem(i, 'unit_price', e.target.value)} className="input-base text-xs" />
+                </div>
+                <div className="col-span-1 text-xs font-medium font-mono">{item.quantity && item.unit_price ? `₹${(parseFloat(item.quantity) * parseFloat(item.unit_price)).toFixed(0)}` : '—'}</div>
+                <div className="col-span-1 flex justify-center">
+                  <button type="button" onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))} className="text-danger-400 hover:text-danger-600"><X className="h-4 w-4" /></button>
+                </div>
               </div>
             ))}
             <Button type="button" variant="secondary" size="sm" icon={Plus} onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...EMPTY_ITEM }] }))}>Add Item</Button>
@@ -562,7 +657,7 @@ export default function AdminPOPage() {
         </Modal>
       )}
 
-      <PinModal open={pinModalOpen} onVerify={handlePinVerified} onClose={() => { setPinModalOpen(false); setPendingAction(null) }} loading={pinLoading} />
+      <PinModal open={pinOpen} onVerify={handlePinConfirmed} onClose={closePin} loading={pinLoading} />
     </div>
   )
 }

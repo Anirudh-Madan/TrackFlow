@@ -52,8 +52,25 @@ exports.createProduct = async (req, res, next) => {
 
     if (!sku?.trim()) return res.status(400).json({ success: false, error: 'Part No is required' });
 
-    const existing = await Product.findOne({ where: { sku: sku.trim().toUpperCase() } });
+    const cleanSku = sku.trim().toUpperCase();
+    const existing = await Product.findOne({ where: { sku: cleanSku } });
     if (existing) return res.status(400).json({ success: false, error: 'A product with this Part No already exists' });
+
+    // Validate that the product has price list entries
+    const hasBodyPrices = (purchase_price !== undefined && purchase_price !== '' && purchase_price !== null) ||
+                          (dealer_landing_price !== undefined && dealer_landing_price !== '' && dealer_landing_price !== null) ||
+                          (selling_price !== undefined && selling_price !== '' && selling_price !== null);
+
+    const existingPricingCount = await Pricing.count({
+      include: [{ model: Product, where: { sku: cleanSku } }]
+    });
+
+    if (!hasBodyPrices && existingPricingCount === 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Product '${cleanSku}' must exist in the Price List with valid prices (DN, DL, or Selling Price) before it can be added to the Products catalog.`
+      });
+    }
 
     let plannerVal = planner?.trim() || null;
     if (!plannerVal && category_id) {
@@ -63,7 +80,7 @@ exports.createProduct = async (req, res, next) => {
 
     const product = await Product.create({
       name: name?.trim() || null,
-      sku: sku.trim().toUpperCase(),
+      sku: cleanSku,
       category_id: category_id || null,
       uom_id: uom_id || null,
       purchase_price: purchase_price !== undefined && purchase_price !== '' && purchase_price !== null ? parseFloat(purchase_price) : null,
@@ -77,9 +94,21 @@ exports.createProduct = async (req, res, next) => {
       gst_rate: gst_rate !== undefined && gst_rate !== '' && gst_rate !== null ? parseFloat(gst_rate) : 18.00,
     });
 
-    // Create initial stock rows
+    // Create initial stock rows & Pricing history row
     await StockOnHand.create({ product_id: product.id, quantity: 0 });
     await StockReserved.create({ product_id: product.id, quantity: 0 });
+
+    if (hasBodyPrices) {
+      await Pricing.create({
+        product_id: product.id,
+        purchase_price: product.purchase_price,
+        dealer_landing_price: product.dealer_landing_price,
+        selling_price: product.selling_price,
+        effective_from: new Date().toISOString().split('T')[0],
+        created_by: req.user?.id || null,
+        notes: 'Created via Products Catalog'
+      });
+    }
 
     await AuditLog.create({
       actor_id: req.user.id, actor_name: req.user.name, actor_role: req.user.role,
