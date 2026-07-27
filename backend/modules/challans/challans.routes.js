@@ -16,6 +16,8 @@ router.get('/:id/edit-history',c.getEditHistory);
 router.post('/',               c.createChallan);
 router.put('/:id',             c.updateChallan);
 router.delete('/:id',          c.deleteChallan);
-router.post('/:id/return',     c.returnChallan);
+router.patch('/:id/bill-number', c.setBillNumber);
+router.post('/:id/approve',     c.approveChallan);
+router.post('/:id/return',      c.returnChallan);
 
 module.exports = router;

@@ -105,6 +105,7 @@ const EMPTY_PAYMENT = {
 export default function PaymentsListPage() {
   const [payments, setPayments] = useState(INITIAL_PAYMENTS)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
 
   useEffect(() => { setPage(1) }, [search, statusFilter])

@@ -13,6 +13,8 @@ router.get('/salesman-wise',  requirePermission('reports.sales'), c.salesmanWise
 router.get('/party-wise',     requirePermission('reports.sales'), c.partyWise);
 router.get('/supplier-wise',  requirePermission('reports.sales'), c.supplierWise);
 router.get('/activity-log',   requirePermission('reports.sales'), c.activityLog);
+router.get('/part-history',   c.partHistory);
+router.get('/part-suggestions', c.partSearchSuggestions);
 router.post('/ai-insight',    c.aiInsight);
 
 module.exports = router;

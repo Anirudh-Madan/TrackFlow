@@ -21,6 +21,7 @@ import {
   BarChart3,
   TrendingUp,
   ClipboardList,
+  Activity,
   FileUp,
   Lightbulb,
   Bell,
@@ -72,10 +73,6 @@ export default function Sidebar() {
           <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
             <SidebarItem to="/im/stock" icon={Package} label="Products & Stock" collapsed={sidebarCollapsed} />
             <SidebarItem to="/im/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
-            <CollapsibleGroup label="Inward Entries" icon={FileUp} collapsed={sidebarCollapsed} defaultOpen>
-              <SidebarItem to="/im/inward/new" icon={Plus} label="New Inward" collapsed={sidebarCollapsed} />
-              <SidebarItem to="/im/inward" icon={History} label="Inward History" collapsed={sidebarCollapsed} />
-            </CollapsibleGroup>
           </SidebarGroup>
 
           {/* Fulfilment */}
@@ -141,7 +138,7 @@ export default function Sidebar() {
 
           {/* Operations */}
           <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
-            <SidebarItem to="/sm/reorder-flags" icon={RefreshCcw} label="Reorder Flags" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/sm/stock" state={{ activeTab: 'reorder-flags' }} icon={RefreshCcw} label="Reorder Flags" collapsed={sidebarCollapsed} />
           </SidebarGroup>
 
           {/* System */}
@@ -198,6 +195,12 @@ export default function Sidebar() {
             label="Users & Roles"
             collapsed={sidebarCollapsed}
           />
+          <SidebarItem
+            to="/admin/activity-logs"
+            icon={Activity}
+            label="Activity Logs"
+            collapsed={sidebarCollapsed}
+          />
         </SidebarGroup>
 
         {/* Operations */}
@@ -206,12 +209,12 @@ export default function Sidebar() {
           <SidebarItem to="/admin/customers" icon={User} label="Customers" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/part-history" icon={History} label="Part History" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Fulfilment */}
         <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/orders" icon={ShoppingCart} label="Orders" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/challans" icon={FileText} label="Delivery Challans" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/purchase-orders" icon={FileUp} label="Purchase Orders" collapsed={sidebarCollapsed} />
           <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
@@ -224,7 +227,6 @@ export default function Sidebar() {
             <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
             <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/audit" icon={ClipboardList} label="Audit Logs" collapsed={sidebarCollapsed} />
           </CollapsibleGroup>
         </SidebarGroup>
 

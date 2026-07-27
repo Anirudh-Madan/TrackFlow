@@ -24,6 +24,8 @@ const reportsRoutes = require('./modules/reports/reports.routes');
 const rbacRoutes = require('./modules/rbac/rbac.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
 
+const path = require('path');
+
 const app = express();
 
 // Middleware
@@ -35,6 +37,9 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
+
+// Static files (PDFs, Challans, Uploads)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/v1/auth',    authRoutes);

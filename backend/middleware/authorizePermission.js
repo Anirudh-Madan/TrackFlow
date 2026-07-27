@@ -30,7 +30,16 @@ async function loadPermissionsForRole(roleId) {
 function requirePermission(...keys) {
   return async (req, res, next) => {
     try {
-      if (!req.user || !req.user.role_id) {
+      if (!req.user) {
+        return res.status(401).json({ success: false, error: 'Not authenticated' });
+      }
+
+      const roleName = typeof req.user.role === 'object' ? req.user.role?.name : req.user.role;
+      if (roleName === 'admin') {
+        return next(); // Admin role has full access to all permissions
+      }
+
+      if (!req.user.role_id) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
 

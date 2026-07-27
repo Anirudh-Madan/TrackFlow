@@ -939,7 +939,7 @@ export default function PartRequestsPage() {
         {activeTab === 'history'
           ? <OrderHistoryTab vendors={vendors} />
           : activeTab === 'po-list'
-          ? <AdminPOPage />
+          ? <AdminPOPage onSwitchToNewPO={() => setActiveTab('new-po')} />
           : <NewPOTab vendors={vendors} products={products} />
         }
       </div>

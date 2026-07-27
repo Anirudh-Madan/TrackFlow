@@ -2,13 +2,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   FileText, Download, Eye, Search, Filter, ChevronDown,
   Package, MapPin, User, Calendar, CheckCircle, Clock, AlertCircle,
-  X, Printer, ArrowUpRight, Loader2
+  X, Printer, ArrowUpRight, Loader2, Lock, History
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
-import { getChallans } from '../../../api/endpoints/challans.api'
+import { getChallans, setBillNumber } from '../../../api/endpoints/challans.api'
 import { usePermission } from '../../../hooks/usePermission'
 
 const STATUS_CONFIG = {
@@ -195,6 +195,30 @@ export default function ChallansListPage() {
   const [search, setSearch]           = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [viewChallan, setViewChallan] = useState(null)
+  const [billModalTarget, setBillModalTarget] = useState(null)
+  const [billModalValue, setBillModalValue]   = useState('')
+  const [submitting, setSubmitting]   = useState(false)
+
+  const handleSaveBillNumber = async (e) => {
+    e.preventDefault()
+    if (!billModalTarget || !billModalValue.trim()) { toast.error('Please enter a bill number'); return }
+    setSubmitting(true)
+    try {
+      const res = await setBillNumber(billModalTarget.dbId, { bill_number: billModalValue.trim() })
+      if (res.success) {
+        toast.success(`Bill number updated to #${billModalValue.trim()} everywhere!`)
+        setBillModalTarget(null)
+        setBillModalValue('')
+        fetchChallansList()
+      } else {
+        toast.error(res.error || 'Failed to update bill number')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update bill number')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const fetchChallansList = useCallback(async () => {
     setLoading(true)
@@ -542,7 +566,15 @@ export default function ChallansListPage() {
                   {filtered.map(c => (
                     <tr key={c.id} className="table-row-hover">
                       <td className="px-5 py-4">
-                        <div className="font-mono font-semibold text-primary-700 dark:text-primary-400 text-xs">{c.id}</div>
+                        <div className="font-mono font-bold text-surface-900 dark:text-surface-50 text-xs flex items-center gap-1.5 flex-wrap">
+                          <span>{c.id}</span>
+                          {c.bill_number && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-bold font-mono text-xs border border-indigo-100/80 dark:border-indigo-900/40" title={`Bill #${c.bill_number}`}>
+                              <Lock className="h-3 w-3 text-amber-500 shrink-0" />
+                              <span>{c.bill_number}</span>
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-surface-400 mt-0.5">{c.order_ref}</div>
                       </td>
                       <td className="px-5 py-4 text-xs text-surface-500">
@@ -699,6 +731,52 @@ export default function ChallansListPage() {
               </div>
             </div>
 
+            {/* ── Edit History Section ── */}
+            <div className="border-t border-surface-200 dark:border-surface-700 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-surface-600 dark:text-surface-300 flex items-center gap-1.5">
+                  <History className="h-4 w-4 text-primary-600" />
+                  Edit History & Reasons
+                </h4>
+                <span className="text-xs text-surface-400">
+                  {(viewChallan.editHistory || viewChallan.edit_history || []).length} record(s)
+                </span>
+              </div>
+
+              {(viewChallan.editHistory || viewChallan.edit_history) && (viewChallan.editHistory || viewChallan.edit_history).length > 0 ? (
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {(viewChallan.editHistory || viewChallan.edit_history).map((log, idx) => (
+                    <div key={log.id || idx} className="p-3 rounded-xl bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-medium">
+                        <span className="text-surface-900 dark:text-surface-100 font-semibold">{log.editor?.name || log.user?.name || 'Admin'}</span>
+                        <span className="text-surface-400 text-[11px]">{new Date(log.created_at || log.timestamp).toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="text-surface-700 dark:text-surface-300">
+                        <span className="text-surface-400">Reason: </span>
+                        <span className="font-semibold text-primary-700 dark:text-primary-300">{log.edit_reason || log.reason || '—'}</span>
+                      </div>
+                      {log.changed_fields && Object.keys(log.changed_fields).length > 0 && (
+                        <div className="text-[11px] text-surface-500 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
+                          {Object.entries(log.changed_fields).map(([k, v]) => (
+                            <div key={k} className="font-mono flex items-center gap-1.5">
+                              <span className="capitalize text-surface-400">{k.replace('_', ' ')}:</span>
+                              <span className="line-through text-surface-400">{typeof v === 'object' ? String(v?.from ?? 'none') : 'none'}</span>
+                              <span>➔</span>
+                              <span className="text-success-600 font-semibold">{typeof v === 'object' ? String(v?.to ?? '') : String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-surface-50 dark:bg-surface-800/40 text-xs text-surface-400 text-center italic">
+                  No edit history recorded for this challan.
+                </div>
+              )}
+            </div>
+
             {/* Footer actions */}
             <div className="flex justify-end gap-3 pt-2 border-t border-surface-100 dark:border-surface-700">
               <Button variant="secondary" onClick={() => setViewChallan(null)} id="challan-modal-close">
@@ -716,6 +794,38 @@ export default function ChallansListPage() {
               )}
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Write Bill Number Modal */}
+      <Modal open={!!billModalTarget} onClose={() => setBillModalTarget(null)} title="Write / Update Bill Number" size="md">
+        {billModalTarget && (
+          <form onSubmit={handleSaveBillNumber} className="space-y-4">
+            <div className="p-3 rounded-xl bg-primary-50 dark:bg-primary-950/30 border border-primary-100 dark:border-primary-900/30 text-xs text-primary-800 dark:text-primary-300">
+              <p className="font-semibold mb-1">Pipeline: Stock Checked → Bill Created → Write Bill Number</p>
+              <p className="text-surface-600 dark:text-surface-400">
+                Writing this bill number will link it to <strong>{billModalTarget.id}</strong> and update it across the system.
+              </p>
+            </div>
+
+            <div>
+              <label className="label-base">Bill Number <span className="text-danger-500">*</span></label>
+              <input
+                type="text"
+                required
+                value={billModalValue}
+                onChange={e => setBillModalValue(e.target.value)}
+                className="input-base font-mono"
+                placeholder="e.g. BILL-2026-001"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setBillModalTarget(null)}>Cancel</Button>
+              <Button type="submit" variant="primary" loading={submitting}>Save & Update Everywhere</Button>
+            </div>
+          </form>
         )}
       </Modal>
     </div>

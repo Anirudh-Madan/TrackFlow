@@ -7,4 +7,8 @@ export const getSalesmanWise   = (params) => client.get('/reports/salesman-wise'
 export const getPartyWise      = (params) => client.get('/reports/party-wise',     { params }).then(r => r.data)
 export const getSupplierWise   = (params) => client.get('/reports/supplier-wise',  { params }).then(r => r.data)
 export const getActivityLog    = (params) => client.get('/reports/activity-log',   { params }).then(r => r.data)
-export const getAiInsight      = (body)   => client.post('/reports/ai-insight',    body).then(r => r.data)
+export const getPartHistory    = (params) => client.get('/reports/part-history',      { params }).then(r => r.data)
+export const getPartSuggestions = (params) => client.get('/reports/part-suggestions',  { params }).then(r => r.data)
+export const getAiInsight      = (body)   => client.post('/reports/ai-insight',        body).then(r => r.data)
+
+

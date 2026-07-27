@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Trash2, Loader2, Eye, CheckCircle2, X, Printer,
-  FileText, Search, ChevronDown, User, Calendar, Package,
+  FileText, Search, ChevronDown, User, Calendar, Package, UserPlus,
 } from 'lucide-react'
 import { getProducts } from '../../../api/endpoints/products.api'
 import { createOrder } from '../../../api/endpoints/orders.api'
-import { getVendors } from '../../../api/endpoints/parties.api'
+import { getVendors, getCustomers } from '../../../api/endpoints/parties.api'
 import { cn } from '../../../utils/cn'
 import { useAuthStore } from '../../../store/authStore'
 import toast from 'react-hot-toast'
@@ -53,6 +53,103 @@ const roInputCls = cn(
   'w-full text-sm px-3.5 py-2.5 border border-surface-100 dark:border-surface-800 rounded-xl',
   'bg-surface-50 dark:bg-surface-800/50 text-surface-400 dark:text-surface-500 cursor-not-allowed',
 )
+
+// ─── Customer Search Dropdown ─────────────────────────────────────────────────
+function CustomerSearchDropdown({ customers, value, onChange, onCompanyFill, navigate }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState(value || '')
+  const ref = useRef(null)
+
+  // Sync search display when value is set externally
+  useEffect(() => { if (!open) setSearch(value || '') }, [value, open])
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return customers.slice(0, 40)
+    return customers
+      .filter(c =>
+        (c.company_name || '').toLowerCase().includes(search.toLowerCase())
+      )
+      .slice(0, 40)
+  }, [customers, search])
+
+  const hasNoMatch = search.trim().length > 0 && filtered.length === 0
+
+  const handleSelect = (customer) => {
+    setSearch(customer.company_name)
+    onChange(customer.company_name)
+    if (onCompanyFill) onCompanyFill(customer.company_name)
+    setOpen(false)
+  }
+
+  const handleRedirectNew = () => {
+    setOpen(false)
+    navigate('/admin/customers', { state: { openNewCustomer: true } })
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="relative">
+        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          autoComplete="off"
+          placeholder="e.g. Rahul Verma or search company…"
+          className={inputCls('pl-9 pr-8')}
+          onFocus={() => setOpen(true)}
+          onChange={e => {
+            setSearch(e.target.value)
+            onChange(e.target.value)
+            setOpen(true)
+          }}
+        />
+        <ChevronDown className={cn('absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 transition-transform pointer-events-none', open && 'rotate-180')} />
+      </div>
+
+      {open && (
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
+          <div className="max-h-56 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
+            {filtered.map(customer => (
+              <button
+                key={customer.id}
+                type="button"
+                onClick={() => handleSelect(customer)}
+                className="w-full px-3.5 py-2.5 text-left text-sm hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+              >
+                <p className="font-medium text-surface-900 dark:text-surface-100">{customer.company_name}</p>
+                {customer.gst && <p className="text-[11px] text-surface-400 font-mono">{customer.gst}</p>}
+              </button>
+            ))}
+
+            {hasNoMatch && (
+              <div className="px-4 py-3">
+                <p className="text-xs text-surface-400 mb-2">No customer found for <span className="font-semibold text-surface-600 dark:text-surface-300">"{search}"</span></p>
+                <button
+                  type="button"
+                  onClick={handleRedirectNew}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Create new customer →
+                </button>
+              </div>
+            )}
+
+            {!hasNoMatch && filtered.length === 0 && (
+              <p className="px-4 py-4 text-xs text-surface-400 text-center">Type to search customers…</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function VendorDropdown({ vendors, value, onChange, placeholder = 'Select supplier' }) {
   const [open, setOpen] = useState(false)
@@ -243,22 +340,40 @@ function printChallan(data, items, user) {
 }
 
 // ─── Product Search Dropdown ──────────────────────────────────────────────────
-function ProductDropdown({ products, value, onSelect }) {
+function ProductDropdown({ products, value, onSelect, supplier }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const ref = useRef(null)
 
-  const filtered = useMemo(() =>
-    products.filter(p =>
-      (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (p.sku || '').toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 30),
-    [products, search]
-  )
+  useEffect(() => {
+    const handler = event => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    let list = products
+    if (supplier && supplier.trim()) {
+      const sLower = supplier.trim().toLowerCase()
+      const supplierParts = list.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
+      if (supplierParts.length > 0) list = supplierParts
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(p =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.sku || '').toLowerCase().includes(q)
+      )
+    }
+    return list.slice(0, 40)
+  }, [products, supplier, search])
 
   const selected = value ? products.find(p => p.id === value) : null
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -276,7 +391,9 @@ function ProductDropdown({ products, value, onSelect }) {
             <p className="text-[11px] text-surface-400 font-mono">{selected.sku}</p>
           </div>
         ) : (
-          <span className="text-surface-400">Search product…</span>
+          <span className="text-surface-400">
+            {supplier ? `Search ${supplier} parts…` : 'Search product…'}
+          </span>
         )}
         <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
@@ -290,14 +407,20 @@ function ProductDropdown({ products, value, onSelect }) {
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name or SKU…"
+                placeholder={supplier ? `Filter ${supplier} parts by name or SKU…` : 'Search by name or SKU…'}
                 className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400"
               />
             </div>
           </div>
+          {supplier && (
+            <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
+              <span>Supplier Filter: <strong>{supplier}</strong></span>
+              <span className="text-[10px] opacity-80">{filtered.length} part(s) available</span>
+            </div>
+          )}
           <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
             {filtered.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found</p>
+              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found for {supplier || 'search'}</p>
             ) : filtered.map(p => (
               <button
                 key={p.id}
@@ -310,7 +433,7 @@ function ProductDropdown({ products, value, onSelect }) {
                   <p className="text-[11px] text-surface-400 font-mono">{p.sku}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price)}</p>
+                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.purchase_price)}</p>
                   <p className="text-[10px] text-surface-400">DL Price</p>
                 </div>
               </button>
@@ -323,86 +446,103 @@ function ProductDropdown({ products, value, onSelect }) {
 }
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, index, products, onChange, onRemove }) {
-  const currentDl = item.dl_price !== '' && item.dl_price != null ? item.dl_price : (item.sell_price || '')
-  const currentSellPrice = currentDl
-  const lineTotal = fmtNum(currentSellPrice) * fmtNum(item.qty)
+function ItemRow({ item, index, products, supplier, onChange, onRemove }) {
+  const dl = fmtNum(item.dl_price)
+  const sp = item.sell_price !== '' && item.sell_price != null ? fmtNum(item.sell_price) : dl
+  const lineTotal = sp * fmtNum(item.qty)
 
-  const handleDlPriceChange = (val) => {
-    onChange(index, {
-      dl_price: val,
-      sell_price: val, // Auto-calculated equal to DL price
-    })
-  }
-
-  const handleQtyChange = (val) => {
-    onChange(index, {
-      qty: val,
-      sell_price: item.dl_price !== '' ? item.dl_price : item.sell_price,
-    })
+  let marginBadge = null
+  if (dl > 0 && sp > 0) {
+    const pct = ((sp - dl) / dl) * 100
+    const formatted = Math.abs(pct).toFixed(1) + '%'
+    if (pct > 0) {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-50 dark:bg-success-900/30 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800 shrink-0" title={`+₹${(sp - dl).toFixed(2)} margin above DL price`}>
+          +{formatted}
+        </span>
+      )
+    } else if (pct < 0) {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger-50 dark:bg-danger-900/30 text-danger-700 dark:text-danger-400 border border-danger-200 dark:border-danger-800 shrink-0" title={`-₹${(dl - sp).toFixed(2)} discount below DL price`}>
+          -{formatted}
+        </span>
+      )
+    } else {
+      marginBadge = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-100 dark:bg-surface-800 text-surface-500 border border-surface-200 dark:border-surface-700 shrink-0">
+          0%
+        </span>
+      )
+    }
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_1fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_1.5fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative items-center">
       {/* Product / Part search */}
       <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Product</label>
         <ProductDropdown
           products={products}
+          supplier={supplier}
           value={item.product_id}
           onSelect={p => {
-            const dl = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '')
+            const dlVal = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '0')
+            const spVal = p.selling_price != null ? String(p.selling_price) : dlVal
             onChange(index, {
               product_id: p.id,
               product_name: p.name,
               part_number: item.part_number || p.sku || '',
               description: item.description || p.name || '',
-              dl_price: dl,
-              sell_price: dl, // Auto calculated from product
+              dl_price: dlVal,
+              sell_price: spVal || dlVal,
             })
           }}
         />
       </div>
 
-      {/* Part Number */}
+      {/* Part Number (Auto-filled from Catalog) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">
           Part No. <span className="text-danger-500">*</span>
         </label>
         <input
           type="text"
+          readOnly
+          disabled
           value={item.part_number}
-          onChange={e => onChange(index, { part_number: e.target.value })}
-          placeholder="e.g. SKU-001"
-          className={inputCls('text-xs font-mono')}
+          placeholder="Select Catalog Product"
+          className={roInputCls + ' text-xs font-mono'}
+          title="Auto-filled from catalog product"
         />
       </div>
 
-      {/* Description */}
+      {/* Description (Auto-filled from Catalog) */}
       <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Description</label>
         <input
           type="text"
+          readOnly
+          disabled
           value={item.description}
-          onChange={e => onChange(index, { description: e.target.value })}
-          placeholder="Item description"
-          className={inputCls('text-xs')}
+          placeholder="Catalog product description"
+          className={roInputCls + ' text-xs'}
+          title="Auto-filled from catalog product"
         />
       </div>
 
-      {/* DL Price (Editable) */}
+      {/* DL Price (NON-EDITABLE) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">DL Price</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
           <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={item.dl_price}
-            onChange={e => handleDlPriceChange(e.target.value)}
+            type="text"
+            disabled
+            readOnly
+            value={item.dl_price !== '' && item.dl_price != null ? Number(item.dl_price).toFixed(2) : '0.00'}
             placeholder="0.00"
-            className={inputCls('pl-6 text-xs')}
+            className={roInputCls + ' pl-6 text-xs font-mono'}
+            title="DL Price (non-editable)"
           />
         </div>
       </div>
@@ -414,25 +554,34 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
           type="number"
           min="1"
           value={item.qty}
-          onChange={e => handleQtyChange(e.target.value)}
+          onChange={e => onChange(index, { qty: e.target.value })}
           placeholder="1"
           className={inputCls('text-xs')}
         />
       </div>
 
-      {/* Selling Price per Unit (Non-editable / Auto-calculated) */}
+      {/* Selling Price per Unit (EDITABLE + MARGIN BOX) */}
       <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
-          <input
-            type="text"
-            disabled
-            readOnly
-            value={currentSellPrice !== '' && currentSellPrice != null ? Number(currentSellPrice).toFixed(2) : '0.00'}
-            placeholder="0.00"
-            className={roInputCls + ' pl-6 text-xs font-mono font-medium'}
-          />
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Sell Price/Unit</label>
+          <div className="lg:hidden">{marginBadge}</div>
+        </div>
+        <div className="relative flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.sell_price}
+              onChange={e => onChange(index, { sell_price: e.target.value })}
+              placeholder="0.00"
+              className={inputCls('pl-6 text-xs font-mono font-medium')}
+            />
+          </div>
+          <div className="hidden lg:block shrink-0">
+            {marginBadge}
+          </div>
         </div>
       </div>
 
@@ -496,10 +645,6 @@ function PreviewModal({ open, onClose, onConfirm, submitting, data, items, user 
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Challan No.</p>
               <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.challan_number}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Bill Number</p>
-              <p className="text-sm font-bold text-primary-700 dark:text-primary-300 font-mono">{data.bill_number || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-0.5">Date</p>
@@ -630,11 +775,11 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   const [products, setProducts] = useState([])
   const [vendors, setVendors] = useState([])
+  const [customers, setCustomers] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
 
   // Challan header state
   const [challanNumber] = useState(genChallanNo)
-  const [billNumber, setBillNumber] = useState('')
   const [orderDate, setOrderDate] = useState(todayStr)
   const [supplier, setSupplier] = useState('')
   const [supplierId, setSupplierId] = useState('')
@@ -649,7 +794,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
   const [showPreview, setShowPreview] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Load products and suppliers
+  // Load products, suppliers, and customers
   useEffect(() => {
     getProducts()
       .then(res => {
@@ -661,6 +806,12 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
     getVendors()
       .then(res => {
         if (res?.success) setVendors(res.data ?? [])
+      })
+      .catch(() => {})
+
+    getCustomers()
+      .then(res => {
+        if (res?.success) setCustomers(res.data ?? [])
       })
       .catch(() => {})
   }, [])
@@ -681,21 +832,17 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
     setItems(prev => prev.length === 1 ? [BLANK_ITEM()] : prev.filter((_, i) => i !== index))
   }
 
-  const subtotal = items.reduce((acc, it) => acc + fmtNum(it.sell_price) * fmtNum(it.qty), 0)
+  const subtotal = items.reduce((acc, it) => acc + (it.sell_price !== '' && it.sell_price != null ? fmtNum(it.sell_price) : fmtNum(it.dl_price)) * fmtNum(it.qty), 0)
   const gst = subtotal * 0.18
   const grand = subtotal + gst
 
   // Validate and open preview
   const handlePreview = () => {
-    if (!billNumber.trim()) {
-      toast.error('Bill Number is required')
-      return
-    }
     if (!customerName.trim()) {
       toast.error('Customer Name is required')
       return
     }
-    const validItems = items.filter(it => it.part_number?.trim() && Number(it.qty) > 0)
+    const validItems = items.filter(it => (it.product_id || it.part_number?.trim()) && Number(it.qty) > 0)
     if (validItems.length === 0) {
       toast.error('Add at least one item with a Part Number and Qty')
       return
@@ -705,17 +852,12 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Actual submit
   const handleSubmit = async () => {
-    if (!billNumber.trim()) {
-      toast.error('Bill Number is required')
-      return
-    }
     const validItems = items.filter(it => (it.product_id || it.part_number?.trim()) && Number(it.qty) > 0)
     setSubmitting(true)
     try {
       const res = await createOrder({
         supplier: supplier || undefined,
         challan_number: challanNumber,
-        bill_number: billNumber.trim(),
         order_date: orderDate,
         customer_name: customerName,
         customer_company: customerCompany || undefined,
@@ -727,7 +869,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
           description: it.description || undefined,
           dl_price: it.dl_price !== '' ? parseFloat(it.dl_price) : undefined,
           quantity: parseInt(it.qty),
-          sm_price: parseFloat(it.sell_price) || 0,
+          sm_price: parseFloat(it.sell_price) || parseFloat(it.dl_price) || 0,
         })),
       })
 
@@ -753,7 +895,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
         onClose={() => setShowPreview(false)}
         onConfirm={handleSubmit}
         submitting={submitting}
-        data={{ challan_number: challanNumber, bill_number: billNumber.trim(), order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
+        data={{ challan_number: challanNumber, order_date: orderDate, supplier, customer_name: customerName, customer_company: customerCompany }}
         items={items}
         user={user}
       />
@@ -780,15 +922,6 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Supplier */}
-            <Field label="Supplier">
-              <VendorDropdown
-                vendors={vendors}
-                value={supplierId}
-                onChange={handleSupplierSelect}
-                placeholder="Select supplier"
-              />
-            </Field>
 
             {/* Challan Number (auto) */}
             <Field label="Challan Number">
@@ -801,19 +934,6 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-surface-400 bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded font-medium">AUTO</span>
               </div>
-            </Field>
-
-            {/* Bill Number */}
-            <Field label="Bill Number" required>
-              <input
-                type="text"
-                required
-                value={billNumber}
-                onChange={e => setBillNumber(e.target.value)}
-                placeholder="Enter bill number"
-                className={inputCls('font-mono')}
-                id="bill-number-input"
-              />
             </Field>
 
             {/* Date */}
@@ -830,18 +950,17 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
               </div>
             </Field>
 
-            {/* Customer Name */}
+            {/* Customer Name — searchable dropdown */}
             <Field label="Customer Name" required>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="e.g. Rahul Verma"
-                  className={inputCls('pl-9')}
-                />
-              </div>
+              <CustomerSearchDropdown
+                customers={customers}
+                value={customerName}
+                navigate={navigate}
+                onChange={setCustomerName}
+                onCompanyFill={name => {
+                  if (!customerCompany) setCustomerCompany(name)
+                }}
+              />
             </Field>
 
             {/* Customer Company */}
@@ -905,6 +1024,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
                   index={i}
                   item={item}
                   products={products}
+                  supplier={supplier}
                   onChange={handleItemChange}
                   onRemove={handleRemoveRow}
                 />

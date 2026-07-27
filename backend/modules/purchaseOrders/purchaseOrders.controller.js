@@ -130,57 +130,66 @@ exports.getOrderItems = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const roleName = typeof req.user?.role === 'object' ? req.user.role.name : req.user?.role;
 
-  const { pin, vendor_id, vendor_name, po_date, notes, bill_number, invoice_number, items } = req.body;
-
-  if (!bill_number?.trim()) return res.status(400).json({ success: false, error: 'Bill number is mandatory' });
-  if (!items?.length) return res.status(400).json({ success: false, error: 'At least one item is required' });
-
-  if (pin) {
-    const pinCheck = await verifyAdminPin(pin);
-    if (!pinCheck.ok) return res.status(401).json({ success: false, error: pinCheck.message, code: pinCheck.code });
-  }
-
   const t = await sequelize.transaction();
   try {
-    const po_number   = genPONumber();
-    const inv_number  = invoice_number?.trim() || genInvoiceNumber();
-    const share_token = genShareToken();
+    const { vendor_id, vendor_name, po_date, notes, items = [], bill_number } = req.body;
 
-    let resolvedVendorName = vendor_name || null;
-    if (vendor_id && !resolvedVendorName) {
-      const vendor = await Vendor.findByPk(vendor_id, { transaction: t });
-      resolvedVendorName = vendor?.company_name || null;
+    if (!Array.isArray(items) || items.length === 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'At least one line item is required' });
     }
+    if (!vendor_name?.trim() && !vendor_id) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Supplier / Vendor Name is compulsory for Purchase Orders' });
+    }
+    if (!bill_number?.trim()) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Bill number is required' });
+    }
+
+    let resolvedVendorName = (vendor_name || '').trim();
+    if (vendor_id && !resolvedVendorName) {
+      const v = await Vendor.findByPk(vendor_id, { transaction: t });
+      if (v) resolvedVendorName = v.company_name;
+    }
+
+    const po_number  = genPONumber();
+    const share_token = genShareToken();
+    const inv_number  = genInvoiceNumber();
 
     let subtotal = 0;
     const itemsToCreate = [];
 
-    for (const item of items) {
-      const qty   = parseInt(item.quantity) || 1;
-      const price = parseFloat(item.unit_price) || 0;
+    for (const rawItem of items) {
+      let { product_id, part_number, description, unit_price, quantity } = rawItem;
+      const qty   = parseInt(quantity) || 1;
+      const price = parseFloat(unit_price) || 0;
       const total = +(qty * price).toFixed(2);
       subtotal += total;
 
-      let product_id  = item.product_id || null;
-      let part_number = item.part_number ? item.part_number.trim().toUpperCase() : null;
-      let description = item.description ? item.description.trim() : null;
-
+      let foundProd = null;
       if (product_id) {
-        const prod = await Product.findByPk(product_id, { transaction: t });
-        if (prod) {
-          if (!part_number) part_number = prod.sku || null;
-          if (!description) description = prod.name || null;
-        }
+        foundProd = await Product.findByPk(product_id, { transaction: t });
       } else if (part_number) {
-        const found = await Product.findOne({ where: { sku: part_number }, transaction: t });
-        if (found) {
-          product_id = found.id;
-          if (!description) description = found.name || null;
-        }
+        foundProd = await Product.findOne({ where: { sku: part_number.trim().toUpperCase() }, transaction: t });
+      }
+
+      if (!foundProd && part_number) {
+        foundProd = await Product.create({
+          sku: part_number.trim().toUpperCase(),
+          name: description || part_number,
+          dealer_landing_price: price,
+        }, { transaction: t });
+      }
+
+      if (foundProd) {
+        product_id = foundProd.id;
+        if (!part_number) part_number = foundProd.sku;
+        if (!description) description = foundProd.name || null;
       }
 
       itemsToCreate.push({
-        product_id,
+        product_id: product_id || null,
         part_number,
         description,
         unit_price: price,
@@ -218,22 +227,22 @@ exports.create = async (req, res, next) => {
 };
 
 // ── PUT /api/v1/purchase-orders/:id — Admin edits PO ─────────────────────────
-// Body: { pin, reason, notes?, vendor_name?, bill_number?, status? }
+// Body: { pin, reason, notes?, vendor_name?, bill_number?, status?, items? }
 exports.update = async (req, res, next) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
 
-  const { pin, reason, notes, vendor_name, bill_number, status } = req.body;
-  if (!pin)    return res.status(400).json({ success: false, error: 'Admin PIN is required' });
+  const { pin, reason, notes, vendor_name, bill_number, status, items } = req.body;
+  if (!pin)            return res.status(400).json({ success: false, error: 'Admin PIN is required' });
   if (!reason?.trim()) return res.status(400).json({ success: false, error: 'Edit reason is required' });
 
   const pinCheck = await verifyAdminPin(pin);
   if (!pinCheck.ok) return res.status(401).json({ success: false, error: pinCheck.message, code: pinCheck.code });
 
+  const t = await sequelize.transaction();
   try {
-    const po = await PurchaseOrder.findByPk(req.params.id);
-    if (!po) return res.status(404).json({ success: false, error: 'PO not found' });
-    if (po.is_returned) return res.status(400).json({ success: false, error: 'Returned POs cannot be edited' });
-    if (po.bill_number) return res.status(400).json({ success: false, error: 'POs with a bill number are locked for editing' });
+    const po = await PurchaseOrder.findByPk(req.params.id, { transaction: t });
+    if (!po) { await t.rollback(); return res.status(404).json({ success: false, error: 'PO not found' }); }
+    if (po.is_returned) { await t.rollback(); return res.status(400).json({ success: false, error: 'Returned POs cannot be edited' }); }
 
     const changedFields = {};
     if (notes       !== undefined && notes       !== po.notes)        changedFields.notes       = { from: po.notes,       to: notes };
@@ -241,18 +250,67 @@ exports.update = async (req, res, next) => {
     if (bill_number !== undefined && bill_number !== po.bill_number)  changedFields.bill_number = { from: po.bill_number, to: bill_number };
     if (status      !== undefined && status      !== po.status)       changedFields.status      = { from: po.status,      to: status };
 
+    let newTotal = parseFloat(po.total || 0);
+
+    if (Array.isArray(items)) {
+      const currentItemsCount = await PurchaseOrderItem.count({ where: { purchase_order_id: po.id }, transaction: t });
+      await PurchaseOrderItem.destroy({ where: { purchase_order_id: po.id }, transaction: t });
+
+      let calculatedSubtotal = 0;
+      for (const rawItem of items) {
+        let { product_id, part_number, description, unit_price, quantity } = rawItem;
+        const qty   = parseInt(quantity) || 1;
+        const price = parseFloat(unit_price) || 0;
+        const total = +(qty * price).toFixed(2);
+        calculatedSubtotal += total;
+
+        let foundProd = null;
+        if (product_id) {
+          foundProd = await Product.findByPk(product_id, { transaction: t });
+        } else if (part_number) {
+          foundProd = await Product.findOne({ where: { sku: String(part_number).trim().toUpperCase() }, transaction: t });
+        }
+
+        if (foundProd) {
+          product_id = foundProd.id;
+          if (!part_number) part_number = foundProd.sku;
+          if (!description) description = foundProd.name || null;
+        }
+
+        await PurchaseOrderItem.create({
+          purchase_order_id: po.id,
+          product_id: product_id || null,
+          part_number: part_number || 'ITEM',
+          description: description || 'Item',
+          unit_price: price,
+          quantity: qty,
+          total,
+        }, { transaction: t });
+      }
+
+      newTotal = +calculatedSubtotal.toFixed(2);
+      changedFields.items = { from: `${currentItemsCount} item(s)`, to: `${items.length} item(s)` };
+      changedFields.total = { from: po.total, to: newTotal };
+    }
+
     await po.update({
       notes:       notes       !== undefined ? notes       : po.notes,
       vendor_name: vendor_name !== undefined ? vendor_name : po.vendor_name,
       bill_number: bill_number !== undefined ? bill_number : po.bill_number,
       status:      status      !== undefined ? status      : po.status,
-    });
+      subtotal:    newTotal,
+      total:       newTotal,
+    }, { transaction: t });
 
-    await POEditLog.create({ po_id: po.id, edited_by: req.user.id, edit_reason: reason.trim(), changed_fields: changedFields });
+    await POEditLog.create({ po_id: po.id, edited_by: req.user.id, edit_reason: reason.trim(), changed_fields: changedFields }, { transaction: t });
 
+    await t.commit();
     const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes() });
     res.json({ success: true, data: result });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await t.rollback();
+    next(err);
+  }
 };
 
 // ── DELETE /api/v1/purchase-orders/:id — Admin deletes (restores stock) ───────
@@ -270,7 +328,6 @@ exports.remove = async (req, res, next) => {
   try {
     const po = await PurchaseOrder.findByPk(req.params.id, { transaction: t });
     if (!po) { await t.rollback(); return res.status(404).json({ success: false, error: 'PO not found' }); }
-    if (po.bill_number) { await t.rollback(); return res.status(400).json({ success: false, error: 'POs with a bill number cannot be deleted' }); }
     if (po.is_returned) { await t.rollback(); return res.status(400).json({ success: false, error: 'Returned POs cannot be deleted' }); }
 
     // Restore stock from PO items (if stock was added via this PO via inward)
@@ -286,11 +343,11 @@ exports.remove = async (req, res, next) => {
 };
 
 // ── POST /api/v1/purchase-orders/:id/return ──────────────────────────────────
-// Body: { pin, reason }
+// Body: { pin, reason, items: [ { product_id, sku, return_qty }, ... ] }
 exports.returnPO = async (req, res, next) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false, error: 'Admin only' });
 
-  const { pin, reason } = req.body;
+  const { pin, reason, items } = req.body;
   if (!pin)    return res.status(400).json({ success: false, error: 'Admin PIN is required' });
   if (!reason?.trim()) return res.status(400).json({ success: false, error: 'Return reason is required' });
 
@@ -299,21 +356,53 @@ exports.returnPO = async (req, res, next) => {
 
   const t = await sequelize.transaction();
   try {
-    const po = await PurchaseOrder.findByPk(req.params.id, { transaction: t });
+    const po = await PurchaseOrder.findByPk(req.params.id, { include: buildIncludes(), transaction: t });
     if (!po)              { await t.rollback(); return res.status(404).json({ success: false, error: 'PO not found' }); }
-    if (po.is_returned)   { await t.rollback(); return res.status(400).json({ success: false, error: 'PO is already returned' }); }
 
-    // Restore stock from any stock_in transactions related to this PO
-    const txns = await StockTransaction.findAll({ where: { reference: po.po_number, type: 'stock_in' }, transaction: t });
-    for (const txn of txns) {
-      await adjustStock(txn.product_id, -Math.abs(parseFloat(txn.quantity_change)), 'released', `RETURN:${po.po_number}`, req.user.id, `Return of PO ${po.po_number}: ${reason}`, t);
+    const returnSummary = [];
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const item of items) {
+        const retQty = parseFloat(item.return_qty || 0);
+        if (retQty <= 0) continue;
+
+        let prodId = item.product_id;
+        let skuName = item.sku || item.part_number;
+
+        if (!prodId && skuName) {
+          const prod = await Product.findOne({ where: { sku: skuName.trim().toUpperCase() }, transaction: t });
+          if (prod) prodId = prod.id;
+        }
+
+        if (prodId) {
+          // Returning a PO item reduces stock that was inwarded
+          await adjustStock(
+            prodId,
+            -retQty,
+            'released',
+            `RETURN:${po.po_number}`,
+            req.user.id,
+            `Return of ${retQty} qty for ${skuName || prodId} on PO ${po.po_number}: ${reason.trim()}`,
+            t
+          );
+          returnSummary.push(`${skuName || prodId}: returned ${retQty}`);
+        }
+      }
+    } else {
+      const txns = await StockTransaction.findAll({ where: { reference: po.po_number, type: 'stock_in' }, transaction: t });
+      for (const txn of txns) {
+        await adjustStock(txn.product_id, -Math.abs(parseFloat(txn.quantity_change)), 'released', `RETURN:${po.po_number}`, req.user.id, `Return of PO ${po.po_number}: ${reason.trim()}`, t);
+      }
+      returnSummary.push('All items returned');
     }
 
-    await po.update({ is_returned: true, return_reason: reason.trim(), returned_at: new Date(), returned_by: req.user.id, status: 'RETURNED' }, { transaction: t });
-    await POEditLog.create({ po_id: po.id, edited_by: req.user.id, edit_reason: `RETURN: ${reason.trim()}`, changed_fields: { status: { from: po.status, to: 'RETURNED' } } }, { transaction: t });
+    const summaryText = returnSummary.length > 0 ? ` [${returnSummary.join(', ')}]` : '';
+
+    await po.update({ is_returned: true, return_reason: `${reason.trim()}${summaryText}`, returned_at: new Date(), returned_by: req.user.id, status: 'RETURNED' }, { transaction: t });
+    await POEditLog.create({ po_id: po.id, edited_by: req.user.id, edit_reason: `RETURN: ${reason.trim()}${summaryText}`, changed_fields: { status: { from: po.status, to: 'RETURNED' }, items_returned: returnSummary.join('; ') } }, { transaction: t });
 
     const result = await PurchaseOrder.findByPk(po.id, { include: buildIncludes(), transaction: t });
     await t.commit();
-    res.json({ success: true, data: result, message: 'PO returned and stock restored' });
+    res.json({ success: true, data: result, message: 'PO return recorded and stock adjusted' });
   } catch (err) { await t.rollback(); next(err); }
 };

@@ -1,1 +1,0 @@
-import{n as e}from"./createLucideIcon-DyCq-HOk.js";import{t}from"./PipelineBoard-DtdsblIo.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Pipeline — Admin Oversight`,subtitle:`Full visibility across every order. Step in at any stage to clear a bottleneck — overrides are logged.`})}export{r as default};

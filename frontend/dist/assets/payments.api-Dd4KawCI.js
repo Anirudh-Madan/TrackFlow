@@ -1,1 +1,0 @@
-import{Yt as e}from"./index-CBXxf4yW.js";var t=t=>e.post(`/payments`,t),n=t=>e.get(`/payments/outstanding/${t}`),r=(t,n)=>e.get(`/payments/ledger/${t}`,{params:n});export{r as n,n as r,t};

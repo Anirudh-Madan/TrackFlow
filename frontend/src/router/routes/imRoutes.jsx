@@ -23,6 +23,8 @@ const IMPipelinePage = lazy(() => import('../../modules/pipeline/pages/IMPipelin
 const IMRequestsPage = lazy(() => import('../../modules/pipeline/pages/IMRequestsPage'))
 const IMWorkersPage  = lazy(() => import('../../modules/pipeline/pages/IMWorkersPage'))
 
+const BillsListPage      = lazy(() => import('../../modules/challans/pages/BillsListPage'))
+
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
 )
@@ -33,10 +35,11 @@ export const imRoutes = [
   { path: 'stock', element: <Wrap><StockOverviewPage /></Wrap> },
   { path: 'products', element: <Navigate to="/im/stock" replace /> },
   { path: 'prices', element: <Wrap><PriceListPage /></Wrap> },
-  { path: 'inward', element: <Wrap><InwardListPage /></Wrap> },
-  { path: 'inward/new', element: <Wrap><InwardNewPage /></Wrap> },
-  { path: 'inward/:id', element: <Wrap><InwardDetailPage /></Wrap> },
+  { path: 'inward', element: <Navigate to="/im/stock" replace /> },
+  { path: 'inward/new', element: <Navigate to="/im/stock" replace /> },
+  { path: 'inward/:id', element: <Navigate to="/im/stock" replace /> },
   { path: 'orders/pending', element: <Wrap><OrdersPendingPage /></Wrap> },
+  { path: 'bills', element: <Wrap><BillsListPage /></Wrap> },
   { path: 'challans', element: <Navigate to="/im/orders/pending" replace /> },
   { path: 'reorder', element: <Wrap><ReorderListPage /></Wrap> },
   { path: 'pipeline', element: <Wrap><IMPipelinePage /></Wrap> },

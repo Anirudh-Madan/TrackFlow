@@ -1,6 +1,6 @@
 const { Op, fn, col } = require('sequelize');
 const {
-  Order, OrderItem, Product, User, Role, Challan,
+  Order, OrderItem, Product, User, Role, Challan, Customer,
   StockOnHand, StockReserved, StockDamaged,
   Vendor, VendorProductMapping, sequelize
 } = require('../../models');
@@ -361,6 +361,49 @@ exports.salesReport = async (req, res, next) => {
       lowStock: lowStockCount
     };
 
+    // 13. Below DL Transactions in this period
+    const belowDlList = [];
+    for (const order of currentOrders) {
+      for (const item of order.items) {
+        const dlPrice = parseFloat(item.dl_price || item.product?.dealer_landing_price || 0);
+        const smPrice = parseFloat(item.sm_price || 0);
+        const qty = parseFloat(item.quantity || 0);
+        if (dlPrice > 0 && smPrice < dlPrice) {
+          const loss = (dlPrice - smPrice) * qty;
+          belowDlList.push({
+            id: item.id,
+            partSku: item.product?.sku || item.part_number || '—',
+            partName: item.product?.name || item.description || '—',
+            salesmanName: order.salesManager?.name || 'Unassigned',
+            challanNumber: order.challan?.challan_number || order.challan_number || `#${order.order_number}`,
+            dlPrice,
+            smPrice,
+            loss
+          });
+        }
+      }
+    }
+    belowDlList.sort((a, b) => b.loss - a.loss);
+
+    const belowDlSummary = {
+      totalCount: belowDlList.length,
+      topTransactions: belowDlList.slice(0, 5)
+    };
+
+    // 14. Fetch all unique suppliers and salesmen lists for quick filter options
+    const distinctSuppliersSet = new Set();
+    products.forEach(p => {
+      if (p.supplier && p.supplier.trim()) distinctSuppliersSet.add(p.supplier.trim());
+    });
+    try {
+      const vendors = await Vendor.findAll({ attributes: ['company_name'] });
+      vendors.forEach(v => {
+        if (v.company_name && v.company_name.trim()) distinctSuppliersSet.add(v.company_name.trim());
+      });
+    } catch (e) {}
+    const allSuppliers = Array.from(distinctSuppliersSet).sort();
+    const allSalesmen = salesManagers.map(sm => ({ id: sm.id, name: sm.name }));
+
     // Return everything!
     return res.json({
       success: true,
@@ -372,7 +415,10 @@ exports.salesReport = async (req, res, next) => {
         supplierBreakdown,
         topPartsByRevenue,
         lowestSellingParts,
-        inventorySnapshot
+        inventorySnapshot,
+        belowDlSummary,
+        allSuppliers,
+        allSalesmen
       }
     });
   } catch (error) {
@@ -721,13 +767,58 @@ exports.supplierWise = async (req, res, next) => {
 exports.activityLog = async (req, res, next) => {
   try {
     const { AuditLog } = require('../../models');
-    const { user_id, startDate, endDate, limit = 100 } = req.query;
+    const { Op } = require('sequelize');
+    const { user_id, role, module: mod, action_type, startDate, endDate, search, limit = 500 } = req.query;
+
     const where = {};
     if (user_id) where.actor_id = user_id;
-    if (startDate && endDate) where.created_at = { [Op.between]: [startDate + ' 00:00:00', endDate + ' 23:59:59'] };
+    if (role && role !== 'all') where.actor_role = role;
+    if (mod && mod !== 'all') where.module = mod;
+    if (action_type && action_type !== 'all') where.action_type = action_type;
 
-    const logs = await AuditLog.findAll({ where, order: [['created_at', 'DESC']], limit: parseInt(limit) });
-    res.json({ success: true, data: logs });
+    if (startDate && endDate) {
+      where.created_at = { [Op.between]: [new Date(startDate + 'T00:00:00'), new Date(endDate + 'T23:59:59')] };
+    }
+
+    if (search && search.trim()) {
+      const q = `%${search.trim().toLowerCase()}%`;
+      where[Op.or] = [
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('actor_name')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('module')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('action_type')), 'LIKE', q),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('actor_role')), 'LIKE', q),
+      ];
+    }
+
+    const logs = await AuditLog.findAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+    });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayLogs = await AuditLog.findAll({
+      where: { created_at: { [Op.gte]: todayStart } },
+      attributes: ['actor_id', 'action_type'],
+    });
+
+    const totalCount = await AuditLog.count();
+    const todayCount = todayLogs.length;
+    const uniqueActorsToday = new Set(todayLogs.map(l => l.actor_id)).size;
+    const criticalCount = todayLogs.filter(l => ['delete', 'approve', 'flag', 'price_update', 'password_reset'].includes(l.action_type)).length;
+
+    res.json({
+      success: true,
+      data: logs,
+      stats: {
+        total: totalCount,
+        today: todayCount,
+        activeUsersToday: uniqueActorsToday,
+        criticalToday: criticalCount,
+      }
+    });
   } catch (err) { next(err); }
 };
 
@@ -744,3 +835,200 @@ exports.aiInsight = async (req, res, next) => {
     res.json({ success: true, insight });
   } catch (err) { next(err); }
 };
+
+// ── GET /api/v1/reports/part-history ─────────────────────────────────────────
+exports.partHistory = async (req, res, next) => {
+  try {
+    const { partNumber, search } = req.query;
+    const queryStr = (partNumber || search || '').trim();
+
+    const { InwardEntry, InwardItem } = require('../../models');
+
+    let product = null;
+    if (queryStr) {
+      product = await Product.findOne({
+        where: {
+          [Op.or]: [
+            { sku: queryStr },
+            { sku: { [Op.like]: `%${queryStr}%` } },
+            { name: { [Op.like]: `%${queryStr}%` } }
+          ]
+        },
+        include: [{ model: StockOnHand, as: 'stockOnHand' }]
+      });
+    }
+
+    // Fallback to first available product if no specific query matched
+    if (!product) {
+      product = await Product.findOne({
+        include: [{ model: StockOnHand, as: 'stockOnHand' }]
+      });
+    }
+
+    if (!product) {
+      return res.json({
+        success: true,
+        data: {
+          part: null,
+          transactions: [],
+          totalFound: 0
+        }
+      });
+    }
+
+    const currentStock = parseFloat(product.stockOnHand?.quantity || 0);
+
+    // 1. Fetch Sales Order Items
+    const orderItems = await OrderItem.findAll({
+      where: { product_id: product.id },
+      include: [{
+        model: Order,
+        as: 'order',
+        where: { status: { [Op.ne]: 'CANCELLED' } },
+        include: [
+          { model: User, as: 'salesManager', attributes: ['name'] },
+          { model: Customer, as: 'party', attributes: ['company_name'] }
+        ]
+      }]
+    });
+
+    // 2. Fetch Inward Goods Receipts
+    let inwardItems = [];
+    try {
+      inwardItems = await InwardItem.findAll({
+        where: { product_id: product.id },
+        include: [{ model: InwardEntry, as: 'inwardEntry' }]
+      });
+    } catch (e) {}
+
+    // 3. Fetch Stock Ledger Transactions
+    let stockTx = [];
+    try {
+      stockTx = await StockTransaction.findAll({
+        where: { product_id: product.id },
+        include: [{ model: User, as: 'performer', attributes: ['name'] }]
+      });
+    } catch (e) {}
+
+    const raw = [];
+
+    // Map sales
+    for (const item of orderItems) {
+      const o = item.order;
+      if (!o) continue;
+      const qty = parseFloat(item.quantity || 0);
+      let partyStr = o.customer_name || o.company_name || o.party?.company_name || '—';
+      if (o.customer_name && o.party?.company_name && o.customer_name !== o.party.company_name) {
+        partyStr = `${o.customer_name} (${o.party.company_name})`;
+      }
+      raw.push({
+        id: `order-${item.id}`,
+        date: o.order_date || o.created_at,
+        type: 'Sale',
+        reference: o.challan_number ? `Challan #${o.challan_number}` : `Order #${o.order_number}`,
+        party: partyStr,
+        salesman: o.salesManager?.name || '—',
+        qtyChange: -Math.abs(qty)
+      });
+    }
+
+    // Map purchases
+    for (const item of inwardItems) {
+      const inv = item.inwardEntry;
+      if (!inv) continue;
+      const qty = parseFloat(item.quantity_received || item.quantity || 0);
+      raw.push({
+        id: `inward-${item.id}`,
+        date: inv.bill_date || inv.inward_date || inv.created_at,
+        type: 'Purchase',
+        reference: inv.bill_number ? `Bill #${inv.bill_number}` : (inv.entry_number ? `Inward #${inv.entry_number}` : `Inward #${inv.id}`),
+        party: inv.supplier_name || product.supplier || '—',
+        salesman: '—',
+        qtyChange: Math.abs(qty)
+      });
+    }
+
+    // Map stock transactions (e.g. returns/adjustments)
+    for (const st of stockTx) {
+      if (st.type === 'released' || (st.notes && st.notes.toLowerCase().includes('return'))) {
+        const qty = parseFloat(st.quantity_change || 0);
+        raw.push({
+          id: `st-${st.id}`,
+          date: st.created_at,
+          type: 'Return',
+          reference: st.reference || `TX #${st.id}`,
+          party: '—',
+          salesman: st.performer?.name || '—',
+          qtyChange: Math.abs(qty)
+        });
+      }
+    }
+
+    // Sort chronologically ascending
+    raw.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate running stock before and after
+    let running = currentStock;
+    const listDesc = [];
+    const descRaw = [...raw].reverse();
+
+    for (const tx of descRaw) {
+      const stockAfter = Math.round(running);
+      const stockBefore = Math.round(stockAfter - tx.qtyChange);
+      listDesc.push({
+        ...tx,
+        stockBefore,
+        stockAfter
+      });
+      running = stockBefore;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        part: {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          supplier: product.supplier || 'CUMMINS 2S',
+          brand: product.brand || product.planner || 'FG-I',
+          currentStock: Math.round(currentStock)
+        },
+        transactions: listDesc,
+        totalFound: listDesc.length
+      }
+    });
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/v1/reports/part-suggestions ─────────────────────────────────────
+exports.partSearchSuggestions = async (req, res, next) => {
+  try {
+    const q = (req.query.q || req.query.search || '').trim();
+    const where = q ? {
+      [Op.or]: [
+        { sku: { [Op.like]: `%${q}%` } },
+        { name: { [Op.like]: `%${q}%` } }
+      ]
+    } : {};
+
+    const list = await Product.findAll({
+      where,
+      attributes: ['id', 'sku', 'name', 'supplier', 'planner'],
+      include: [{ model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] }],
+      limit: 15
+    });
+
+    const formatted = list.map(p => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      supplier: p.supplier || 'CUMMINS 2S',
+      stock: Math.round(parseFloat(p.stockOnHand?.quantity || 0))
+    }));
+
+    res.json({ success: true, data: formatted });
+  } catch (err) { next(err); }
+};
+
+

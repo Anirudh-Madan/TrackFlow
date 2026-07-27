@@ -38,6 +38,10 @@ export function attachRefreshInterceptor(client) {
       if (!storedToken) {
         isRefreshing = false
         useAuthStore.getState().logout()
+        localStorage.removeItem('trackflow-refresh-token')
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
         return Promise.reject(new Error('Session expired'))
       }
 
@@ -54,6 +58,10 @@ export function attachRefreshInterceptor(client) {
       } catch (err) {
         processQueue(err, null)
         useAuthStore.getState().logout()
+        localStorage.removeItem('trackflow-refresh-token')
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
         return Promise.reject(new Error('Session expired, please log in again'))
       } finally {
         isRefreshing = false
