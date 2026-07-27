@@ -115,12 +115,6 @@ export default function IMDashboard() {
           >
             Create Purchase Order
           </Link>
-          <Link
-            to="/im/inward/new"
-            className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-500 rounded-lg shadow-sm transition-all shadow-primary-500/10"
-          >
-            New Inward Entry
-          </Link>
         </div>
       </div>
 
@@ -273,41 +267,6 @@ export default function IMDashboard() {
                   <div className="text-right space-y-1">
                     <p className="text-sm font-bold text-purple-600">{r.quantity_wanted} units</p>
                     <p className="text-[10px] text-surface-400 font-medium">Flagged by: {r.flagger?.name}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Inwards History Table */}
-        <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 shadow-sm overflow-hidden flex flex-col">
-          <div className="px-5 py-4 border-b border-surface-200 dark:border-surface-800 flex items-center justify-between">
-            <h2 className="text-base font-bold text-surface-900 dark:text-surface-50 flex items-center gap-2">
-              <FileDown className="w-4.5 h-4.5 text-emerald-500" />
-              Latest Inward Goods Receipts
-            </h2>
-            <Link to="/im/inward" className="text-xs font-semibold text-primary-600 hover:text-primary-500 flex items-center gap-0.5">
-              Inward History <ChevronRight className="w-3 h-3" />
-            </Link>
-          </div>
-          <div className="flex-1 divide-y divide-surface-200 dark:divide-surface-800 overflow-y-auto max-h-96">
-            {inwardEntries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 text-center text-surface-400">
-                <Clock className="w-8 h-8 text-surface-400 mb-2" />
-                <p className="text-sm font-semibold">No Receipts Logged</p>
-                <p className="text-xs">Log inward shipments to add new product stock.</p>
-              </div>
-            ) : (
-              inwardEntries.map(i => (
-                <div key={i.id} className="p-4 hover:bg-surface-50 dark:hover:bg-surface-800/40 transition-colors flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-surface-900 dark:text-surface-50">{i.entry_number}</p>
-                    <p className="text-xs text-surface-500">Supplier: {i.supplier_name}</p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-xs text-surface-500 font-mono">Bill No: {i.bill_number}</p>
-                    <p className="text-[10px] text-surface-400">{i.items?.length || 0} unique items</p>
                   </div>
                 </div>
               ))

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { Navigate } from 'react-router-dom'
 import { PageLoader } from '../../components/ui/Spinner'
 
 // Eager — always needed
@@ -29,6 +30,7 @@ const SalesReportPage      = lazy(() => import('../../modules/reports/pages/Sale
 const StockReportPage      = lazy(() => import('../../modules/reports/pages/StockReportPage'))
 const AuditLogPage         = lazy(() => import('../../modules/audit/pages/AuditLogPage'))
 const BelowDlReportPage    = lazy(() => import('../../modules/reports/pages/BelowDlReportPage'))
+const PartHistoryPage      = lazy(() => import('../../modules/reports/pages/PartHistoryPage'))
 const ReportsPage          = lazy(() => import('../../modules/reports/pages/ReportsPage'))
 
 const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
@@ -59,17 +61,19 @@ export const adminRoutes = [
   { path: 'parties',             element: <Wrap><PartiesListPage /></Wrap> },
   { path: 'parties/:id',         element: <Wrap><PartyDetailPage /></Wrap> },
 
-  // Products
+  // Products & Part History
   { path: 'products',            element: <Wrap><ProductsListPage /></Wrap> },
   { path: 'products/new',        element: <Wrap><ProductCreatePage /></Wrap> },
   { path: 'products/:id',        element: <Wrap><ProductDetailPage /></Wrap> },
+  { path: 'part-history',        element: <Wrap><PartHistoryPage /></Wrap> },
+  { path: 'part-history/:sku',   element: <Wrap><PartHistoryPage /></Wrap> },
   { path: 'prices',              element: <Wrap><PriceListPage /></Wrap> },
 
   // Inventory
   { path: 'inventory',           element: <Wrap><StockOverviewPage /></Wrap> },
 
   // Orders
-  { path: 'orders',              element: <Wrap><OrdersListPage /></Wrap> },
+  { path: 'orders',              element: <Navigate to="/admin/challans" replace /> },
 
   // Pipeline (was: dispatch)
   { path: 'pipeline',            element: <Wrap><AdminPipelinePage /></Wrap> },

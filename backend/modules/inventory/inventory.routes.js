@@ -6,9 +6,8 @@ const requirePermission = require('../../middleware/authorizePermission');
 
 router.use(authenticate);
 
-// Stock Summary & Low Stock
-router.get('/stock',        requirePermission('inventory.view'),      c.getStockSummary);
-router.get('/stock/low',    requirePermission('inventory.low_stock'), c.getLowStock);
+router.get('/stock',        c.getStockSummary);
+router.get('/stock/low',    c.getLowStock);
 
 // Transaction Ledger (read-only, immutable)
 router.get('/transactions', requirePermission('inventory.view'),      c.getTransactions);

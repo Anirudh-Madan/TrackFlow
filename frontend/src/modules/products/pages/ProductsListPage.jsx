@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,6 +10,7 @@ import {
   getPricing, createPricing, updatePricing, deletePricing,
   bulkImportProducts,
 } from '../../../api/endpoints/products.api'
+import { getVendors } from '../../../api/endpoints/parties.api'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
@@ -37,6 +38,7 @@ const productSchema = z.object({
   location:             z.string().optional().or(z.literal('')),
   supplier:             z.string().optional().or(z.literal('')),
   gst_rate:             z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  initial_stock:        z.coerce.number().min(0, 'Must be ≥ 0').optional().or(z.literal('')),
 })
 
 const categorySchema = z.object({
@@ -182,6 +184,7 @@ export default function ProductsListPage() {
   const [categories, setCategories]     = useState([])
   const [uoms, setUoms]                 = useState([])
   const [pricing, setPricing]           = useState([])
+  const [vendors, setVendors]           = useState([])
   const [loading, setLoading]           = useState(true)
 
   // Import modal state
@@ -257,55 +260,87 @@ export default function ProductsListPage() {
     defaultValues: { product_id: '', purchase_price: 0, dealer_landing_price: '', selling_price: 0, effective_from: '', effective_to: '', notes: '' },
   })
 
-  // ── Lookup dictionary of active products by SKU ────────────────────────────
-  const productDict = useMemo(() => {
+  // ── Unified lookup dictionary for Price List + Products by SKU ─────────────
+  const priceCatalogDict = useMemo(() => {
     const dict = {}
     products.forEach(p => {
-      if (p.sku) dict[p.sku.toUpperCase()] = p
-    })
-    return dict
-  }, [products])
-
-  // ── Auto-fetch DL Price and Price List details when typing SKU/Part No ─────
-  const watchSku = prodForm.watch('sku')
-  useEffect(() => {
-    if (!editProduct && watchSku && watchSku.trim()) {
-      const skuUpper = watchSku.trim().toUpperCase()
-      const existingRecord = productDict[skuUpper]
-      if (existingRecord) {
-        if (existingRecord.dealer_landing_price != null && !prodForm.getValues('dealer_landing_price')) {
-          prodForm.setValue('dealer_landing_price', parseFloat(existingRecord.dealer_landing_price))
-        }
-        if (existingRecord.purchase_price != null && !prodForm.getValues('purchase_price')) {
-          prodForm.setValue('purchase_price', parseFloat(existingRecord.purchase_price))
-        }
-        if (existingRecord.name && !prodForm.getValues('name')) {
-          prodForm.setValue('name', existingRecord.name)
-        }
-        if (existingRecord.planner && !prodForm.getValues('planner')) {
-          prodForm.setValue('planner', existingRecord.planner)
-        }
-        if (existingRecord.supplier && !prodForm.getValues('supplier')) {
-          prodForm.setValue('supplier', existingRecord.supplier)
-        }
-        if (existingRecord.gst_rate != null && (!prodForm.getValues('gst_rate') || prodForm.getValues('gst_rate') === 18)) {
-          prodForm.setValue('gst_rate', parseFloat(existingRecord.gst_rate))
+      if (p.sku) {
+        dict[p.sku.trim().toUpperCase()] = {
+          name: p.name || '',
+          planner: p.planner || '',
+          supplier: p.supplier || '',
+          location: p.location || '',
+          gst_rate: p.gst_rate ?? 18,
+          purchase_price: p.purchase_price,
+          dealer_landing_price: p.dealer_landing_price,
+          selling_price: p.selling_price,
+          category_id: p.category_id ? String(p.category_id) : '',
         }
       }
+    })
+    pricing.forEach(pr => {
+      const sku = pr.product?.sku || pr.sku
+      if (sku) {
+        const skuUpper = sku.trim().toUpperCase()
+        const existing = dict[skuUpper] || {}
+        dict[skuUpper] = {
+          name: pr.product?.name || pr.name || existing.name || '',
+          planner: pr.product?.planner || pr.planner || existing.planner || '',
+          supplier: pr.product?.supplier || pr.supplier || existing.supplier || '',
+          location: pr.product?.location || pr.location || existing.location || '',
+          gst_rate: pr.product?.gst_rate ?? pr.gst_rate ?? existing.gst_rate ?? 18,
+          purchase_price: pr.purchase_price ?? pr.product?.purchase_price ?? existing.purchase_price,
+          dealer_landing_price: pr.dealer_landing_price ?? pr.product?.dealer_landing_price ?? existing.dealer_landing_price,
+          selling_price: pr.selling_price ?? pr.product?.selling_price ?? existing.selling_price,
+          category_id: pr.product?.category_id ? String(pr.product.category_id) : existing.category_id || '',
+        }
+      }
+    })
+    return dict
+  }, [products, pricing])
+
+  // ── Auto-fill all product details when typing/pasting SKU/Part No ────────
+  const handlePartNumberAutoFill = useCallback((rawSku) => {
+    if (editProduct || !rawSku || !rawSku.trim()) return
+    const skuUpper = rawSku.trim().toUpperCase()
+    const match = priceCatalogDict[skuUpper]
+    if (match) {
+      if (match.name) prodForm.setValue('name', match.name)
+      if (match.planner) prodForm.setValue('planner', match.planner)
+      if (match.supplier) prodForm.setValue('supplier', match.supplier)
+      if (match.location) prodForm.setValue('location', match.location)
+      if (match.purchase_price != null && match.purchase_price !== '') prodForm.setValue('purchase_price', parseFloat(match.purchase_price))
+      if (match.dealer_landing_price != null && match.dealer_landing_price !== '') prodForm.setValue('dealer_landing_price', parseFloat(match.dealer_landing_price))
+      if (match.gst_rate != null) prodForm.setValue('gst_rate', parseFloat(match.gst_rate))
+      if (match.category_id) prodForm.setValue('category_id', match.category_id)
+
+      toast.success(`Auto-filled details from Price List for Part No ${skuUpper}!`, { id: 'autofill-sku-toast' })
     }
-  }, [watchSku, editProduct, productDict, prodForm])
+  }, [editProduct, priceCatalogDict, prodForm])
+
+  const watchSku = prodForm.watch('sku')
+  useEffect(() => {
+    if (watchSku) {
+      handlePartNumberAutoFill(watchSku)
+    }
+  }, [watchSku, handlePartNumberAutoFill])
 
   // ── Data fetch ─────────────────────────────────────────────────────────────
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [pRes, cRes, uRes, prRes] = await Promise.all([
-        getProducts(), getCategories(), getUOM(), getPricing(),
+      const [pRes, cRes, uRes, prRes, vRes] = await Promise.all([
+        getProducts(),
+        getCategories(),
+        getUOM(),
+        getPricing(),
+        getVendors().catch(() => ({ success: false, data: [] }))
       ])
       if (pRes.success)  setProducts(pRes.data)
       if (cRes.success)  setCategories(cRes.data)
       if (uRes.success)  setUoms(uRes.data)
       if (prRes.success) setPricing(prRes.data)
+      if (vRes && vRes.success && Array.isArray(vRes.data)) setVendors(vRes.data)
     } catch (err) {
       toast.error(err.message || 'Failed to load products data')
     } finally {
@@ -315,20 +350,47 @@ export default function ProductsListPage() {
 
   useEffect(() => { fetchAll() }, [])
 
+  // ── Dynamic Vendors List ──────────────────────────────────────────────────
+  const vendorsList = useMemo(() => {
+    const set = new Set()
+    if (Array.isArray(vendors)) {
+      vendors.forEach(v => {
+        const name = v.company_name || v.name || v.supplier_name
+        if (name && name.trim()) set.add(name.trim())
+      })
+    }
+    if (Array.isArray(products)) {
+      products.forEach(p => {
+        if (p.supplier && p.supplier.trim()) set.add(p.supplier.trim())
+      })
+    }
+    if (Array.isArray(pricing)) {
+      pricing.forEach(pr => {
+        const supp = pr.product?.supplier || pr.supplier
+        if (supp && supp.trim()) set.add(supp.trim())
+      })
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [vendors, products, pricing])
+
   // ── Filtered lists ─────────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => products.filter(p => {
-    // Only show products for which stock is available
+    // Only show products for which stock is available (> 0)
     const hasAvailableStock = parseFloat(p.available || 0) > 0 || parseFloat(p.on_hand || 0) > 0
     if (!hasAvailableStock) return false
 
-    const q = search.toLowerCase()
-    const matchSearch = !search ||
+    const q = search.toLowerCase().trim()
+    const matchSearch = !q ||
       (p.name && p.name.toLowerCase().includes(q)) ||
       (p.sku && p.sku.toLowerCase().includes(q)) ||
       (p.planner && p.planner.toLowerCase().includes(q)) ||
-      (p.location && p.location.toLowerCase().includes(q))
-    const matchCat = !catFilter || String(p.category_id) === catFilter
-    const matchSupplier = !supplierFilter || p.supplier === supplierFilter
+      (p.location && p.location.toLowerCase().includes(q)) ||
+      (p.supplier && p.supplier.toLowerCase().includes(q)) ||
+      (p.category?.name && p.category.name.toLowerCase().includes(q)) ||
+      (p.remarks && p.remarks.toLowerCase().includes(q))
+
+    const matchCat = !catFilter || String(p.category_id) === String(catFilter) || String(p.category?.id) === String(catFilter)
+    const matchSupplier = !supplierFilter || (p.supplier && p.supplier.toLowerCase().trim() === supplierFilter.toLowerCase().trim())
     return matchSearch && matchCat && matchSupplier
   }), [products, search, catFilter, supplierFilter])
 
@@ -345,7 +407,7 @@ export default function ProductsListPage() {
   const openCreateProduct = () => {
     setEditProduct(null)
     setProdError(null)
-    prodForm.reset({ name: '', sku: '', category_id: '', purchase_price: '', dealer_landing_price: '', remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00 })
+    prodForm.reset({ name: '', sku: '', category_id: '', purchase_price: '', dealer_landing_price: '', remarks: '', planner: '', location: '', supplier: '', gst_rate: 18.00, initial_stock: '' })
     setIsProdOpen(true)
   }
 
@@ -363,6 +425,7 @@ export default function ProductsListPage() {
       location:             p.location || '',
       supplier:             p.supplier || '',
       gst_rate:             p.gst_rate != null ? parseFloat(p.gst_rate) : 18.00,
+      initial_stock:        p.available != null ? parseFloat(p.available) : (p.on_hand != null ? parseFloat(p.on_hand) : ''),
     })
     setIsProdOpen(true)
   }
@@ -385,6 +448,7 @@ export default function ProductsListPage() {
         purchase_price:       data.purchase_price !== '' && data.purchase_price != null ? parseFloat(data.purchase_price) : null,
         dealer_landing_price: data.dealer_landing_price !== '' && data.dealer_landing_price != null ? parseFloat(data.dealer_landing_price) : null,
         gst_rate:             data.gst_rate !== '' && data.gst_rate != null ? parseFloat(data.gst_rate) : null,
+        initial_stock:        data.initial_stock !== '' && data.initial_stock != null ? parseFloat(data.initial_stock) : 0,
         planner:              derivedPlanner || null,
       }
       const res = editProduct
@@ -685,7 +749,7 @@ export default function ProductsListPage() {
   const validatedImportItems = useMemo(() => {
     return parsedImportData.map((item, index) => {
       const skuUpper = item.sku?.trim().toUpperCase()
-      const dbProduct = productDict[skuUpper]
+      const dbProduct = priceCatalogDict[skuUpper]
       
       const errors = []
       if (!item.sku?.trim()) {
@@ -755,7 +819,7 @@ export default function ProductsListPage() {
         errors
       }
     })
-  }, [parsedImportData, productDict])
+  }, [parsedImportData, priceCatalogDict])
 
   // Count items summary
   const importSummary = useMemo(() => {
@@ -904,10 +968,10 @@ export default function ProductsListPage() {
               onChange={e => setSupplierFilter(e.target.value)}
               className={`input-base pl-9 py-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
             >
-              <option value="">All Suppliers</option>
-              <option value="Cummins">Cummins</option>
-              <option value="Meritor">Meritor</option>
-              <option value="Other">Other</option>
+              <option value="">All Vendors</option>
+              {vendorsList.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
             </select>
           </div>
 
@@ -932,7 +996,7 @@ export default function ProductsListPage() {
             <div className="p-12 text-center">
               <Package className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600 mb-3" />
               <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">No products with available stock</h3>
-              <p className="text-xs text-surface-500 mt-1">Products without available stock are hidden on this page.</p>
+              <p className="text-xs text-surface-500 mt-1">Only products with available stock (&gt; 0) are shown on this page.</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -1033,8 +1097,20 @@ export default function ProductsListPage() {
           <ErrorBanner msg={prodError} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input {...prodForm.register('sku')} label="Part No" placeholder="e.g. PN-1.5-RED" required error={prodForm.formState.errors.sku?.message} />
-            <Input {...prodForm.register('name')} label="Description" placeholder="e.g. Copper Wire 1.5mm (Optional)" error={prodForm.formState.errors.name?.message} icon={Package} />
+            <Input
+              {...prodForm.register('sku')}
+              label="Part No"
+              placeholder="e.g. 3004258 (paste or type Part No)"
+              required
+              onPaste={(e) => {
+                const pastedText = e.clipboardData?.getData('text')
+                if (pastedText) {
+                  setTimeout(() => handlePartNumberAutoFill(pastedText), 50)
+                }
+              }}
+              error={prodForm.formState.errors.sku?.message}
+            />
+            <Input {...prodForm.register('name')} label="Description" placeholder="Description (Auto-filled from Price List)" error={prodForm.formState.errors.name?.message} icon={Package} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1068,12 +1144,20 @@ export default function ProductsListPage() {
                 {...prodForm.register('supplier')}
                 className={`input-base appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.25em_1.25em] bg-[url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")]`}
               >
-                <option value="">— Select Supplier —</option>
-                <option value="Cummins">Cummins</option>
-                <option value="Meritor">Meritor</option>
-                <option value="Other">Other</option>
+                <option value="">— Select Supplier / Vendor —</option>
+                {vendorsList.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
               </select>
             </div>
+            <Input
+              {...prodForm.register('initial_stock')}
+              label="Stock Quantity (Available Stock)"
+              type="number"
+              step="1"
+              placeholder="e.g. 50 (enter stock quantity)"
+              error={prodForm.formState.errors.initial_stock?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">

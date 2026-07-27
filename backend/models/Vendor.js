@@ -13,7 +13,7 @@ const Vendor = sequelize.define('Vendor', {
   },
   gst: {
     type: DataTypes.STRING(15),
-    allowNull: false,
+    allowNull: true,
     unique: true,
   },
   remarks: {

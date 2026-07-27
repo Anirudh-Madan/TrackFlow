@@ -11,7 +11,7 @@ exports.getSettings = async (req, res, next) => {
     }
     // Return all settings except the PIN hash itself
     const settings = await AppSetting.findAll({
-      where: { key: ['whatsapp_enabled', 'company_name', 'pin_set'] },
+      where: { key: ['company_name', 'pin_set'] },
     });
     const pinRow = await AppSetting.findOne({ where: { key: 'admin_edit_pin' } });
     res.json({
@@ -40,8 +40,7 @@ exports.setPin = async (req, res, next) => {
 
     const existing = await AppSetting.findOne({ where: { key: 'admin_edit_pin' } });
 
-    // Allow first-time setup without a current PIN. If a current PIN is supplied,
-    // verify it before changing the stored PIN.
+    // Logged in Admins can set or update PIN directly
     if (existing?.value && current_pin) {
       const valid = await bcrypt.compare(String(current_pin), existing.value);
       if (!valid) {

@@ -6,7 +6,7 @@ const requirePermission = require('../../middleware/authorizePermission');
 
 router.use(authenticate);
 
-router.get('/',       requirePermission('users.view'),       usersController.getUsers);
+router.get('/',       usersController.getUsers);
 router.post('/',      requirePermission('users.create'),     usersController.createUser);
 router.put('/:id',    requirePermission('users.edit'),       usersController.updateUser);
 router.delete('/:id', requirePermission('users.deactivate'), usersController.deleteUser);

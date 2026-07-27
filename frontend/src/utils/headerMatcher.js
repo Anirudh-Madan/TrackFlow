@@ -7,6 +7,22 @@
 //     whitespace/underscores  (handles "Part No.", "PART_NUMBER", "Item Code ")
 //   • Never hard-fails: always returns matched + unmatched, caller decides
 //   • Structured log object so the caller can always emit useful debug output
+//
+// ── CHANGELOG ─────────────────────────────────────────────────────────────────
+// [FIX] matchHeaders(): previously, when a second raw header aliased to a
+// field that was already claimed (e.g. two columns both alias to `name`, or
+// both alias to `sku`), the second header was silently discarded — it never
+// appeared in fieldMap AND never appeared in unmatchedHeaders. This made
+// columns like "Description" vanish without a trace whenever the sheet had
+// another column mapping to the same internal field.
+//
+// Fixed by:
+//   1. Pushing the losing header into unmatchedHeaders instead of dropping it,
+//      so it's always visible somewhere in the report.
+//   2. Recording every collision in a new `collisions` array on matchLog, so
+//      the caller / UI can explicitly show "Description and Particulars both
+//      matched to 'name' — kept 'Description'" instead of a mystery.
+// ──────────────────────────────────────────────────────────────────────────────
 
 // ── Normalisation ─────────────────────────────────────────────────────────────
 
@@ -51,7 +67,8 @@ export const FIELD_ALIASES = {
   sku: [
     'sku', 'sku_code', 'product_sku', 'item_sku', 'part_sku',
     'part_number', 'part_no', 'partno', 'part no', 'part_num', 'part_id',
-    'partnumber', 'part number', 'part_code',
+    'partnumber', 'part number', 'part_code', 'tml_part_no', 'tml part no', 'tml_part_number', 'tml part number',
+    'old_part', 'old part', 'old_part_no', 'old part no',
     'item_code', 'item_no', 'itemno', 'item no', 'item_number', 'item_id',
     'product_code', 'product_no', 'prod_code', 'prod_no',
     'code', 'article_no', 'article no', 'article_number', 'art_no',
@@ -70,10 +87,11 @@ export const FIELD_ALIASES = {
     'particulars', 'item_particulars', 'item particulars',
     'nomenclature', 'specification', 'specifications', 'specs',
     'part_info', 'product_info', 'short_description', 'long_description',
-    'item', 'title', 'product', 'part',
+    'item', 'title', 'product',
   ],
   planner: [
     'planner', 'plan', 'planned_by', 'buyer', 'buyer_name',
+    'engine_model', 'engine model', 'emission_mode', 'emission mode',
     'planner_section', 'planner section', 'planner/section', 'planner_sec', 'planner sec',
     'planner_code', 'planner code', 'planner_name', 'planner name', 'planner_no', 'planner no', 'planner_num', 'planner_id',
     'section', 'sec', 'sec_name', 'section_name', 'section_code',
@@ -86,11 +104,10 @@ export const FIELD_ALIASES = {
     'shelf', 'rack', 'store_location', 'wh_location', 'rack_no', 'bin_no',
   ],
   purchase_price: [
-    'new_casl_dn_price', 'new casl dn price', 'new_casl_dn', 'new casl dn', 
+    'new_casl_dn_price', 'new casl dn price', 'new_casl_dn', 'new casl dn',
     'casl_dn_price', 'casl dn price', 'casl_dn', 'casl dn',
-    'new_dn_price', 'new dn price', 'new_dn', 'new dn', 
+    'new_dn_price', 'new dn price', 'new_dn', 'new dn',
     'new_purchase_price', 'new purchase price',
-    'old_casl_dn_price', 'old casl dn price', 'old_casl_dn', 'old casl dn',
     'purchase_price', 'purchase price', 'purchase', 'pur_price',
     'buy_price', 'buy price', 'buying_price', 'cost_price', 'cost price', 'cost',
     'dn', 'dn_price', 'dn price', 'dealer_net', 'dealer net', 'dealer_net_price',
@@ -98,21 +115,19 @@ export const FIELD_ALIASES = {
     'unit_cost', 'unit cost', 'po_price', 'rate', 'unit_rate',
   ],
   dealer_landing_price: [
-    'new_casl_dl_price', 'new casl dl price', 'new_casl_dl', 'new casl dl', 
+    'new_casl_dl_price', 'new casl dl price', 'new_casl_dl', 'new casl dl',
     'casl_dl_price', 'casl dl price', 'casl_dl', 'casl dl',
-    'new_dl_price', 'new dl price', 'new_dl', 'new dl', 
+    'new_dl_price', 'new dl price', 'new_dl', 'new dl',
     'new_landing_price', 'new landing price',
-    'old_casl_dl_price', 'old casl dl price', 'old_casl_dl', 'old casl dl',
     'dealer_landing_price', 'dealer landing price', 'dealer landing', 'dealer_landing',
     'landing_price', 'landing price', 'landing', 'landed_price', 'landed_cost',
     'dealer_price', 'dealer price', 'dl_price', 'dl price', 'dl', 'dl_rate',
     'dp', 'dp_price', 'd_l_price', 'd_l',
   ],
   selling_price: [
-    'new_mrp_price', 'new mrp price', 'new_mrp', 'new mrp', 
+    'new_mrp_price', 'new mrp price', 'new_mrp', 'new mrp',
     'casl_mrp_price', 'casl mrp price', 'casl_mrp', 'casl mrp',
     'new_selling_price', 'new selling price', 'new_sp', 'new sp',
-    'old_mrp_price', 'old mrp price', 'old_mrp', 'old mrp',
     'selling_price', 'selling price', 'selling', 'sell_price', 'sell price',
     'mrp', 'maximum_retail_price', 'mrp_price', 'mrp_rs', 'mrp_amount',
     'price', 'unit_price', 'list_price', 'list price', 'retail_price', 'retail price',
@@ -163,6 +178,7 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
  *     received:   string[],
  *     matched:    Object.<string, string>,
  *     unmatched:  string[],
+ *     collisions: Array<{ field: string, kept: string, dropped: string }>,
  *     supplierId: string
  *   }
  * }}
@@ -170,6 +186,7 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
 export function matchHeaders(rawHeaders, supplierId = 'unknown') {
   const fieldMap = {}         // internalField → original header (first match wins)
   const unmatchedHeaders = []
+  const collisions = []      // [FIX] track every "second header lost the race" case
 
   for (const header of rawHeaders) {
     const normHeader = normalizeKey(header)
@@ -178,6 +195,18 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
     if (internalField) {
       if (!fieldMap[internalField]) {
         fieldMap[internalField] = header
+      } else {
+        // [FIX] Previously this header was silently dropped here — it never
+        // made it into fieldMap (already claimed) and never made it into
+        // unmatchedHeaders either, so it just vanished from every report.
+        // Now: surface it as unmatched AND log the collision explicitly so
+        // the UI/caller can show *why* it was dropped instead of a mystery.
+        unmatchedHeaders.push(header)
+        collisions.push({
+          field: internalField,
+          kept: fieldMap[internalField],
+          dropped: header,
+        })
       }
     } else {
       unmatchedHeaders.push(header)
@@ -185,11 +214,15 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
   }
 
   // ── Fuzzy Secondary Pass for unmapped fields ──────────────────────────────
-  const checkFallback = (field, keywords) => {
+  const isDescriptionLike = (norm) =>
+    /desc|description|detail|particular|nomenclature|spec|material/.test(norm)
+
+  const checkFallback = (field, keywords, { skipDescriptionLike = false } = {}) => {
     if (fieldMap[field]) return
     for (let i = 0; i < unmatchedHeaders.length; i++) {
       const header = unmatchedHeaders[i]
       const norm = normalizeKey(header)
+      if (skipDescriptionLike && isDescriptionLike(norm)) continue
       if (keywords.some(kw => norm.includes(kw))) {
         fieldMap[field] = header
         unmatchedHeaders.splice(i, 1)
@@ -200,17 +233,41 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
 
   checkFallback('name', ['desc', 'description', 'detail', 'particular', 'nomenclature', 'spec'])
   checkFallback('planner', ['planner', 'plan', 'category', 'group', 'section', 'segment', 'family'])
-  checkFallback('sku', ['part', 'sku', 'code', 'article', 'number'])
+  // Never map "Description" to sku — it contains the substring "part"
+  checkFallback('sku', ['part', 'sku', 'code', 'article', 'number'], { skipDescriptionLike: true })
   checkFallback('purchase_price', ['new_casl_dn', 'new_dn', 'casl_dn', 'dn', 'purchase', 'cost', 'buy', 'net'])
   checkFallback('dealer_landing_price', ['new_casl_dl', 'new_dl', 'casl_dl', 'landing', 'dl', 'dealer'])
   checkFallback('selling_price', ['new_mrp', 'casl_mrp', 'mrp', 'sell', 'selling', 'price'])
   checkFallback('quantity', ['qty', 'quantity', 'stock', 'soh', 'balance', 'count'])
 
+  // Prefer latest (New …) price columns over legacy (Old …) when both exist — e.g. Cummins lists
+  const preferNewPriceColumn = (field, hintTokens) => {
+    const newHeader = rawHeaders.find(h => {
+      const norm = normalizeKey(h)
+      return norm.includes('new') && hintTokens.some(token => norm.includes(token))
+    })
+    if (newHeader) {
+      const prev = fieldMap[field]
+      fieldMap[field] = newHeader
+      if (prev && prev !== newHeader) {
+        const idx = unmatchedHeaders.indexOf(prev)
+        if (idx === -1) unmatchedHeaders.push(prev)
+      }
+      const newIdx = unmatchedHeaders.indexOf(newHeader)
+      if (newIdx >= 0) unmatchedHeaders.splice(newIdx, 1)
+    }
+  }
+
+  preferNewPriceColumn('purchase_price', ['dn', 'casl', 'purchase', 'cost', 'net'])
+  preferNewPriceColumn('dealer_landing_price', ['dl', 'landing', 'dealer'])
+  preferNewPriceColumn('selling_price', ['mrp', 'sell', 'retail'])
+
   const matchLog = {
     supplierId,
-    received:  rawHeaders,
-    matched:   fieldMap,
+    received: rawHeaders,
+    matched: fieldMap,
     unmatched: unmatchedHeaders,
+    collisions, // [FIX] new — e.g. [{ field: 'name', kept: 'Description', dropped: 'Particulars' }]
   }
 
   return { fieldMap, unmatchedHeaders, matchLog }
@@ -240,8 +297,11 @@ export function applyMapping(rawRows, fieldMap) {
     for (const [rawKey, rawValue] of Object.entries(row)) {
       const internalField = invertedMap[rawKey]
       if (internalField) {
-        const val = rawValue !== undefined && rawValue !== null ? String(rawValue) : ''
-        mapped[internalField] = val
+        const val = rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : ''
+        // When duplicate source columns map to the same field, keep the first non-empty value
+        if (val !== '' || mapped[internalField] === undefined) {
+          mapped[internalField] = val
+        }
       }
     }
     return mapped
@@ -327,11 +387,63 @@ export function buildRowsFromSheet(arrayRows) {
   const headerRowIndex = findActualHeaderRowIndex(arrayRows)
   const idx = headerRowIndex === -1 ? 0 : headerRowIndex
 
-  // Build header array, preserving original casing for downstream matchHeaders()
   const rawHeaderRow = arrayRows[idx] || []
-  const headers = rawHeaderRow.map(cell =>
-    (cell !== null && cell !== undefined) ? String(cell).trim() : ''
-  )
+
+  // Determine maximum column count across header and data rows
+  let maxCols = rawHeaderRow.length
+  for (let r = idx + 1; r < Math.min(arrayRows.length, idx + 25); r++) {
+    if (Array.isArray(arrayRows[r])) {
+      maxCols = Math.max(maxCols, arrayRows[r].length)
+    }
+  }
+
+  // Detect if the sheet already has an explicit Description column later in the row
+  const hasExplicitDescriptionHeader = rawHeaderRow.some(cell => {
+    if (cell === null || cell === undefined || String(cell).trim() === '') return false
+    const norm = normalizeKey(String(cell))
+    return norm === 'description' || norm === 'desc' || norm.includes('description') || norm.includes('part_desc')
+  })
+
+  // Build header array, inspecting preceding rows and inspecting data columns for empty header cells
+  const headers = []
+  for (let cIdx = 0; cIdx < maxCols; cIdx++) {
+    let s = (rawHeaderRow[cIdx] !== null && rawHeaderRow[cIdx] !== undefined) ? String(rawHeaderRow[cIdx]).trim() : ''
+
+    // 1. If header is empty, check preceding rows above (idx - 1, idx - 2...)
+    if (!s) {
+      for (let r = idx - 1; r >= 0; r--) {
+        const prevCell = arrayRows[r]?.[cIdx]
+        if (prevCell !== null && prevCell !== undefined && String(prevCell).trim() !== '') {
+          s = String(prevCell).trim()
+          break
+        }
+      }
+    }
+
+    // 2. If STILL empty, check if data rows below contain non-empty data in this column
+    if (!s) {
+      const firstDataVal = arrayRows.slice(idx + 1, idx + 50).find(r => Array.isArray(r) && r[cIdx] !== null && r[cIdx] !== undefined && String(r[cIdx]).trim() !== '')?.[cIdx]
+      if (firstDataVal !== undefined && firstDataVal !== null && String(firstDataVal).trim() !== '') {
+        const strVal = String(firstDataVal).trim()
+        const isStringText = isNaN(Number(strVal.replace(/,/g, '')))
+        // Avoid inventing a second "Description" when the sheet already labels that column explicitly
+        const canInferDescription = isStringText && !(hasExplicitDescriptionHeader && cIdx < rawHeaderRow.findIndex(cell => {
+          if (cell === null || cell === undefined || String(cell).trim() === '') return false
+          const norm = normalizeKey(String(cell))
+          return norm === 'description' || norm === 'desc' || norm.includes('description')
+        }))
+        if (canInferDescription) {
+          s = 'Description'
+        } else if (cIdx === 1 && isStringText && !hasExplicitDescriptionHeader) {
+          s = 'Description'
+        } else {
+          s = `Column_${cIdx + 1}`
+        }
+      }
+    }
+
+    headers.push(s)
+  }
 
   // Data rows = everything after the header row; skip rows where every cell is empty
   const rows = arrayRows
@@ -340,9 +452,13 @@ export function buildRowsFromSheet(arrayRows) {
     .map(row => {
       const obj = {}
       headers.forEach((h, i) => {
-        if (!h) return  // skip columns with empty header
+        if (!h) return
         const v = row[i]
-        obj[h] = (v !== null && v !== undefined) ? String(v) : ''
+        const strVal = (v !== null && v !== undefined) ? String(v).trim() : ''
+        // Duplicate headers (e.g. inferred + explicit "Description") — keep first non-empty value
+        if (strVal !== '' || obj[h] === undefined) {
+          obj[h] = strVal
+        }
       })
       return obj
     })

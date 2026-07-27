@@ -190,7 +190,7 @@ Every socket event is also persisted to `notifications` + `notification_recipien
 ### Delivery Strategy
 - **Primary:** Socket.io push to relevant rooms.
 - **Fallback:** 30-second polling endpoint `/api/notifications/unread-count` for clients that lose socket connection.
-- **No email** is sent by the application (per spec). Admin downloads and shares manually.
+- **No email or WhatsApp:** WhatsApp integration features and service abstractions have been fully removed from the system architecture. All notifications flow strictly via in-app Socket.io and DB-backed notification center.
 
 ---
 
@@ -218,20 +218,20 @@ Admin-only. Searchable by: user, role, module, action, date range, entity ID. Ex
 ## 7. Order Workflow
 
 ```
-SM creates order
+SM creates order / challan
   │
   ▼
-[Party selected] → Credit check runs
-  │                 ├─ Over limit → Warning shown inline, Admin alerted
-  │                 └─ OK → continue
+[Party selection via CustomerSearchDropdown]
+  ├─ Customer exists → Credit check runs (over limit → warning inline; OK → continue)
+  └─ Customer not in list → User prompted and auto-redirected to /admin/customers (state: openNewCustomer)
   ▼
 [Smart Suggestion panel appears] (if party has history)
   │
   ▼
 [SM adds items] → Live stock shown (combined Stock1+Stock2)
-  │              → Base price shown (read-only)
-  │              → SM selling price defaulted from rate card or base
-  │              → If SM price < base: base price shown amber
+                 → Base price shown (read-only)
+                 → SM selling price defaulted from rate card or base
+                 → If SM price < base: base price shown amber
   ▼
 [Submit] → Order created, challan number auto-assigned
   │       → Status: PENDING
@@ -255,6 +255,7 @@ SM creates order
 ```
 
 **Dispatched orders are fully locked at the API level.** No PATCH or PUT accepted on orders with status DISPATCHED or DELIVERED.
+**Delivery Challans Navigation:** In `/admin/challans`, clicking **Create Challan** switches directly to the **New Challan** tab.
 
 ---
 
@@ -425,7 +426,33 @@ ADMIN CLEANUP DASHBOARD
 STOCK STATES (per product)
   In Stock   = combined_qty > low_stock_threshold    → Green
   Low Stock  = 0 < combined_qty ≤ low_stock_threshold → Amber
-  Out of Stock = combined_qty = 0                    → Red
+  ```
+
+---
+
+## 12.1. Price List Import & Header Matching Engine
+
+```
+SUPPLIER SELECTION & VENDOR ONBOARDING
+  • Strict database vendor dropdown selection (populated from Vendor model).
+  • Vendors allow quick onboarding with nullable GST (`company_name` required, GST editable later).
+  • Legacy hardcoded static supplier options (Cummins/Meritor) are removed.
+
+IMPORT PRICE ACTIONS
+  • Add / Merge (`merge`): Updates prices/fields for matching SKUs and inserts new products without purging existing catalog.
+  • Overwrite List (`overwrite`): Updates matching SKUs and purges legacy products under the target supplier that are not present in the uploaded file.
+
+HEADER MATCHER ENGINE (src/utils/headerMatcher.js)
+  • preferNewPriceColumn: Automatically identifies and prioritizes `New CASL DN Price`, `New MRP Price`, `New DL Price` over legacy `Old` columns.
+  • Multi-Row & Merged Header Fallback: Inspects preceding rows if header cell is empty (handles merged Excel title rows).
+  • Data-Driven Description Synthesis: Inspects column data rows for text strings (e.g. `PLUG,EXPANSION`) to resolve unlabelled description columns.
+  • Adjacent Column Description Inference: Automatically pairs the column immediately following SKU as Description if unmapped.
+  • Number Sanitization: Strips comma thousand-separators (`1,220` → `1220.00`) before float parsing.
+  • Deduplication: Keeps first non-empty value when duplicate columns map to the same field.
+
+DATA PREVIEW UI
+  • Highlights parsed product descriptions in bold text directly under Part Numbers.
+  • Displays `⚠️ Description not found in file` warning if a sheet lacks description columns.
 ```
 
 ---

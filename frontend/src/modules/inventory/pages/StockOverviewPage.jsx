@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
+import MyReorderFlagsPage from '../../reorder/pages/MyReorderFlagsPage'
 import {
   getStockSummary, getLowStock, getTransactions,
   getDamaged, recordDamage, getAdjustments, createAdjustment, placeReorder,
@@ -63,8 +65,18 @@ const SELECT_CLS = `input-base appearance-none bg-no-repeat bg-[right_0.75rem_ce
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StockOverviewPage() {
+  const location = useLocation()
   // Tab state
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState(() => {
+    return location.state?.activeTab || 'overview'
+  })
+
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location])
 
   // Data
   const [stock,        setStock]        = useState([])
@@ -151,9 +163,14 @@ export default function StockOverviewPage() {
 
   // ── Filtered Data ─────────────────────────────────────────────────────────
   const filteredStock = useMemo(() => stock.filter(p => {
+    // Only show active inventory/catalog products (matches Admin Products page filtering)
+    const hasAvailableStock = parseFloat(p.available || 0) > 0 || parseFloat(p.on_hand || 0) > 0
+    const isCatalogProduct = Boolean(p.category_id || p.location || (p.reorder_threshold && p.reorder_threshold > 0))
+    if (!hasAvailableStock && !isCatalogProduct) return false
+
     if (!search) return true
     const q = search.toLowerCase()
-    return p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)
+    return p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.planner?.toLowerCase().includes(q) || p.location?.toLowerCase().includes(q)
   }), [stock, search])
 
   const filteredTxns = useMemo(() => transactions.filter(t => {
@@ -172,11 +189,11 @@ export default function StockOverviewPage() {
 
   // ── Summary Stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
-    totalProducts: stock.length,
+    totalProducts: filteredStock.length,
     lowStockCount: lowStock.length,
-    totalOnHand:   stock.reduce((s, p) => s + (p.on_hand || 0), 0),
+    totalOnHand:   filteredStock.reduce((s, p) => s + (p.on_hand || 0), 0),
     totalDamaged:  damaged.reduce((s, d) => s + parseFloat(d.quantity || 0), 0),
-  }), [stock, lowStock, damaged])
+  }), [filteredStock, lowStock, damaged])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRecordDamage = async (e) => {
@@ -273,12 +290,15 @@ export default function StockOverviewPage() {
 
   // ── Tab config ────────────────────────────────────────────────────────────
   const tabs = isSM
-    ? [{ id: 'overview',     label: 'Stock Overview',    Icon: Boxes }]
+    ? [
+        { id: 'overview',      label: 'Stock Overview', Icon: Boxes },
+        { id: 'reorder-flags', label: 'Reorder Flags',  Icon: RotateCcw },
+      ]
     : [
-        { id: 'overview',     label: 'Stock Overview',    Icon: Boxes },
-        { id: 'transactions', label: 'Transactions',      Icon: Activity },
-        { id: 'damaged',      label: 'Damaged Stock',     Icon: AlertTriangle },
-        { id: 'adjustments',  label: 'Adjustments',       Icon: Wrench },
+        { id: 'overview',      label: 'Stock Overview', Icon: Boxes },
+        { id: 'transactions',  label: 'Transactions',   Icon: Activity },
+        { id: 'damaged',       label: 'Damaged Stock',  Icon: AlertTriangle },
+        { id: 'adjustments',   label: 'Adjustments',    Icon: Wrench },
       ]
 
   const TH = ({ children, right }) => (
@@ -503,6 +523,13 @@ export default function StockOverviewPage() {
             onPageChange={setOverviewPage}
           />
         </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {/* TAB: REORDER FLAGS (SALES MANAGER)                              */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'reorder-flags' && (
+        <MyReorderFlagsPage />
       )}
 
       {/* ════════════════════════════════════════════════════════════════ */}

@@ -13,8 +13,8 @@ const MOCK_RESULTS = {
     { id: 2, label: 'Steel Rod 12mm', sub: 'SKU: SR-12MM', href: '/admin/products/2' },
   ],
   Orders: [
-    { id: 1, label: 'ORD-2024-001', sub: 'Raj Enterprises · ₹45,000', href: '/admin/orders/1' },
-    { id: 2, label: 'ORD-2024-002', sub: 'Sharma & Co. · ₹12,500', href: '/admin/orders/2' },
+    { id: 1, label: 'ORD-2024-001', sub: 'Raj Enterprises · ₹45,000', href: '/admin/challans' },
+    { id: 2, label: 'ORD-2024-002', sub: 'Sharma & Co. · ₹12,500', href: '/admin/challans' },
   ],
 }
 

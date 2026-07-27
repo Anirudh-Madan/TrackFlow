@@ -157,7 +157,7 @@ export default function BelowDlReportPage() {
                   </td>
                   <td className="px-6 py-4">
                     <Link
-                      to={`/admin/orders?search=${item.challanNumber?.replace('#', '')}`}
+                      to={`/admin/challans?search=${item.challanNumber?.replace('#', '')}`}
                       className="text-primary-600 dark:text-primary-400 hover:underline font-medium text-xs font-mono"
                     >
                       {item.challanNumber}

@@ -33,19 +33,23 @@ const OrderItem = sequelize.define('OrderItem', {
   },
   base_price: {
     type: DataTypes.DECIMAL(12, 4),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 0,
   },
   sm_price: {
     type: DataTypes.DECIMAL(12, 4),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 0,
   },
   gst_percent: {
     type: DataTypes.DECIMAL(5, 2),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 18.00,
   },
   line_total: {
     type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 0,
   },
   suggestion_added: {
     type: DataTypes.BOOLEAN,

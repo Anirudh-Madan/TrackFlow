@@ -54,28 +54,75 @@ exports.createProduct = async (req, res, next) => {
 
     const cleanSku = sku.trim().toUpperCase();
     const existing = await Product.findOne({ where: { sku: cleanSku } });
-    if (existing) return res.status(400).json({ success: false, error: 'A product with this Part No already exists' });
-
-    // Validate that the product has price list entries
-    const hasBodyPrices = (purchase_price !== undefined && purchase_price !== '' && purchase_price !== null) ||
-                          (dealer_landing_price !== undefined && dealer_landing_price !== '' && dealer_landing_price !== null) ||
-                          (selling_price !== undefined && selling_price !== '' && selling_price !== null);
-
-    const existingPricingCount = await Pricing.count({
-      include: [{ model: Product, where: { sku: cleanSku } }]
-    });
-
-    if (!hasBodyPrices && existingPricingCount === 0) {
-      return res.status(400).json({
-        success: false,
-        error: `Product '${cleanSku}' must exist in the Price List with valid prices (DN, DL, or Selling Price) before it can be added to the Products catalog.`
-      });
-    }
 
     let plannerVal = planner?.trim() || null;
     if (!plannerVal && category_id) {
       const cat = await ProductCategory.findByPk(category_id);
       if (cat) plannerVal = cat.name;
+    }
+
+    if (existing) {
+      // Product already exists in catalog/database. Update details and add initial stock if provided.
+      await existing.update({
+        name: name?.trim() || existing.name,
+        category_id: category_id || existing.category_id,
+        uom_id: uom_id || existing.uom_id,
+        purchase_price: purchase_price !== undefined && purchase_price !== '' && purchase_price !== null ? parseFloat(purchase_price) : existing.purchase_price,
+        dealer_landing_price: dealer_landing_price !== undefined && dealer_landing_price !== '' && dealer_landing_price !== null ? parseFloat(dealer_landing_price) : existing.dealer_landing_price,
+        selling_price: selling_price !== undefined && selling_price !== '' && selling_price !== null ? parseFloat(selling_price) : existing.selling_price,
+        planner: plannerVal || existing.planner,
+        location: location || existing.location,
+        supplier: supplier || existing.supplier,
+        gst_rate: gst_rate !== undefined && gst_rate !== '' && gst_rate !== null ? parseFloat(gst_rate) : existing.gst_rate,
+        remarks: remarks || existing.remarks,
+      });
+
+      const initStock = parseFloat(req.body.initial_stock || req.body.quantity || req.body.stock_quantity || 0);
+      let stockRow = await StockOnHand.findOne({ where: { product_id: existing.id } });
+      if (stockRow) {
+        if (initStock > 0) {
+          stockRow.quantity = parseFloat(stockRow.quantity || 0) + initStock;
+          await stockRow.save();
+        }
+      } else {
+        stockRow = await StockOnHand.create({ product_id: existing.id, quantity: initStock });
+      }
+
+      let reservedRow = await StockReserved.findOne({ where: { product_id: existing.id } });
+      if (!reservedRow) {
+        await StockReserved.create({ product_id: existing.id, quantity: 0 });
+      }
+
+      if (initStock > 0) {
+        const currentQty = stockRow ? parseFloat(stockRow.quantity || 0) : initStock;
+        await StockTransaction.create({
+          product_id: existing.id,
+          type: 'stock_in',
+          reference: `PRODUCT-${existing.id}`,
+          quantity_change: initStock,
+          quantity_after: currentQty,
+          performed_by: req.user?.id || 1,
+          notes: 'Stock added via Product form'
+        });
+      }
+
+      const result = await Product.findByPk(existing.id, {
+        include: [
+          { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
+          { model: UnitOfMeasure, as: 'uom', attributes: ['id', 'name', 'code'] },
+          { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+          { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] },
+        ],
+      });
+
+      const onHand = parseFloat(result.stockOnHand?.quantity || 0);
+      const reserved = parseFloat(result.stockReserved?.quantity || 0);
+      const productJson = result.toJSON();
+      productJson.on_hand = onHand;
+      productJson.reserved = reserved;
+      productJson.available = onHand - reserved;
+
+      return res.json({ success: true, data: productJson, message: 'Existing product updated with stock' });
     }
 
     const product = await Product.create({
@@ -95,8 +142,21 @@ exports.createProduct = async (req, res, next) => {
     });
 
     // Create initial stock rows & Pricing history row
-    await StockOnHand.create({ product_id: product.id, quantity: 0 });
+    const initStock = parseFloat(req.body.initial_stock || req.body.quantity || req.body.stock_quantity || 0);
+    await StockOnHand.create({ product_id: product.id, quantity: initStock });
     await StockReserved.create({ product_id: product.id, quantity: 0 });
+
+    if (initStock > 0) {
+      await StockTransaction.create({
+        product_id: product.id,
+        type: 'stock_in',
+        reference: `PRODUCT-${product.id}`,
+        quantity_change: initStock,
+        quantity_after: initStock,
+        performed_by: req.user?.id || 1,
+        notes: 'Initial stock on product creation'
+      });
+    }
 
     if (hasBodyPrices) {
       await Pricing.create({
@@ -488,15 +548,27 @@ exports.deletePricing = async (req, res, next) => {
 exports.bulkImport = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { items, stock_mode = 'absolute', effective_from, notes } = req.body;
+    const { items, stock_mode = 'absolute', price_mode = 'merge', target_supplier, effective_from, notes } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, error: 'No items provided for import' });
     }
 
-    // Step 1: Fetch all existing products for the provided SKUs
     const skus = items.map(item => item.sku?.trim().toUpperCase()).filter(Boolean);
     const uniqueSkus = [...new Set(skus)];
+
+    // If price_mode === 'overwrite' and target_supplier is provided, remove old products for this supplier not in the new file
+    if (price_mode === 'overwrite' && target_supplier) {
+      const { Op } = require('sequelize');
+      await Product.destroy({
+        where: {
+          supplier: target_supplier,
+          sku: { [Op.notIn]: uniqueSkus }
+        },
+        force: true,
+        transaction: t
+      });
+    }
 
     const existingProducts = await Product.findAll({
       where: { sku: uniqueSkus },
@@ -510,6 +582,12 @@ exports.bulkImport = async (req, res, next) => {
 
     const importDetails = [];
     const effFrom = effective_from || new Date().toISOString().split('T')[0];
+
+    const toNum = (val, fallback = null) => {
+      if (val === undefined || val === null || val === '') return fallback;
+      const num = parseFloat(String(val).replace(/,/g, '').trim());
+      return isNaN(num) ? fallback : num;
+    };
 
     // Step 2: Perform the updates or insertions
     for (const item of items) {
@@ -526,12 +604,12 @@ exports.bulkImport = async (req, res, next) => {
           planner: item.planner?.trim() || null,
           location: item.location?.trim() || null,
           supplier: item.supplier?.trim() || null,
-          purchase_price: (item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '') ? parseFloat(item.purchase_price) : null,
-          dealer_landing_price: (item.dealer_landing_price !== undefined && item.dealer_landing_price !== null && item.dealer_landing_price !== '') ? parseFloat(item.dealer_landing_price) : null,
-          selling_price: (item.selling_price !== undefined && item.selling_price !== null && item.selling_price !== '') ? parseFloat(item.selling_price) : null,
+          purchase_price: toNum(item.purchase_price, null),
+          dealer_landing_price: toNum(item.dealer_landing_price, null),
+          selling_price: toNum(item.selling_price, null),
           category_id: null,
           uom_id: null,
-          gst_rate: (item.gst_rate !== undefined && item.gst_rate !== null && item.gst_rate !== '') ? parseFloat(item.gst_rate) : 18.00,
+          gst_rate: toNum(item.gst_rate, 18.00),
         }, { transaction: t });
 
         // Create initial stock rows if missing
@@ -546,7 +624,7 @@ exports.bulkImport = async (req, res, next) => {
         if (item.planner !== undefined && item.planner !== null) product.planner = item.planner.trim();
         if (item.location !== undefined && item.location !== null) product.location = item.location.trim();
         if (item.supplier !== undefined && item.supplier !== null) product.supplier = item.supplier.trim();
-        if (item.gst_rate !== undefined && item.gst_rate !== null && item.gst_rate !== '') product.gst_rate = parseFloat(item.gst_rate);
+        if (item.gst_rate !== undefined && item.gst_rate !== null && item.gst_rate !== '') product.gst_rate = toNum(item.gst_rate, 18.00);
 
         await StockOnHand.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
         await StockReserved.findOrCreate({ where: { product_id: product.id }, defaults: { product_id: product.id, quantity: 0 }, transaction: t });
@@ -570,9 +648,9 @@ exports.bulkImport = async (req, res, next) => {
       const hasDealer = item.dealer_landing_price !== undefined && item.dealer_landing_price !== null && item.dealer_landing_price !== '';
       
       if (hasPurchase || hasSelling || hasDealer) {
-        const parsedPurchase = hasPurchase && !isNaN(parseFloat(item.purchase_price)) ? parseFloat(item.purchase_price) : (product.purchase_price ? parseFloat(product.purchase_price) : null);
-        const parsedSelling = hasSelling && !isNaN(parseFloat(item.selling_price)) ? parseFloat(item.selling_price) : (product.selling_price ? parseFloat(product.selling_price) : null);
-        const parsedDealer = hasDealer && !isNaN(parseFloat(item.dealer_landing_price)) ? parseFloat(item.dealer_landing_price) : (product.dealer_landing_price ? parseFloat(product.dealer_landing_price) : null);
+        const parsedPurchase = hasPurchase ? toNum(item.purchase_price, product.purchase_price) : product.purchase_price;
+        const parsedSelling = hasSelling ? toNum(item.selling_price, product.selling_price) : product.selling_price;
+        const parsedDealer = hasDealer ? toNum(item.dealer_landing_price, product.dealer_landing_price) : product.dealer_landing_price;
 
         product.purchase_price = parsedPurchase;
         product.selling_price = parsedSelling;

@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Trash2, Loader2, Eye, CheckCircle2, X, Printer,
-  FileText, Search, ChevronDown, User, Calendar, Package,
+  FileText, Search, ChevronDown, User, Calendar, Package, UserPlus,
 } from 'lucide-react'
 import { getProducts } from '../../../api/endpoints/products.api'
 import { createOrder } from '../../../api/endpoints/orders.api'
-import { getVendors } from '../../../api/endpoints/parties.api'
+import { getVendors, getCustomers } from '../../../api/endpoints/parties.api'
 import { cn } from '../../../utils/cn'
 import { useAuthStore } from '../../../store/authStore'
 import toast from 'react-hot-toast'
@@ -53,6 +53,103 @@ const roInputCls = cn(
   'w-full text-sm px-3.5 py-2.5 border border-surface-100 dark:border-surface-800 rounded-xl',
   'bg-surface-50 dark:bg-surface-800/50 text-surface-400 dark:text-surface-500 cursor-not-allowed',
 )
+
+// ─── Customer Search Dropdown ─────────────────────────────────────────────────
+function CustomerSearchDropdown({ customers, value, onChange, onCompanyFill, navigate }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState(value || '')
+  const ref = useRef(null)
+
+  // Sync search display when value is set externally
+  useEffect(() => { if (!open) setSearch(value || '') }, [value, open])
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return customers.slice(0, 40)
+    return customers
+      .filter(c =>
+        (c.company_name || '').toLowerCase().includes(search.toLowerCase())
+      )
+      .slice(0, 40)
+  }, [customers, search])
+
+  const hasNoMatch = search.trim().length > 0 && filtered.length === 0
+
+  const handleSelect = (customer) => {
+    setSearch(customer.company_name)
+    onChange(customer.company_name)
+    if (onCompanyFill) onCompanyFill(customer.company_name)
+    setOpen(false)
+  }
+
+  const handleRedirectNew = () => {
+    setOpen(false)
+    navigate('/admin/customers', { state: { openNewCustomer: true } })
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="relative">
+        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          autoComplete="off"
+          placeholder="e.g. Rahul Verma or search company…"
+          className={inputCls('pl-9 pr-8')}
+          onFocus={() => setOpen(true)}
+          onChange={e => {
+            setSearch(e.target.value)
+            onChange(e.target.value)
+            setOpen(true)
+          }}
+        />
+        <ChevronDown className={cn('absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 transition-transform pointer-events-none', open && 'rotate-180')} />
+      </div>
+
+      {open && (
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
+          <div className="max-h-56 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
+            {filtered.map(customer => (
+              <button
+                key={customer.id}
+                type="button"
+                onClick={() => handleSelect(customer)}
+                className="w-full px-3.5 py-2.5 text-left text-sm hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+              >
+                <p className="font-medium text-surface-900 dark:text-surface-100">{customer.company_name}</p>
+                {customer.gst && <p className="text-[11px] text-surface-400 font-mono">{customer.gst}</p>}
+              </button>
+            ))}
+
+            {hasNoMatch && (
+              <div className="px-4 py-3">
+                <p className="text-xs text-surface-400 mb-2">No customer found for <span className="font-semibold text-surface-600 dark:text-surface-300">"{search}"</span></p>
+                <button
+                  type="button"
+                  onClick={handleRedirectNew}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Create new customer →
+                </button>
+              </div>
+            )}
+
+            {!hasNoMatch && filtered.length === 0 && (
+              <p className="px-4 py-4 text-xs text-surface-400 text-center">Type to search customers…</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function VendorDropdown({ vendors, value, onChange, placeholder = 'Select supplier' }) {
   const [open, setOpen] = useState(false)
@@ -243,22 +340,40 @@ function printChallan(data, items, user) {
 }
 
 // ─── Product Search Dropdown ──────────────────────────────────────────────────
-function ProductDropdown({ products, value, onSelect }) {
+function ProductDropdown({ products, value, onSelect, supplier }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const ref = useRef(null)
 
-  const filtered = useMemo(() =>
-    products.filter(p =>
-      (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (p.sku || '').toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 30),
-    [products, search]
-  )
+  useEffect(() => {
+    const handler = event => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    let list = products
+    if (supplier && supplier.trim()) {
+      const sLower = supplier.trim().toLowerCase()
+      const supplierParts = list.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
+      if (supplierParts.length > 0) list = supplierParts
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(p =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.sku || '').toLowerCase().includes(q)
+      )
+    }
+    return list.slice(0, 40)
+  }, [products, supplier, search])
 
   const selected = value ? products.find(p => p.id === value) : null
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -276,7 +391,9 @@ function ProductDropdown({ products, value, onSelect }) {
             <p className="text-[11px] text-surface-400 font-mono">{selected.sku}</p>
           </div>
         ) : (
-          <span className="text-surface-400">Search product…</span>
+          <span className="text-surface-400">
+            {supplier ? `Search ${supplier} parts…` : 'Search product…'}
+          </span>
         )}
         <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
@@ -290,14 +407,20 @@ function ProductDropdown({ products, value, onSelect }) {
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name or SKU…"
+                placeholder={supplier ? `Filter ${supplier} parts by name or SKU…` : 'Search by name or SKU…'}
                 className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400"
               />
             </div>
           </div>
+          {supplier && (
+            <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
+              <span>Supplier Filter: <strong>{supplier}</strong></span>
+              <span className="text-[10px] opacity-80">{filtered.length} part(s) available</span>
+            </div>
+          )}
           <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
             {filtered.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found</p>
+              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found for {supplier || 'search'}</p>
             ) : filtered.map(p => (
               <button
                 key={p.id}
@@ -310,7 +433,7 @@ function ProductDropdown({ products, value, onSelect }) {
                   <p className="text-[11px] text-surface-400 font-mono">{p.sku}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price)}</p>
+                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.purchase_price)}</p>
                   <p className="text-[10px] text-surface-400">DL Price</p>
                 </div>
               </button>
@@ -323,7 +446,7 @@ function ProductDropdown({ products, value, onSelect }) {
 }
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, index, products, onChange, onRemove }) {
+function ItemRow({ item, index, products, supplier, onChange, onRemove }) {
   const dl = fmtNum(item.dl_price)
   const sp = item.sell_price !== '' && item.sell_price != null ? fmtNum(item.sell_price) : dl
   const lineTotal = sp * fmtNum(item.qty)
@@ -360,6 +483,7 @@ function ItemRow({ item, index, products, onChange, onRemove }) {
         <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Product</label>
         <ProductDropdown
           products={products}
+          supplier={supplier}
           value={item.product_id}
           onSelect={p => {
             const dlVal = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '0')
@@ -651,6 +775,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   const [products, setProducts] = useState([])
   const [vendors, setVendors] = useState([])
+  const [customers, setCustomers] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
 
   // Challan header state
@@ -669,7 +794,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
   const [showPreview, setShowPreview] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Load products and suppliers
+  // Load products, suppliers, and customers
   useEffect(() => {
     getProducts()
       .then(res => {
@@ -681,6 +806,12 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
     getVendors()
       .then(res => {
         if (res?.success) setVendors(res.data ?? [])
+      })
+      .catch(() => {})
+
+    getCustomers()
+      .then(res => {
+        if (res?.success) setCustomers(res.data ?? [])
       })
       .catch(() => {})
   }, [])
@@ -791,15 +922,6 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Supplier */}
-            <Field label="Supplier">
-              <VendorDropdown
-                vendors={vendors}
-                value={supplierId}
-                onChange={handleSupplierSelect}
-                placeholder="Select supplier"
-              />
-            </Field>
 
             {/* Challan Number (auto) */}
             <Field label="Challan Number">
@@ -828,18 +950,17 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
               </div>
             </Field>
 
-            {/* Customer Name */}
+            {/* Customer Name — searchable dropdown */}
             <Field label="Customer Name" required>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="e.g. Rahul Verma"
-                  className={inputCls('pl-9')}
-                />
-              </div>
+              <CustomerSearchDropdown
+                customers={customers}
+                value={customerName}
+                navigate={navigate}
+                onChange={setCustomerName}
+                onCompanyFill={name => {
+                  if (!customerCompany) setCustomerCompany(name)
+                }}
+              />
             </Field>
 
             {/* Customer Company */}
@@ -903,6 +1024,7 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
                   index={i}
                   item={item}
                   products={products}
+                  supplier={supplier}
                   onChange={handleItemChange}
                   onRemove={handleRemoveRow}
                 />

@@ -148,6 +148,7 @@ const ROLE_DEFAULTS = {
   sales_manager: [
     'auth.login', 'auth.logout', 'auth.change_password',
     'dashboard.view', 'dashboard.statistics',
+    'regions.view',
     'party.view', 'party.create', 'party.edit', 'party.ledger', 'party.order_history', 'party.rate_card',
     'products.view',
     'inventory.view',
@@ -162,6 +163,7 @@ const ROLE_DEFAULTS = {
   inventory_manager: [
     'auth.login', 'auth.logout', 'auth.change_password',
     'dashboard.view', 'dashboard.statistics',
+    'regions.view',
     'products.view', 'products.edit', 'products.import', 'products.custom_fields',
     'inventory.view', 'inventory.view_stock_split', 'inventory.adjust', 'inventory.inward', 'inventory.export', 'inventory.low_stock',
     'orders.view', 'orders.approve', 'orders.flag', 'orders.return',
@@ -249,6 +251,20 @@ async function seedDatabase() {
         await RolePermission.bulkCreate(rows, { ignoreDuplicates: true });
       }
       console.log(`Assigned ${rows.length} default permissions to role '${roleName}'.`);
+    }
+
+    // Ensure regions.view permission is assigned to sales_manager and inventory_manager
+    const regionsViewPerm = permissionMap['regions.view'];
+    if (regionsViewPerm) {
+      for (const rName of ['sales_manager', 'inventory_manager']) {
+        const r = await Role.findOne({ where: { name: rName } });
+        if (r) {
+          await RolePermission.findOrCreate({
+            where: { role_id: r.id, permission_id: regionsViewPerm.id },
+            defaults: { role_id: r.id, permission_id: regionsViewPerm.id }
+          });
+        }
+      }
     }
     console.log('Permission seeding complete.');
 

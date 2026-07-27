@@ -94,9 +94,9 @@ exports.createOrder = async (req, res, next) => {
       }
 
       const resolvedProductId = targetProd.id;
-      base_price = parseFloat(targetProd.selling_price || 0);
-      productName = description || targetProd.name || targetProd.sku;
-      if (dl_price == null) snapshotDlPrice = parseFloat(targetProd.dealer_landing_price || 0);
+      const base_price = parseFloat(targetProd.selling_price || 0);
+      const productName = description || targetProd.name || targetProd.sku;
+      const snapshotDlPrice = dl_price != null ? parseFloat(dl_price) : parseFloat(targetProd.dealer_landing_price || 0);
 
       // Snapshot base price & GST
       const gst_percent = 18.00; // Default GST 18%
@@ -349,12 +349,22 @@ exports.approveOrder = async (req, res, next) => {
       reason: 'Approved by Inventory Manager',
     }, { transaction: t });
 
-    // Find existing Challan or create new if not present
-    let challan = await Challan.findOne({ where: { order_id: order.id }, transaction: t });
+    // Find existing Challan or create new if not present (including soft-deleted ones)
+    let challan = await Challan.findOne({ where: { order_id: order.id }, paranoid: false, transaction: t });
     let challan_number = challan?.challan_number;
 
     if (challan) {
-      await challan.update({ status: 'active', generated_at: new Date() }, { transaction: t });
+      if (challan.deletedAt || challan.deleted_at) {
+        await challan.restore({ transaction: t });
+      }
+      await challan.update({
+        status: 'active',
+        party_id: order.party_id || challan.party_id,
+        party_name: order.customer_name || order.company_name || order.customer_company || challan.party_name,
+        supplier: order.supplier || challan.supplier,
+        grand_total: order.grand_total || challan.grand_total,
+        generated_at: new Date(),
+      }, { transaction: t });
     } else {
       const dateObj = new Date();
       const year = dateObj.getFullYear();
@@ -407,6 +417,7 @@ exports.approveOrder = async (req, res, next) => {
     }, { transaction: t });
 
     await t.commit();
+
     return res.json({
       success: true,
       message: 'Order approved & stock updated. Bill generated in Bills tab.',

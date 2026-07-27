@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -34,6 +34,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Info,
+  ChevronDown,
+  UserPlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
@@ -41,13 +43,15 @@ import TablePagination from '../../../components/data/TablePagination'
 
 // ─── Price Record Schema ──────────────────────────────────────────────────────
 const priceRecordSchema = z.object({
-  name:                 z.string().optional().or(z.literal('')),
-  sku:                  z.string().min(1, 'Part Number is required').max(50),
-  purchase_price:       z.coerce.number().min(0, 'DN must be ≥ 0').optional().or(z.literal('')),
+  name: z.string().optional().or(z.literal('')),
+  sku: z.string().min(1, 'Part Number is required').max(50),
+  purchase_price: z.coerce.number().min(0, 'DN must be ≥ 0').optional().or(z.literal('')),
   dealer_landing_price: z.coerce.number().min(0, 'DL must be ≥ 0').optional().or(z.literal('')),
-  gst_rate:             z.coerce.number().min(0, 'GST % must be ≥ 0').max(100, 'GST cannot exceed 100%').optional().or(z.literal('')).default(18.00),
-  planner:              z.string().optional().or(z.literal('')),
-  supplier:             z.string().optional().or(z.literal('')),
+  selling_price: z.coerce.number().min(0, 'Selling Price must be ≥ 0').optional().or(z.literal('')),
+  gst_rate: z.coerce.number().min(0, 'GST % must be ≥ 0').max(100, 'GST cannot exceed 100%').optional().or(z.literal('')).default(18.00),
+  planner: z.string().optional().or(z.literal('')),
+  supplier: z.string().optional().or(z.literal('')),
+  location: z.string().optional().or(z.literal('')),
 })
 
 // ─── Currency & Qty Formatters ────────────────────────────────────────────────────────
@@ -64,7 +68,7 @@ const parseCSV = (text) => {
   const commaCount = (firstLine.match(/,/g) || []).length
   const semiCount = (firstLine.match(/;/g) || []).length
   const tabCount = (firstLine.match(/\t/g) || []).length
-  
+
   if (semiCount > commaCount && semiCount > tabCount) delimiter = ';'
   if (tabCount > commaCount && tabCount > semiCount) delimiter = '\t'
 
@@ -74,11 +78,11 @@ const parseCSV = (text) => {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
-    
+
     let cells = []
     let inQuotes = false
     let currentCell = ''
-    
+
     for (let c = 0; c < line.length; c++) {
       const char = line[c]
       if (char === '"') {
@@ -103,6 +107,104 @@ const parseCSV = (text) => {
   return result
 }
 
+// ─── [FIX] Cross-Sheet Description Lookup ─────────────────────────────────────
+// Root cause of the "Description not parsing for Cummins" bug:
+// Cummins workbooks split data across multiple sheets — e.g.
+//   "On Highway Pricelist"  → Part Number, DN/DL/GST/HSN prices  (NO Description column)
+//   "Summary"               → Part Number, Description, New/Old CASL & MRP prices
+//   "V.BELT Ref."           → Part Number, Description, Market ref.
+// The importer picks the pricing sheet correctly (it matches "price" in the name),
+// but Description simply does not exist on that sheet — it lives on a different
+// tab, keyed by the same Part Number. headerMatcher.js can never find it because
+// it only ever sees headers from the single sheet it was handed.
+//
+// This helper scans every *other* sheet in the same workbook, finds any sheet
+// where Part Number + Description both map via matchHeaders, and builds a
+// SKU → Description lookup. Sheets with "summary" in the name are checked
+// first since that's typically the canonical full-catalog description index;
+// other sheets (e.g. category-specific reference sheets) are checked after,
+// filling in any SKUs the summary sheet didn't cover.
+const normSkuKey = (s) => {
+  if (s === null || s === undefined) return ''
+  let str = String(s).trim().toUpperCase()
+  str = str.replace(/\.0+$/, '')
+  str = str.replace(/\s+/g, '')
+  return str
+}
+
+const buildCrossSheetDescriptionLookup = (workbook, primarySheetName) => {
+  const lookup = {}
+  let sourceSheetName = null
+
+  const otherSheets = workbook.SheetNames.filter(s => s !== primarySheetName)
+  const prioritizedSheets = [
+    ...otherSheets.filter(s => s.toLowerCase().includes('summary')),
+    ...otherSheets.filter(s => !s.toLowerCase().includes('summary')),
+  ]
+
+  for (const sName of prioritizedSheets) {
+    try {
+      const ws = workbook.Sheets[sName]
+      if (!ws) continue
+
+      const arrayRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+      const { rows } = buildRowsFromSheet(arrayRows)
+      if (!rows.length) continue
+
+      const headers = Object.keys(rows[0] || {})
+      const { fieldMap } = matchHeaders(headers, sName)
+
+      let skuHeader = fieldMap.sku
+      let nameHeader = fieldMap.name
+
+      if (!skuHeader) {
+        skuHeader = headers.find(h => {
+          const n = normalizeKey(h)
+          return n.includes('part') || n.includes('sku') || n.includes('code') || n.includes('number') || n.includes('item')
+        })
+      }
+
+      if (!nameHeader) {
+        nameHeader = headers.find(h => {
+          const n = normalizeKey(h)
+          return n.includes('desc') || n.includes('name') || n.includes('detail') || n.includes('particular')
+        })
+      }
+
+      if (!nameHeader && headers[1]) {
+        const firstVal = rows.find(r => r[headers[1]] && String(r[headers[1]]).trim() !== '')?.[headers[1]]
+        if (firstVal && isNaN(Number(String(firstVal).replace(/,/g, '').trim()))) {
+          nameHeader = headers[1]
+        }
+      }
+
+      if (!skuHeader || !nameHeader) continue
+
+      let addedFromThisSheet = 0
+      rows.forEach(r => {
+        const rawSku = r[skuHeader]
+        const skuKey = normSkuKey(rawSku)
+        const nameVal = String(r[nameHeader] || '').trim()
+
+        if (skuKey && nameVal && nameVal !== rawSku && !lookup[skuKey]) {
+          lookup[skuKey] = nameVal
+          addedFromThisSheet++
+        }
+      })
+
+      if (addedFromThisSheet > 0 && !sourceSheetName) {
+        sourceSheetName = sName
+      }
+
+      console.log(`[Import – Prices] Cross-sheet scan "${sName}": ${addedFromThisSheet} description(s) indexed`)
+    } catch (err) {
+      console.warn(`[Import – Prices] Could not scan sheet "${sName}" for descriptions:`, err)
+    }
+  }
+
+  return { lookup, sourceSheetName }
+}
+
 function ErrorBanner({ msg }) {
   if (!msg) return null
   return (
@@ -114,35 +216,37 @@ function ErrorBanner({ msg }) {
 }
 
 export default function PriceListPage() {
-  const [products, setProducts]         = useState([])
-  const [vendors, setVendors]           = useState([])
-  const [loading, setLoading]           = useState(true)
-  const [search, setSearch]             = useState('')
+  const [products, setProducts] = useState([])
+  const [vendors, setVendors] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
-  const [page, setPage]                 = useState(1)
+  const [page, setPage] = useState(1)
 
   useEffect(() => { setPage(1) }, [search, supplierFilter])
 
   // Modals
-  const [isRecordOpen, setIsRecordOpen]     = useState(false)
+  const [isRecordOpen, setIsRecordOpen] = useState(false)
   const [isRecordDelete, setIsRecordDelete] = useState(false)
-  const [editRecord, setEditRecord]         = useState(null)
-  const [activeRecord, setActiveRecord]     = useState(null)
-  const [recordError, setRecordError]       = useState(null)
-  const [submitting, setSubmitting]         = useState(false)
-  const [deleting, setDeleting]             = useState(false)
+  const [editRecord, setEditRecord] = useState(null)
+  const [activeRecord, setActiveRecord] = useState(null)
+  const [recordError, setRecordError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Excel / CSV Importer states
-  const [isImportOpen, setIsImportOpen]       = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [selectedImportSupplier, setSelectedImportSupplier] = useState('')
-  const [importing, setImporting]             = useState(false)
-  const [importFileName, setImportFileName]   = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importFileName, setImportFileName] = useState('')
   const [parsedImportData, setParsedImportData] = useState([])
-  const [importNotes, setImportNotes]         = useState('')
+  const [importNotes, setImportNotes] = useState('')
   const [importEffectiveFrom, setImportEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
   const [importStockMode, setImportStockMode] = useState('relative')
+  const [importPriceMode, setImportPriceMode] = useState('merge') // 'merge' | 'overwrite'
   const [unmatchedHeaders, setUnmatchedHeaders] = useState([])  // columns the file had that we couldn't map
-  const [matchedFields, setMatchedFields]     = useState({})    // successfully mapped fields for display
+  const [matchedFields, setMatchedFields] = useState({})    // successfully mapped fields for display
+  const [descriptionSourceSheet, setDescriptionSourceSheet] = useState(null) // [FIX] which sheet descriptions were cross-referenced from, if any
 
   // Forms hook
   const recordForm = useForm({
@@ -215,9 +319,11 @@ export default function PriceListPage() {
       sku: '',
       purchase_price: 0,
       dealer_landing_price: '',
+      selling_price: '',
       gst_rate: 18.00,
       planner: '',
       supplier: '',
+      location: '',
     })
     setIsRecordOpen(true)
   }
@@ -226,13 +332,15 @@ export default function PriceListPage() {
     setEditRecord(p)
     setRecordError(null)
     recordForm.reset({
-      name:                 p.name,
-      sku:                  p.sku,
-      purchase_price:       parseFloat(p.purchase_price) || 0,
+      name: p.name || '',
+      sku: p.sku || '',
+      purchase_price: p.purchase_price ? parseFloat(p.purchase_price) : 0,
       dealer_landing_price: p.dealer_landing_price ? parseFloat(p.dealer_landing_price) : '',
-      gst_rate:             p.gst_rate != null ? parseFloat(p.gst_rate) : 18.00,
-      planner:              p.planner || '',
-      supplier:             p.supplier || '',
+      selling_price: p.selling_price ? parseFloat(p.selling_price) : '',
+      gst_rate: p.gst_rate != null ? parseFloat(p.gst_rate) : 18.00,
+      planner: p.planner || '',
+      supplier: p.supplier || '',
+      location: p.location || '',
     })
     setIsRecordOpen(true)
   }
@@ -243,14 +351,16 @@ export default function PriceListPage() {
     try {
       const payload = {
         ...data,
-        name:                 data.name?.trim() || null,
-        purchase_price:       data.purchase_price !== '' && data.purchase_price != null ? parseFloat(data.purchase_price) : null,
+        name: data.name?.trim() || null,
+        purchase_price: data.purchase_price !== '' && data.purchase_price != null ? parseFloat(data.purchase_price) : null,
         dealer_landing_price: data.dealer_landing_price !== '' && data.dealer_landing_price != null ? parseFloat(data.dealer_landing_price) : null,
-        gst_rate:             data.gst_rate !== '' && data.gst_rate != null ? parseFloat(data.gst_rate) : 18.00,
-        planner:              data.planner?.trim() || null,
-        supplier:             data.supplier?.trim() || null,
+        selling_price: data.selling_price !== '' && data.selling_price != null ? parseFloat(data.selling_price) : null,
+        gst_rate: data.gst_rate !== '' && data.gst_rate != null ? parseFloat(data.gst_rate) : 18.00,
+        planner: data.planner?.trim() || null,
+        supplier: data.supplier?.trim() || null,
+        location: data.location?.trim() || null,
       }
-      
+
       const res = editRecord
         ? await updateProduct(editRecord.id, payload)
         : await createProduct(payload)
@@ -290,12 +400,18 @@ export default function PriceListPage() {
 
   // ─── Sheet Bulk Import Handler ───────────────────────────────────────────────
   const onImportDrop = (acceptedFiles) => {
+    if (!selectedImportSupplier) {
+      toast.error('Please select a supplier from the dropdown first. If the supplier is not listed, add them in the Vendors directory first.')
+      return
+    }
+
     const file = acceptedFiles[0]
     if (!file) return
 
     setImportFileName(file.name)
     setUnmatchedHeaders([])   // reset on each new file
     setMatchedFields({})      // reset matched fields display
+    setDescriptionSourceSheet(null) // [FIX] reset cross-sheet description note on each new file
     const fileExtension = file.name.split('.').pop().toLowerCase()
     const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls'
 
@@ -303,81 +419,102 @@ export default function PriceListPage() {
     reader.onload = (e) => {
       try {
         let rawRows = []
-        if (isExcel) {
-          const data = new Uint8Array(e.target.result)
-          const workbook = XLSX.read(data, { type: 'array' })
-          let targetSheetName = workbook.SheetNames[0]
-          for (const sName of workbook.SheetNames) {
-            const normSName = sName.toLowerCase()
-            if (normSName.includes('price') || normSName.includes('part') || normSName.includes('catalog') || normSName.includes('data') || normSName.includes('master') || normSName.includes('item')) {
-              targetSheetName = sName
-              break
-            }
-          }
-          const worksheet = workbook.Sheets[targetSheetName]
-          // Parse in array mode first so we can detect the real header row
-          // (avoids __EMPTY_N placeholders when title/logo rows sit above data)
-          const allArrayRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
-          const { rows, headerRowIndex } = buildRowsFromSheet(allArrayRows)
-          console.log(`[Import – Prices] Header row detected at sheet row ${headerRowIndex + 1}`)
-          rawRows = rows
-        } else {
-          const text = e.target.result
-          rawRows = parseCSV(text)
-        }
+        let workbook = null
+        let targetSheetName = null
 
-        // ── Auto-detect supplier from filename / header content ─────────────
-        let detectedSupplier = 'Other'
-        const nameLower = file.name.toLowerCase()
-        if (nameLower.includes('cummins')) {
-          detectedSupplier = 'Cummins'
-        } else if (nameLower.includes('meritor')) {
-          detectedSupplier = 'Meritor'
-        }
-
-        if (detectedSupplier === 'Other' && rawRows.length > 0) {
-          const headerKeys = Object.keys(rawRows[0] || {})
-          const normalizedHeaders = headerKeys.map(k => k.replace(/^\uFEFF/, '').replace(/[\s_]+/g, '_').toLowerCase())
-          if (normalizedHeaders.includes('closing_qty') || normalizedHeaders.includes('planner') || normalizedHeaders.includes('closing_quantity')) {
-            detectedSupplier = 'Cummins'
-          } else if (normalizedHeaders.includes('qty') || normalizedHeaders.includes('location')) {
-            detectedSupplier = 'Meritor'
+        const data = new Uint8Array(e.target.result)
+        workbook = XLSX.read(data, { type: 'array' })
+        targetSheetName = workbook.SheetNames[0]
+        for (const sName of workbook.SheetNames) {
+          const normSName = sName.toLowerCase()
+          if (normSName.includes('price') || normSName.includes('part') || normSName.includes('catalog') || normSName.includes('data') || normSName.includes('master') || normSName.includes('item')) {
+            targetSheetName = sName
+            break
           }
         }
+        console.log(`[Import – Prices] Sheets/Tabs found: ${workbook.SheetNames.join(', ')} — using "${targetSheetName}"`)
+        const worksheet = workbook.Sheets[targetSheetName]
+        const allArrayRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+        const { rows, headerRowIndex } = buildRowsFromSheet(allArrayRows)
+        console.log(`[Import – Prices] Header row detected at row ${headerRowIndex + 1}`)
+        rawRows = rows
 
-        // ── Header matching via shared utility ──────────────────────────────
         const rawHeaders = Object.keys(rawRows[0] || {})
-        const supplierName = selectedImportSupplier || detectedSupplier
+        const supplierName = selectedImportSupplier
         const { fieldMap, unmatchedHeaders: unmatched, matchLog } = matchHeaders(rawHeaders, supplierName)
 
-        // Store matched fields for display
-        setMatchedFields(fieldMap)
-
-        // Always log matching detail — invaluable for debugging supplier files
         console.group('[Import – Prices] Header matching result')
         console.log('File            :', file.name)
         console.log('Supplier        :', supplierName)
         console.log('Raw headers     :', matchLog.received)
         console.log('Matched fields  :', JSON.stringify(matchLog.matched, null, 2))
         console.log('Unmatched headers:', JSON.stringify(matchLog.unmatched, null, 2))
+        if (matchLog.collisions?.length) {
+          console.log('Field collisions:', JSON.stringify(matchLog.collisions, null, 2))
+        }
         console.groupEnd()
 
-        // ── Build normalised rows ───────────────────────────────────────────
+        const cleanNumStr = val => {
+          if (val === undefined || val === null || val === '') return ''
+          return String(val).replace(/,/g, '').trim()
+        }
+
         const mappedRows = applyMapping(rawRows, fieldMap)
-        const normalizedRows = mappedRows
+        let normalizedRows = mappedRows
           .map(r => ({
-            sku:                  r.sku                  || '',
-            name:                 r.name                 || '',
-            planner:              r.planner              || '',
-            location:             r.location             || '',
-            purchase_price:       r.purchase_price       ?? '',
-            dealer_landing_price: r.dealer_landing_price ?? '',
-            selling_price:        r.selling_price        ?? '',
-            quantity:             r.quantity             ?? '',
-            gst_rate:             r.gst_rate !== '' && r.gst_rate !== undefined && r.gst_rate !== null ? r.gst_rate : '18.00',
-            supplier:             selectedImportSupplier || r.supplier || supplierName,
+            sku: r.sku || '',
+            name: r.name || '',
+            planner: r.planner || '',
+            location: r.location || '',
+            purchase_price: cleanNumStr(r.purchase_price),
+            dealer_landing_price: cleanNumStr(r.dealer_landing_price),
+            selling_price: cleanNumStr(r.selling_price),
+            quantity: cleanNumStr(r.quantity),
+            gst_rate: r.gst_rate !== '' && r.gst_rate !== undefined && r.gst_rate !== null ? cleanNumStr(r.gst_rate) : '18.00',
+            supplier: selectedImportSupplier,
           }))
-          .filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
+
+        // [FIX] Cross-sheet Description backfill.
+        // If the pricing sheet has no Description column at all (fieldMap.name is
+        // undefined), scan the workbook's other sheets for one that has BOTH
+        // Part Number and Description mapped, build a SKU → Description lookup,
+        // and fill it in here rather than leaving every row's `name` blank.
+        let crossSheetDescCount = 0
+        let descSourceSheet = null
+
+        if (isExcel && workbook && !fieldMap.name) {
+          const { lookup, sourceSheetName } = buildCrossSheetDescriptionLookup(workbook, targetSheetName)
+          if (Object.keys(lookup).length > 0) {
+            descSourceSheet = sourceSheetName
+            normalizedRows = normalizedRows.map(r => {
+              if (!r.name && r.sku) {
+                const skuKey = normSkuKey(r.sku)
+                const match = lookup[skuKey]
+                if (match) {
+                  crossSheetDescCount++
+                  return { ...r, name: match }
+                }
+              }
+              return r
+            })
+          }
+        }
+
+        if (crossSheetDescCount > 0) {
+          console.log(`[Import – Prices] Backfilled ${crossSheetDescCount} description(s) from sheet "${descSourceSheet}"`)
+          setDescriptionSourceSheet(descSourceSheet)
+        }
+
+        // Build the fields shown in the "Successfully mapped" banner. If Description
+        // wasn't a real column on this sheet but we recovered it from another sheet,
+        // reflect that here instead of showing the "Description not present" warning.
+        const displayFieldMap = { ...fieldMap }
+        if (crossSheetDescCount > 0 && !displayFieldMap.name) {
+          displayFieldMap.name = `Description (cross-referenced from "${descSourceSheet}" sheet)`
+        }
+        setMatchedFields(displayFieldMap)
+
+        normalizedRows = normalizedRows.filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
 
         setUnmatchedHeaders(unmatched)
         setParsedImportData(normalizedRows)
@@ -385,7 +522,7 @@ export default function PriceListPage() {
         if (normalizedRows.length === 0 && rawRows.length > 0) {
           console.error('[Import – Prices] FAILED: no rows matched after header mapping', {
             file: file.name,
-            supplier: detectedSupplier,
+            supplier: supplierName,
             rawHeaders: matchLog.received,
             fieldMap,
           })
@@ -395,10 +532,10 @@ export default function PriceListPage() {
           )
         } else if (unmatched.length > 0) {
           toast.success(
-            `Parsed ${normalizedRows.length} rows (${detectedSupplier}). ${unmatched.length} column(s) not recognised — see console for details.`
+            `Parsed ${normalizedRows.length} rows for ${supplierName}. ${unmatched.length} column(s) not recognised — see console for details.`
           )
         } else {
-          toast.success(`Successfully parsed ${normalizedRows.length} rows (${detectedSupplier}).`)
+          toast.success(`Successfully parsed ${normalizedRows.length} rows for ${supplierName}.`)
         }
       } catch (err) {
         console.error('[Import – Prices] Parse error:', err)
@@ -406,11 +543,7 @@ export default function PriceListPage() {
       }
     }
 
-    if (isExcel) {
-      reader.readAsArrayBuffer(file)
-    } else {
-      reader.readAsText(file)
-    }
+    reader.readAsArrayBuffer(file)
   }
 
   const { getRootProps: getImportRootProps, getInputProps: getImportInputProps, isDragActive: isImportDragActive } = useDropzone({
@@ -428,7 +561,7 @@ export default function PriceListPage() {
     return parsedImportData.map((item, index) => {
       const skuUpper = item.sku?.trim().toUpperCase()
       const dbProduct = productDict[skuUpper]
-      
+
       const errors = []
       if (!item.sku?.trim()) {
         errors.push('SKU is missing')
@@ -460,13 +593,15 @@ export default function PriceListPage() {
         errors.push('No prices, GST %, or stock levels specified for update')
       }
 
-      const importName = item.name?.trim() || dbProduct?.name || item.sku?.trim()
+      const importName = item.name?.trim() || dbProduct?.name || ''
+      const hasFileDescription = !!item.name?.trim()
       const importPlanner = item.planner?.trim() || dbProduct?.planner || ''
 
       return {
         id: index,
         sku: item.sku,
         name: importName,
+        hasFileDescription,
         planner: importPlanner,
         location: item.location,
         supplier: item.supplier,
@@ -502,6 +637,32 @@ export default function PriceListPage() {
     document.body.removeChild(link)
   }
 
+  // Auto-create vendor if the typed supplier name is new
+  const ensureVendorExists = async (supplierName) => {
+    if (!supplierName?.trim()) return
+    const exists = vendors.some(
+      v => v.company_name.toLowerCase() === supplierName.trim().toLowerCase()
+    )
+    if (exists) return
+    // Skip known static options
+    const statics = ['cummins', 'meritor', 'other']
+    if (statics.includes(supplierName.trim().toLowerCase())) return
+
+    try {
+      setCreatingSupplier(true)
+      const res = await createVendor({ company_name: supplierName.trim() })
+      if (res.success) {
+        toast.success(`New vendor "${supplierName.trim()}" added to the Vendors directory. You can edit the details at /admin/parties.`, { duration: 5000 })
+        // Refresh vendors list
+        getVendors().then(r => { if (r.success) setVendors(r.data || []) })
+      }
+    } catch {
+      // Silent — vendor creation is best-effort
+    } finally {
+      setCreatingSupplier(false)
+    }
+  }
+
   const handleImportSubmit = async () => {
     const validPayloadItems = validatedImportItems
       .filter(item => item.isValid)
@@ -533,6 +694,8 @@ export default function PriceListPage() {
         const res = await bulkImportProducts({
           items: batch,
           stock_mode: importStockMode,
+          price_mode: importPriceMode,
+          target_supplier: selectedImportSupplier,
           effective_from: importEffectiveFrom,
           notes: importNotes
         })
@@ -543,7 +706,11 @@ export default function PriceListPage() {
         totalImported += batch.length
       }
 
-      toast.success(`Successfully imported ${totalImported} records!`)
+      toast.success(
+        importPriceMode === 'overwrite'
+          ? `Successfully overwritten price list for ${selectedImportSupplier} (${totalImported} records)!`
+          : `Successfully imported/merged ${totalImported} records for ${selectedImportSupplier}!`
+      )
       setParsedImportData([])
       setImportFileName('')
       setImportNotes('')
@@ -605,9 +772,6 @@ export default function PriceListPage() {
               {vendors.map(v => (
                 <option key={v.id} value={v.company_name}>{v.company_name}</option>
               ))}
-              <option value="Cummins">Cummins</option>
-              <option value="Meritor">Meritor</option>
-              <option value="Other">Other</option>
             </select>
           </div>
 
@@ -643,41 +807,55 @@ export default function PriceListPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">
-                  <th className="px-6 py-3.5">Part Number</th>
-                  <th className="px-6 py-3.5">Description</th>
-                  <th className="px-6 py-3.5">Planner</th>
-                  <th className="px-6 py-3.5">DN (₹)</th>
-                  <th className="px-6 py-3.5">GST %</th>
-                  <th className="px-6 py-3.5">DL (₹)</th>
-                  <th className="px-6 py-3.5">Source</th>
-                  <th className="px-6 py-3.5 text-right">Actions</th>
+                  <th className="px-5 py-3.5">Part Number</th>
+                  <th className="px-5 py-3.5">Description</th>
+                  <th className="px-5 py-3.5">Category</th>
+                  <th className="px-5 py-3.5">Planner</th>
+                  <th className="px-5 py-3.5">DN (₹)</th>
+                  <th className="px-5 py-3.5">GST %</th>
+                  <th className="px-5 py-3.5">DL (₹)</th>
+                  <th className="px-5 py-3.5">Sell Price (₹)</th>
+                  <th className="px-5 py-3.5">Stock Qty</th>
+                  <th className="px-5 py-3.5">Source</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-700 text-sm text-surface-700 dark:text-surface-300">
                 {filteredRecords.slice((page - 1) * 50, page * 50).map(p => (
                   <tr key={p.id} className="table-row-hover">
-                    <td className="px-6 py-4 font-mono text-xs font-medium text-surface-600 dark:text-surface-400">
+                    <td className="px-5 py-4 font-mono text-xs font-medium text-surface-600 dark:text-surface-400">
                       {p.sku}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <div className="font-semibold text-surface-900 dark:text-surface-50">{p.name}</div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-surface-700 dark:text-surface-300">
+                    <td className="px-5 py-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400">
+                        {p.category?.name || 'Uncategorized'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 font-medium text-surface-700 dark:text-surface-300">
                       {p.planner || '—'}
                     </td>
-                    <td className="px-6 py-4 font-semibold text-surface-900 dark:text-surface-50">
+                    <td className="px-5 py-4 font-semibold text-surface-900 dark:text-surface-50">
                       {fmt(p.purchase_price)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-100/50">
                         <Percent className="h-3 w-3" />
                         {p.gst_rate != null ? parseFloat(p.gst_rate) : '18'}%
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-primary-600 dark:text-primary-400">
+                    <td className="px-5 py-4 font-semibold text-primary-600 dark:text-primary-400">
                       {fmt(p.dealer_landing_price)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4 font-semibold text-success-600 dark:text-success-400">
+                      {fmt(p.selling_price)}
+                    </td>
+                    <td className="px-5 py-4 font-mono text-xs font-medium text-surface-800 dark:text-surface-200">
+                      {fmtQty(p.available != null ? p.available : (p.on_hand != null ? p.on_hand : 0))}
+                    </td>
+                    <td className="px-5 py-4">
                       {p.supplier ? (
                         <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50">
                           {p.supplier}
@@ -686,7 +864,7 @@ export default function PriceListPage() {
                         <span className="text-surface-400">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEditRecord(p)}
@@ -733,16 +911,16 @@ export default function PriceListPage() {
             <Input
               {...recordForm.register('sku')}
               label="Part Number / SKU"
-              placeholder="e.g. CUM-55442"
+              placeholder="e.g. PART-55442"
               required
               disabled={!!editRecord}
               error={recordForm.formState.errors.sku?.message}
             />
-            
+
             <Input
               {...recordForm.register('name')}
               label="Description"
-              placeholder="e.g. Fuel Filter Cummins"
+              placeholder="e.g. Fuel Filter"
               required
               error={recordForm.formState.errors.name?.message}
             />
@@ -766,9 +944,6 @@ export default function PriceListPage() {
                 {vendors.map(v => (
                   <option key={v.id} value={v.company_name}>{v.company_name}</option>
                 ))}
-                <option value="Cummins">Cummins</option>
-                <option value="Meritor">Meritor</option>
-                <option value="Other">Other</option>
               </select>
             </div>
           </div>
@@ -784,6 +959,24 @@ export default function PriceListPage() {
             />
 
             <Input
+              {...recordForm.register('dealer_landing_price')}
+              label="DL Price (₹)"
+              type="number"
+              step="0.01"
+              error={recordForm.formState.errors.dealer_landing_price?.message}
+            />
+
+            <Input
+              {...recordForm.register('selling_price')}
+              label="Sell Price (₹)"
+              type="number"
+              step="0.01"
+              error={recordForm.formState.errors.selling_price?.message}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
               {...recordForm.register('gst_rate')}
               label="GST %"
               type="number"
@@ -793,11 +986,10 @@ export default function PriceListPage() {
             />
 
             <Input
-              {...recordForm.register('dealer_landing_price')}
-              label="DL Price (₹)"
-              type="number"
-              step="0.01"
-              error={recordForm.formState.errors.dealer_landing_price?.message}
+              {...recordForm.register('location')}
+              label="Location / Rack"
+              placeholder="e.g. A-12-3"
+              error={recordForm.formState.errors.location?.message}
             />
           </div>
 
@@ -862,61 +1054,86 @@ export default function PriceListPage() {
           setImportFileName('')
           setMatchedFields({})
           setUnmatchedHeaders([])
+          setDescriptionSourceSheet(null)
         }}
         title="Import Price Records"
         description="Upload an Excel (.xlsx, .xls) or CSV file containing part net prices and tax mappings."
         size="lg"
       >
         <div className="space-y-5">
-          {/* Supplier / Vendor Selection (Required) */}
+          {/* Supplier / Vendor Selection (Strict Dropdown) */}
           <div className="p-4 rounded-xl border border-primary-200 dark:border-primary-800/50 bg-primary-50/40 dark:bg-primary-900/10 space-y-2">
             <label className="text-xs font-semibold text-surface-900 dark:text-surface-100 flex items-center gap-1.5">
               <Truck className="h-4 w-4 text-primary-600 dark:text-primary-400" />
               Select Supplier / Vendor for this Price List <span className="text-danger-500">*</span>
             </label>
+
             <select
               value={selectedImportSupplier}
               onChange={e => setSelectedImportSupplier(e.target.value)}
               className="input-base bg-white dark:bg-surface-900"
             >
-              <option value="">— Choose Vendor / Supplier —</option>
+              <option value="">— Select Supplier / Vendor (Required) —</option>
               {vendors.map(v => (
                 <option key={v.id} value={v.company_name}>{v.company_name}</option>
               ))}
-              <option value="Cummins">Cummins</option>
-              <option value="Meritor">Meritor</option>
-              <option value="Other">Other</option>
             </select>
-            <p className="text-[11px] text-surface-500 dark:text-surface-400">
-              Choosing a supplier tags all imported price records under this vendor and applies vendor-specific column mappings.
-            </p>
+
+            {vendors.length === 0 ? (
+              <p className="text-xs text-danger-600 font-medium mt-1">
+                No vendors found in system. Please add vendors in the Vendors Directory (Parties page) before uploading price lists.
+              </p>
+            ) : (
+              <p className="text-[11px] text-surface-500 dark:text-surface-400">
+                Choosing a supplier tags all imported price records under this vendor. If the supplier is not listed, add them in the Vendors directory first.
+              </p>
+            )}
           </div>
 
           {/* Dropzone */}
           <div
             {...getImportRootProps()}
             className={cn(
-              "border-2 border-dashed border-surface-200 dark:border-surface-800 hover:border-primary-400 dark:hover:border-primary-500 rounded-xl p-8 text-center cursor-pointer transition-all bg-surface-50/50 dark:bg-surface-950/20",
+              "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all bg-surface-50/50 dark:bg-surface-950/20",
+              !selectedImportSupplier
+                ? "border-surface-200 dark:border-surface-800 opacity-60 cursor-not-allowed"
+                : "border-surface-300 dark:border-surface-700 hover:border-primary-500 dark:hover:border-primary-400",
               isImportDragActive && "border-primary-500 bg-primary-50/10"
             )}
           >
-            <input {...getImportInputProps()} />
+            <input {...getImportInputProps()} disabled={!selectedImportSupplier} />
             <FileSpreadsheet className="mx-auto h-10 w-10 text-surface-400 dark:text-surface-600 mb-3" />
             <p className="text-sm font-medium text-surface-700 dark:text-surface-300">
-              {importFileName ? (
+              {!selectedImportSupplier ? (
+                <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                  ⚠️ Please select a supplier from the dropdown above before uploading.
+                </span>
+              ) : importFileName ? (
                 <span className="text-primary-600 dark:text-primary-400 font-semibold">{importFileName}</span>
               ) : (
                 'Drag & drop your Excel or CSV file here, or click to browse'
               )}
             </p>
             <p className="text-xs text-surface-400 dark:text-surface-500 mt-1">
-              Supports .xlsx, .xls, .csv templates containing Part Number, Description, DN, GST %, DL, Supplier
+              Supports .xlsx, .xls, .csv templates containing Part Number, Description, DN, GST %, DL
             </p>
           </div>
 
           {/* Import Controls */}
           {parsedImportData.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50/20">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50/20">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-surface-700 dark:text-surface-300">Price List Action</label>
+                <select
+                  value={importPriceMode}
+                  onChange={e => setImportPriceMode(e.target.value)}
+                  className="input-base text-xs font-medium"
+                >
+                  <option value="merge">➕ Add / Merge (Update prices, keep rest)</option>
+                  <option value="overwrite">🔄 Overwrite (Replace supplier's price list)</option>
+                </select>
+              </div>
+
               <Input
                 label="Effective From Date"
                 type="date"
@@ -925,11 +1142,11 @@ export default function PriceListPage() {
               />
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Stock Count Import Mode</label>
+                <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Stock Import Mode</label>
                 <select
                   value={importStockMode}
                   onChange={e => setImportStockMode(e.target.value)}
-                  className="input-base"
+                  className="input-base text-xs"
                 >
                   <option value="relative">Add to existing stock (Relative)</option>
                   <option value="absolute">Override current stock (Absolute)</option>
@@ -940,10 +1157,10 @@ export default function PriceListPage() {
                 <label className="text-xs font-medium text-surface-700 dark:text-surface-300">Notes / Remarks</label>
                 <input
                   type="text"
-                  placeholder="e.g. Cummins price updates Q3"
+                  placeholder="e.g. Price list updates Q3"
                   value={importNotes}
                   onChange={e => setImportNotes(e.target.value)}
-                  className="input-base py-2"
+                  className="input-base py-2 text-xs"
                 />
               </div>
             </div>
@@ -954,14 +1171,28 @@ export default function PriceListPage() {
             <div className="space-y-2">
               {/* Column Matching Summary */}
               {Object.keys(matchedFields).length > 0 && (
-                <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/50 rounded-lg text-[11px] text-success-700 dark:text-success-300 flex gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-success-500 dark:text-success-400" />
-                  <div>
-                    <strong>Successfully mapped {Object.keys(matchedFields).length} field(s):</strong>{' '}
-                    <span className="font-mono">
-                      {Object.entries(matchedFields).map(([field, header]) => `${header} → ${field}`).join(', ')}
-                    </span>
+                <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/50 rounded-lg text-[11px] text-success-700 dark:text-success-300 flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success-500 dark:text-success-400" />
+                    <div>
+                      <strong>Mapped {Object.keys(matchedFields).length} field(s):</strong>{' '}
+                      <span className="font-mono">
+                        {Object.entries(matchedFields).map(([field, header]) => `${header} → ${field}`).join(', ')}
+                      </span>
+                    </div>
                   </div>
+                  {descriptionSourceSheet && (
+                    /* [FIX] Explain the cross-sheet backfill instead of leaving it invisible */
+                    <div className="text-[10px] text-primary-700 dark:text-primary-400 pl-6 font-medium">
+                      ℹ️ This file's pricing sheet had no Description column — descriptions were cross-referenced
+                      from the <strong>"{descriptionSourceSheet}"</strong> sheet in the same workbook by matching Part Number.
+                    </div>
+                  )}
+                  {!matchedFields.name && !descriptionSourceSheet && (
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400 pl-6 font-medium">
+                      ⚠️ <strong>Note:</strong> This CSV file contains prices but no Description column. To auto-link descriptions, upload the original multi-tab <strong>.xlsx</strong> workbook directly, or import the Description catalog CSV first. Existing product descriptions in the database will be preserved.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1004,7 +1235,11 @@ export default function PriceListPage() {
                         <tr key={item.id} className={cn("hover:bg-surface-50/50 dark:hover:bg-surface-800/20", !item.isValid && "bg-danger-50/5 dark:bg-danger-950/5")}>
                           <td className="px-4 py-2">
                             <span className="font-mono font-bold block text-surface-900 dark:text-surface-50">{item.sku || 'N/A'}</span>
-                            <span className="text-[11px] font-medium text-surface-600 dark:text-surface-300 block">{item.name || '—'}</span>
+                            {item.name ? (
+                              <span className="text-[11px] font-semibold text-primary-700 dark:text-primary-300 block truncate max-w-xs">{item.name}</span>
+                            ) : (
+                              <span className="text-[10px] italic text-amber-600 dark:text-amber-400 block font-normal">⚠️ Description not found in file</span>
+                            )}
                           </td>
                           <td className="px-4 py-2">
                             <div className="space-y-0.5">
@@ -1047,7 +1282,7 @@ export default function PriceListPage() {
                                   <span>{fmtQty(item.dbProduct.available)}</span>
                                   <ChevronRight className="h-2.5 w-2.5 text-surface-400" />
                                   <span className="font-semibold text-primary-600 dark:text-primary-400">
-                                    {importStockMode === 'absolute' 
+                                    {importStockMode === 'absolute'
                                       ? fmtQty(qtyNum)
                                       : fmtQty(parseFloat(item.dbProduct.available) + qtyNum)
                                     }
@@ -1111,6 +1346,7 @@ export default function PriceListPage() {
                   setImportFileName('')
                   setMatchedFields({})
                   setUnmatchedHeaders([])
+                  setDescriptionSourceSheet(null)
                 }}
                 disabled={importing}
                 className="w-full sm:w-auto"

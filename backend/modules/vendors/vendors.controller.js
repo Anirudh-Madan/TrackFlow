@@ -29,18 +29,18 @@ exports.createVendor = async (req, res, next) => {
     if (!company_name?.trim()) {
       return res.status(400).json({ success: false, error: 'Company name is required' });
     }
-    if (!gst?.trim()) {
-      return res.status(400).json({ success: false, error: 'GST is required' });
-    }
 
-    const existing = await Vendor.findOne({ where: { gst: gst.trim() } });
-    if (existing) {
-      return res.status(400).json({ success: false, error: 'Vendor with this GST already exists' });
+    // GST is optional for quick-create; if provided it must be unique
+    if (gst?.trim()) {
+      const existing = await Vendor.findOne({ where: { gst: gst.trim() } });
+      if (existing) {
+        return res.status(400).json({ success: false, error: 'Vendor with this GST already exists' });
+      }
     }
 
     const vendor = await Vendor.create({
       company_name: company_name.trim(),
-      gst: gst.trim().toUpperCase(),
+      gst: gst?.trim().toUpperCase() || null,
       remarks: remarks || null
     }, { transaction });
 

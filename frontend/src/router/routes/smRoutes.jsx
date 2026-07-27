@@ -53,7 +53,7 @@ export const smRoutes = [
   { path: 'ledger/:partyId',       element: <Wrap><PartyLedgerPage /></Wrap> },
 
   // Reorder Flags
-  { path: 'reorder-flags',         element: <Wrap><MyReorderFlagsPage /></Wrap> },
+  { path: 'reorder-flags',         element: <Navigate to="/sm/stock" replace state={{ activeTab: 'reorder-flags' }} /> },
 
   // Fulfilment
   { path: 'pipeline',              element: <Wrap><SMPipelinePage /></Wrap> },

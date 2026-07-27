@@ -261,6 +261,8 @@ async function transition(req, res, next, { allowedFrom, toStage, normalRoles, a
     await writeAudit(override ? 'approve' : 'update', pipeline, req, { from, to: toStage, override }, t);
 
     await t.commit();
+
+
     res.json({ success: true, message: successMessage, data: await reload(pipeline.id) });
   } catch (err) { await t.rollback(); next(err); }
 }
@@ -420,6 +422,8 @@ exports.quickAssignWorker = async (req, res, next) => {
       await notifyWorker(pipeline.id, false);
 
       await t.commit();
+
+
       return res.json({ success: true, message: `Approved & assigned to ${dw.name}`, data: await reload(pipeline.id) });
     }
 

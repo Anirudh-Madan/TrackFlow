@@ -14,6 +14,7 @@ import {
   returnChallan, getChallanEditHistory, checkPartAvailability,
   setBillNumber, approveChallan
 } from '../../../api/endpoints/challans.api'
+import { getProducts } from '../../../api/endpoints/products.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
 
@@ -163,10 +164,22 @@ function PinModal({ open, onVerify, onClose, loading }) {
 }
 
 // ── Part Row Lookup ────────────────────────────────────────────────────────────
-function PartRow({ item, index, onChange, onRemove }) {
+function PartRow({ item, index, products = [], onChange, onRemove }) {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(false)
   const debounceRef = useRef(null)
+
+  const handleSelectProduct = (productId) => {
+    const prod = products.find(p => String(p.id) === String(productId))
+    if (prod) {
+      onChange(index, 'sku', prod.sku)
+      onChange(index, 'name', prod.name || prod.sku)
+      const dlPrice = parseFloat(prod.dealer_landing_price || prod.purchase_price || 0)
+      onChange(index, 'dl_price', dlPrice)
+      onChange(index, 'price', dlPrice)
+      setStatus('in_stock')
+    }
+  }
 
   const handleSkuChange = (sku) => {
     onChange(index, 'sku', sku)
@@ -214,10 +227,27 @@ function PartRow({ item, index, onChange, onRemove }) {
 
   return (
     <div className="grid grid-cols-12 gap-2 items-center">
-      <div className="col-span-2">
+      <div className="col-span-3 space-y-1">
+        {products.length > 0 && (
+          <select
+            className="input-base text-xs font-mono bg-white dark:bg-surface-900 border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300"
+            value={products.find(p => (p.sku || '').toUpperCase() === (item.sku || '').toUpperCase())?.id || ''}
+            onChange={e => {
+              if (e.target.value) handleSelectProduct(e.target.value)
+              else onChange(index, 'sku', '')
+            }}
+          >
+            <option value="">-- Select Catalog Product ({products.length}) --</option>
+            {products.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.sku} – {p.name || 'No Name'} (₹{parseFloat(p.dealer_landing_price || 0).toFixed(0)})
+              </option>
+            ))}
+          </select>
+        )}
         <div className="relative">
           <input type="text" value={item.sku} onChange={e => handleSkuChange(e.target.value.toUpperCase())}
-            className={cn('input-base text-xs font-mono', status === 'in_stock' && 'border-success-400', status === 'not_found' && 'border-danger-400')} placeholder="Part No *" />
+            className={cn('input-base text-xs font-mono', status === 'in_stock' && 'border-success-400', status === 'not_found' && 'border-danger-400')} placeholder="Or SKU / Part No *" />
           {checking && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-surface-400" />}
         </div>
       </div>
@@ -272,15 +302,29 @@ function EditHistoryModal({ open, onClose, challanId }) {
 
 const EMPTY_ITEM = { sku: '', name: '', qty: 1, dl_price: '', price: '' }
 
-export default function AdminChallanPage() {
+export default function AdminChallanPage({ onCreateChallan } = {}) {
   const { user } = useAuthStore()
   const roleName = typeof user?.role === 'object' ? user?.role?.name : user?.role
   const isAdmin = roleName === 'admin' || user?.role_id === 1 || user?.role === 'admin'
 
   const [challans, setChallans]       = useState([])
+  const [products, setProducts]       = useState([])
   const [loading, setLoading]         = useState(true)
   const [search, setSearch]           = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+
+  useEffect(() => {
+    getProducts().then(res => {
+      if (res?.success && Array.isArray(res?.data)) {
+        setProducts(res.data)
+      }
+    }).catch(err => console.error('Failed to load products for challan supplier filter:', err))
+  }, [])
+
+  const uniqueSuppliers = useMemo(() => {
+    const list = products.map(p => (p.supplier || '').trim()).filter(Boolean)
+    return Array.from(new Set(list)).sort()
+  }, [products])
 
   // Pagination state
   const [page, setPage]               = useState(1)
@@ -393,10 +437,32 @@ export default function AdminChallanPage() {
 
   const handleEdit = () => {
     if (!editForm.reason.trim()) { toast.error('Edit reason is required'); return }
+    if (!editForm.party_name.trim()) { toast.error('Company / Customer Name is required'); return }
+    if (editForm.items.some(i => !i.sku.trim())) { toast.error('All items must have a Part No'); return }
+
     requirePin(async (pin) => {
-      const res = await updateChallan(editChallan.id, { pin, ...editForm })
-      if (res.success) { toast.success('Challan updated'); setEditChallan(null); fetchChallansList() }
-      else { toast.error(res.error || 'Failed to update'); throw new Error(res.error) }
+      const payload = {
+        pin,
+        reason: editForm.reason.trim(),
+        party_name: editForm.party_name.trim(),
+        supplier: editForm.supplier.trim() || undefined,
+        notes: editForm.notes.trim() || undefined,
+        items: editForm.items.map(i => ({
+          sku: i.sku.trim().toUpperCase(),
+          name: i.name?.trim() || undefined,
+          qty: parseInt(i.qty) || 1,
+          price: parseFloat(i.price) || 0,
+        })),
+      }
+      const res = await updateChallan(editChallan.id, payload)
+      if (res.success) {
+        toast.success('Challan updated successfully!')
+        setEditChallan(null)
+        fetchChallansList()
+      } else {
+        toast.error(res.error || 'Failed to update')
+        throw new Error(res.error)
+      }
     })
   }
 
@@ -410,8 +476,21 @@ export default function AdminChallanPage() {
 
   const handleReturn = () => {
     if (!returnForm.reason.trim()) { toast.error('Return reason is required'); return }
+    const itemsToReturn = (returnForm.items || []).filter(i => (parseInt(i.return_qty) || 0) > 0)
+    if ((returnForm.items || []).length > 0 && itemsToReturn.length === 0) {
+      toast.error('Specify at least 1 item with return quantity > 0')
+      return
+    }
     requirePin(async (pin) => {
-      const res = await returnChallan(returnTarget.id, { pin, reason: returnForm.reason })
+      const res = await returnChallan(returnTarget.id, {
+        pin,
+        reason: returnForm.reason.trim(),
+        items: (returnForm.items || []).map(i => ({
+          product_id: i.product_id,
+          sku: i.sku,
+          return_qty: parseInt(i.return_qty) || 0,
+        }))
+      })
       if (res.success) {
         toast.success(res.message || 'Challan returned successfully');
         setReturnTarget(null);
@@ -494,7 +573,7 @@ export default function AdminChallanPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" icon={Download} onClick={exportChallansCSV}>Export CSV</Button>
-          <Button variant="primary" size="sm" icon={Plus} onClick={() => { setForm({ party_name: '', supplier: '', bill_number: '', notes: '', items: [{ ...EMPTY_ITEM }] }); setShowCreate(true) }} id="create-challan-btn">
+          <Button variant="primary" size="sm" icon={Plus} onClick={() => onCreateChallan ? onCreateChallan() : setShowCreate(true)} id="create-challan-btn">
             Create Challan
           </Button>
         </div>
@@ -612,7 +691,23 @@ export default function AdminChallanPage() {
                               icon={Pencil}
                               disabled={!isEditable}
                               title={isReturned ? 'Returned challans cannot be edited' : hasBill ? 'Challans with a bill number cannot be edited' : 'Edit challan'}
-                              onClick={() => { setEditChallan(c); setEditForm({ reason: '', notes: c.notes || '', supplier: c.supplier || '', party_name: c.party_name || '', bill_number: '' }) }}
+                              onClick={() => {
+                                setEditChallan(c);
+                                const rawItems = (c.order?.items || c.items || []).map(i => ({
+                                  sku: i.sku || i.product?.sku || '',
+                                  name: i.product?.name || i.name || '',
+                                  qty: i.quantity || i.qty || 1,
+                                  price: i.unit_price || i.price || i.product?.dealer_landing_price || 0,
+                                  dl_price: i.product?.dealer_landing_price || 0
+                                }))
+                                setEditForm({
+                                  reason: '',
+                                  notes: c.notes || '',
+                                  supplier: c.supplier || '',
+                                  party_name: c.party_name || c.party?.company_name || c.order?.party?.company_name || '',
+                                  items: rawItems.length > 0 ? rawItems : [{ sku: '', name: '', qty: 1, price: 0, dl_price: 0 }]
+                                })
+                              }}
                             >
                               Edit
                             </Button>
@@ -622,7 +717,20 @@ export default function AdminChallanPage() {
                               icon={RotateCcw}
                               disabled={!isReturnable}
                               title={isReturned ? 'Challan is returned' : hasBill ? `Return challan & associated Bill #${c.bill_number}` : 'Return challan'}
-                              onClick={() => { setReturnTarget(c); setReturnForm({ reason: '' }) }}
+                              onClick={() => {
+                                setReturnTarget(c);
+                                const challanItems = c.order?.items || c.items || [];
+                                setReturnForm({
+                                  reason: '',
+                                  items: challanItems.map(it => ({
+                                    product_id: it.product_id || it.product?.id,
+                                    sku: it.part_number || it.sku || it.product?.sku || '',
+                                    name: it.description || it.name || it.product?.name || '',
+                                    ordered_qty: it.quantity || it.qty || 1,
+                                    return_qty: it.quantity || it.qty || 1,
+                                  }))
+                                });
+                              }}
                               className={cn(isReturnable && 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20')}
                             >
                               {isReturned ? 'Returned' : 'Return'}
@@ -659,17 +767,22 @@ export default function AdminChallanPage() {
       {/* Create Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Delivery Challan" size="xl">
         <form onSubmit={handlePreview} className="space-y-5">
-          <div className="grid grid-cols-3 gap-4">
-            <div><label className="label-base">Party Name</label><input type="text" value={form.party_name} onChange={e => setForm(f => ({ ...f, party_name: e.target.value }))} className="input-base" placeholder="Customer / party name" /></div>
-            <div><label className="label-base">Supplier</label><input type="text" value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} className="input-base" placeholder="Supplier name" /></div>
-            <div><label className="label-base">Notes</label><input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-base" placeholder="Optional notes" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-base">Party Name <span className="text-danger-500">*</span></label>
+              <input type="text" value={form.party_name} onChange={e => setForm(f => ({ ...f, party_name: e.target.value }))} className="input-base" placeholder="Customer / party name" required />
+            </div>
+            <div>
+              <label className="label-base">Notes</label>
+              <input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-base" placeholder="Optional notes" />
+            </div>
           </div>
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-surface-500 uppercase pb-1 border-b border-surface-200 dark:border-surface-700">
-              <div className="col-span-2">Part No *</div><div className="col-span-2">Description</div><div className="col-span-2">DL Price</div><div className="col-span-1 text-center">Qty *</div><div className="col-span-3">Selling Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
+              <div className="col-span-3">Catalog Product / Part No *</div><div className="col-span-2">Description</div><div className="col-span-2">DL Price</div><div className="col-span-1 text-center">Qty *</div><div className="col-span-3">Selling Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
             </div>
             {form.items.map((item, i) => (
-              <PartRow key={i} item={item} index={i} onChange={updateItem} onRemove={removeItem} />
+              <PartRow key={i} item={item} index={i} products={products} onChange={updateItem} onRemove={removeItem} />
             ))}
             <Button type="button" variant="secondary" size="sm" icon={Plus} onClick={addItem}>Add Item</Button>
           </div>
@@ -686,9 +799,8 @@ export default function AdminChallanPage() {
       {/* Preview Modal */}
       <Modal open={showPreview} onClose={() => setShowPreview(false)} title="Preview Challan" size="lg">
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700 grid grid-cols-3 gap-3 text-sm">
+          <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700 grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-xs text-surface-400">Party:</span><div className="font-medium">{form.party_name || '—'}</div></div>
-            <div><span className="text-xs text-surface-400">Supplier:</span><div className="font-medium">{form.supplier || '—'}</div></div>
             <div><span className="text-xs text-surface-400">Notes:</span><div className="font-medium">{form.notes || '—'}</div></div>
           </div>
           <div className="flex gap-2 justify-end pt-2">
@@ -699,11 +811,12 @@ export default function AdminChallanPage() {
       </Modal>
 
       {/* Edit Modal */}
-      <Modal open={!!editChallan} onClose={() => setEditChallan(null)} title={`Edit Challan: ${editChallan?.challan_number}`} size="md">
+      <Modal open={!!editChallan} onClose={() => setEditChallan(null)} title={`Edit Challan: ${editChallan?.challan_number}`} size="lg">
         <div className="space-y-4">
-          <div className="p-3 rounded-xl bg-warning-50 text-xs text-warning-700">
-            A compulsory edit reason must be provided for audit logging.
+          <div className="p-3 rounded-xl bg-warning-50 text-xs text-warning-700 dark:bg-warning-950/30 dark:text-warning-300 border border-warning-200 dark:border-warning-900/40">
+            <strong>Audit Required:</strong> A compulsory edit reason must be provided. Modifying items will update order totals and adjust inventory stock automatically.
           </div>
+
           <div>
             <label className="label-base">Compulsory Edit Reason <span className="text-danger-500">*</span></label>
             <input
@@ -715,36 +828,148 @@ export default function AdminChallanPage() {
               required
             />
           </div>
-          {[{ label: 'Notes', field: 'notes' }, { label: 'Supplier', field: 'supplier' }, { label: 'Party Name', field: 'party_name' }].map(({ label, field }) => (
-            <div key={field}><label className="label-base">{label}</label><input type="text" value={editForm[field]} onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))} className="input-base" placeholder={label} /></div>
-          ))}
-          <div className="flex gap-2 justify-end"><Button variant="secondary" onClick={() => setEditChallan(null)}>Cancel</Button><Button variant="primary" onClick={handleEdit}>Save Changes</Button></div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label-base">Company / Customer Name <span className="text-danger-500">*</span></label>
+              <input
+                type="text"
+                value={editForm.party_name}
+                onChange={e => setEditForm(f => ({ ...f, party_name: e.target.value }))}
+                className="input-base"
+                placeholder="Company / Customer Name"
+                required
+              />
+            </div>
+            <div>
+              <label className="label-base">Notes</label>
+              <input
+                type="text"
+                value={editForm.notes}
+                onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                className="input-base"
+                placeholder="Remarks / notes"
+              />
+            </div>
+          </div>
+
+          {/* Items Ordered Section */}
+          <div className="space-y-3 pt-2 border-t border-surface-200 dark:border-surface-700">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-surface-600 dark:text-surface-300">
+                Items Ordered
+              </h4>
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                icon={Plus}
+                onClick={() => setEditForm(f => ({ ...f, items: [...(f.items || []), { sku: '', name: '', qty: 1, price: 0, dl_price: 0 }] }))}
+              >
+                Add Item
+              </Button>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {(editForm.items || []).map((item, index) => (
+                <PartRow
+                  key={index}
+                  item={item}
+                  index={index}
+                  products={products}
+                  onChange={(idx, field, value) => {
+                    setEditForm(f => {
+                      const updated = [...(f.items || [])]
+                      updated[idx] = { ...updated[idx], [field]: value }
+                      return { ...f, items: updated }
+                    })
+                  }}
+                  onRemove={(idx) => {
+                    setEditForm(f => ({
+                      ...f,
+                      items: (f.items || []).filter((_, i) => i !== idx)
+                    }))
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center p-3 rounded-xl bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 text-xs font-semibold">
+              <span className="text-surface-600 dark:text-surface-400">Total Calculated Amount:</span>
+              <span className="text-sm font-bold text-primary-700 dark:text-primary-400 font-mono">
+                ₹{(editForm.items || []).reduce((s, i) => s + (parseFloat(i.qty || 0) * parseFloat(i.price || 0)), 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2 border-t border-surface-200 dark:border-surface-700">
+            <Button variant="secondary" onClick={() => setEditChallan(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleEdit}>Save Changes</Button>
+          </div>
         </div>
       </Modal>
 
       {/* Return Modal */}
-      <Modal open={!!returnTarget} onClose={() => setReturnTarget(null)} title={`Return Challan: ${returnTarget?.challan_number}`} size="md">
+      <Modal open={!!returnTarget} onClose={() => setReturnTarget(null)} title={`Return Challan: ${returnTarget?.challan_number}`} size="lg">
         <div className="space-y-4">
           <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40">
             {returnTarget?.bill_number ? (
               <span>
-                <strong>Notice:</strong> This challan has Bill <strong>#{returnTarget.bill_number}</strong>. Returning this challan will restore stock and mark both the challan and the bill as returned.
+                <strong>Partial / Full Return:</strong> Select quantities to return for each item. Returned stock will be restored into inventory.
               </span>
             ) : (
-              <span>Returning this challan will restore stock and lock it from further edits or deletion.</span>
+              <span>Select the quantity to return for each item. Stock will be restored for returned quantities.</span>
             )}
           </div>
+
           <div>
             <label className="label-base">Return Reason <span className="text-danger-500">*</span></label>
             <textarea
               value={returnForm.reason}
-              onChange={e => setReturnForm({ reason: e.target.value })}
-              className="input-base min-h-[80px]"
+              onChange={e => setReturnForm(f => ({ ...f, reason: e.target.value }))}
+              className="input-base min-h-[70px]"
               placeholder="Compulsory reason for returning this challan..."
               required
             />
           </div>
-          <div className="flex gap-2 justify-end">
+
+          {/* Itemized Return Quantities */}
+          <div className="space-y-2 pt-2 border-t border-surface-200 dark:border-surface-700">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-surface-600 dark:text-surface-300">
+              Items to Return (Partial / Full)
+            </h4>
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {(returnForm.items || []).map((it, idx) => (
+                <div key={idx} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono font-bold text-surface-900 dark:text-surface-100">{it.sku || 'Part'}</p>
+                    <p className="text-surface-500 truncate">{it.name}</p>
+                    <span className="text-[10px] text-surface-400">Total Dispatched: {it.ordered_qty}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="text-[11px] font-semibold text-surface-600 dark:text-surface-300">Qty to Return:</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={it.ordered_qty}
+                      value={it.return_qty}
+                      onChange={e => {
+                        const val = Math.min(it.ordered_qty, Math.max(0, parseInt(e.target.value) || 0))
+                        setReturnForm(f => {
+                          const updated = [...f.items]
+                          updated[idx] = { ...updated[idx], return_qty: val }
+                          return { ...f, items: updated }
+                        })
+                      }}
+                      className="input-base w-20 text-center text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2 border-t border-surface-200 dark:border-surface-700">
             <Button variant="secondary" onClick={() => setReturnTarget(null)}>Cancel</Button>
             <Button variant="primary" onClick={handleReturn} className="bg-amber-600 hover:bg-amber-700 text-white">
               Confirm Return

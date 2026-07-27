@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   FileText, Download, Eye, Search, Filter, ChevronDown,
   Package, MapPin, User, Calendar, CheckCircle, Clock, AlertCircle,
-  X, Printer, ArrowUpRight, Loader2, Lock
+  X, Printer, ArrowUpRight, Loader2, Lock, History
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
@@ -729,6 +729,52 @@ export default function ChallansListPage() {
                   </tfoot>
                 </table>
               </div>
+            </div>
+
+            {/* ── Edit History Section ── */}
+            <div className="border-t border-surface-200 dark:border-surface-700 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-surface-600 dark:text-surface-300 flex items-center gap-1.5">
+                  <History className="h-4 w-4 text-primary-600" />
+                  Edit History & Reasons
+                </h4>
+                <span className="text-xs text-surface-400">
+                  {(viewChallan.editHistory || viewChallan.edit_history || []).length} record(s)
+                </span>
+              </div>
+
+              {(viewChallan.editHistory || viewChallan.edit_history) && (viewChallan.editHistory || viewChallan.edit_history).length > 0 ? (
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {(viewChallan.editHistory || viewChallan.edit_history).map((log, idx) => (
+                    <div key={log.id || idx} className="p-3 rounded-xl bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-medium">
+                        <span className="text-surface-900 dark:text-surface-100 font-semibold">{log.editor?.name || log.user?.name || 'Admin'}</span>
+                        <span className="text-surface-400 text-[11px]">{new Date(log.created_at || log.timestamp).toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="text-surface-700 dark:text-surface-300">
+                        <span className="text-surface-400">Reason: </span>
+                        <span className="font-semibold text-primary-700 dark:text-primary-300">{log.edit_reason || log.reason || '—'}</span>
+                      </div>
+                      {log.changed_fields && Object.keys(log.changed_fields).length > 0 && (
+                        <div className="text-[11px] text-surface-500 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
+                          {Object.entries(log.changed_fields).map(([k, v]) => (
+                            <div key={k} className="font-mono flex items-center gap-1.5">
+                              <span className="capitalize text-surface-400">{k.replace('_', ' ')}:</span>
+                              <span className="line-through text-surface-400">{typeof v === 'object' ? String(v?.from ?? 'none') : 'none'}</span>
+                              <span>➔</span>
+                              <span className="text-success-600 font-semibold">{typeof v === 'object' ? String(v?.to ?? '') : String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-surface-50 dark:bg-surface-800/40 text-xs text-surface-400 text-center italic">
+                  No edit history recorded for this challan.
+                </div>
+              )}
             </div>
 
             {/* Footer actions */}

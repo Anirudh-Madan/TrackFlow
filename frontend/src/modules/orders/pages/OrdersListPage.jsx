@@ -311,7 +311,7 @@ export default function OrdersListPage() {
       ) : activeTab === 'order-history' ? (
         <OrderHistoryPage isTab={true} />
       ) : activeTab === 'challans' ? (
-        isAdmin ? <AdminChallanPage /> : <ChallansListPage />
+        isAdmin ? <AdminChallanPage onCreateChallan={() => setActiveTab('new-challan')} /> : <ChallansListPage />
       ) : activeTab === 'new-challan' ? (
         <div className="pt-6">
           <OrderNewPage

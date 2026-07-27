@@ -147,14 +147,14 @@ export default function AdminDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" icon={RefreshCcw} onClick={fetchData}>Refresh</Button>
           <Link to="/admin/challans"><Button size="sm" variant="secondary" icon={FileText}>Create Challan</Button></Link>
-          <Link to="/admin/purchase-orders"><Button size="sm" variant="secondary" icon={FileUp}>Create PO</Button></Link>
+          <Link to="/admin/purchase-orders" state={{ openNewPO: true }}><Button size="sm" variant="secondary" icon={FileUp}>Create PO</Button></Link>
           <Link to="/admin/pipeline"><Button size="sm" icon={GitBranch}>Open Pipeline</Button></Link>
         </div>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard label="Total Orders" value={h.total_orders} icon={ShoppingCart} color="primary" to="/admin/orders" />
+        <KpiCard label="Total Orders" value={h.total_orders} icon={ShoppingCart} color="primary" to="/admin/challans" />
         <KpiCard label="Awaiting Approval" value={h.pending_admin_approval} sub="need admin action" icon={Clock} color="warning" to="/admin/pipeline" />
         <KpiCard label="In Pipeline" value={h.in_pipeline} sub="active orders" icon={Truck} color="blue" to="/admin/pipeline" />
         <KpiCard label="Completed" value={h.completed} sub={`${h.completion_rate}% completion`} icon={CheckCircle2} color="success" />

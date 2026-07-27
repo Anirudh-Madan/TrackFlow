@@ -49,15 +49,16 @@ exports.createReorder = async (req, res, next) => {
         usersByRole('inventory_manager'),
       ]);
       const recipients = [...admins, ...ims];
+      const flaggerName = result.flagger?.name || req.user.name || 'Sales Manager';
 
       const notificationPromises = recipients.map(user =>
         notify({
           recipient_id: user.id,
           sender_id: req.user.id,
           type: 'REORDER_REQUEST',
-          title: `Reorder requested: ${product.name}`,
-          body: `Sales Manager ${req.user.name} requested reorder of ${quantity_wanted} unit(s) of ${product.name} (SKU: ${product.sku}).`,
-          link: `/im/purchase-requests`,
+          title: `Reorder requested for ${product.sku}`,
+          body: `${flaggerName} requested a reorder of ${quantity_wanted} unit(s) for ${product.name} (SKU: ${product.sku}).${notes ? ` Note: "${notes}"` : ''}`,
+          link: `/im/reorder`,
           entity_type: 'ReorderFlag',
           entity_id: reorder.id,
         })
@@ -68,9 +69,9 @@ exports.createReorder = async (req, res, next) => {
       if (io) {
         io.to('admin').to('inventory_manager').emit('new-notification', {
           type: 'REORDER_REQUEST',
-          title: `Reorder requested: ${product.name}`,
-          body: `Sales Manager ${req.user.name} requested reorder of ${quantity_wanted} unit(s) of ${product.name} (SKU: ${product.sku}).`,
-          link: `/im/purchase-requests`,
+          title: `Reorder requested for ${product.sku}`,
+          body: `${flaggerName} requested a reorder of ${quantity_wanted} unit(s) for ${product.name} (SKU: ${product.sku}).${notes ? ` Note: "${notes}"` : ''}`,
+          link: `/im/reorder`,
           created_at: new Date(),
         });
       }
