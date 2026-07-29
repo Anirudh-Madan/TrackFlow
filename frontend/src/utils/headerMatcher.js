@@ -67,13 +67,13 @@ export const FIELD_ALIASES = {
   sku: [
     'sku', 'sku_code', 'product_sku', 'item_sku', 'part_sku',
     'part_number', 'part_no', 'partno', 'part no', 'part_num', 'part_id',
-    'partnumber', 'part number', 'part_code', 'tml_part_no', 'tml part no', 'tml_part_number', 'tml part number',
+    'partnumber', 'part number', 'part_code', 'part code', 'tml_part_no', 'tml part no', 'tml_part_number', 'tml part number',
+    'meritor_part_no', 'meritor_part_number', 'meritor_part_code', 'meritor_code',
     'old_part', 'old part', 'old_part_no', 'old part no',
-    'item_code', 'item_no', 'itemno', 'item no', 'item_number', 'item_id',
-    'product_code', 'product_no', 'prod_code', 'prod_no',
+    'item_code', 'product_code', 'product_no', 'prod_code', 'prod_no',
     'code', 'article_no', 'article no', 'article_number', 'art_no',
     'ref', 'reference', 'ref_no', 'reference_no', 'part_ref',
-    'material_no', 'material_number', 'material_code',
+    'material_no', 'material_number', 'material_code', 'material',
     'oem_part_no', 'oem_no', 'oem_part_number',
   ],
   name: [
@@ -81,7 +81,7 @@ export const FIELD_ALIASES = {
     'part_description', 'part description', 'part_desc', 'part desc', 'part_name', 'part name', 'partname',
     'item_description', 'item description', 'item_desc', 'item desc',
     'product_description', 'product description', 'product_desc',
-    'material_description', 'material description', 'material_desc', 'material desc', 'material',
+    'material_description', 'material description', 'material_desc', 'material desc',
     'details', 'item_details', 'part_details', 'part details',
     'description_of_goods', 'description of goods', 'goods_description',
     'particulars', 'item_particulars', 'item particulars',
@@ -98,6 +98,7 @@ export const FIELD_ALIASES = {
     'category', 'part_category', 'part category', 'product_category', 'product category', 'prod_category', 'category_name',
     'group', 'part_group', 'product_group', 'product group', 'prod_group', 'prod group', 'item_group', 'pg', 'p_g',
     'division', 'segment', 'family', 'product_family', 'sub_group', 'sub_category',
+    'axle_parts', 'axle_kit_parts', 'axle_group', 'part_type', 'type',
   ],
   location: [
     'location', 'loc', 'bin', 'warehouse_location', 'bin_location',
@@ -108,11 +109,12 @@ export const FIELD_ALIASES = {
     'casl_dn_price', 'casl dn price', 'casl_dn', 'casl dn',
     'new_dn_price', 'new dn price', 'new_dn', 'new dn',
     'new_purchase_price', 'new purchase price',
-    'purchase_price', 'purchase price', 'purchase', 'pur_price',
+    'purchase_price', 'purchase price', 'purchase', 'pur_price', 'purchase_rate',
     'buy_price', 'buy price', 'buying_price', 'cost_price', 'cost price', 'cost',
-    'dn', 'dn_price', 'dn price', 'dealer_net', 'dealer net', 'dealer_net_price',
-    'net_price', 'net price', 'basic_price', 'basic price', 'ndp', 'net_dealer_price',
+    'dn', 'dn_price', 'dn price', 'dn_rate', 'dn_amount', 'dealer_net', 'dealer net', 'dealer_net_price', 'dealer_net_rate',
+    'net_price', 'net price', 'basic_price', 'basic price', 'ndp', 'net_dealer_price', 'net_dealer_rate',
     'unit_cost', 'unit cost', 'po_price', 'rate', 'unit_rate',
+    'dn_price_rs', 'dn_rs', 'dn_price_in_rs', 'dn_in_rs', 'dn_price_inr', 'dn_inr', 'dn_rate_rs', 'purchase_price_rs', 'net_price_rs', 'basic_price_rs',
   ],
   dealer_landing_price: [
     'new_casl_dl_price', 'new casl dl price', 'new_casl_dl', 'new casl dl',
@@ -121,17 +123,22 @@ export const FIELD_ALIASES = {
     'new_landing_price', 'new landing price',
     'dealer_landing_price', 'dealer landing price', 'dealer landing', 'dealer_landing',
     'landing_price', 'landing price', 'landing', 'landed_price', 'landed_cost',
-    'dealer_price', 'dealer price', 'dl_price', 'dl price', 'dl', 'dl_rate',
-    'dp', 'dp_price', 'd_l_price', 'd_l',
+    'dealer_price', 'dealer price', 'dealer_rate', 'dealer_amount',
+    'dl_price', 'dl price', 'dl', 'dl_rate', 'dl_amount', 'dl_value',
+    'dp', 'dp_price', 'dp price', 'dp_rate', 'd_l_price', 'd_l', 'd_l_rate', 'd_l_amount',
+    'meritor_dl', 'meritor_dl_price', 'meritor dl price', 'meritor dl',
+    'dl_price_rs', 'dl_rs', 'dl_price_in_rs', 'dl_in_rs', 'dl_rs_', 'dl_in_inr', 'dl_inr', 'dl_price_list', 'dl_rate_rs', 'dl_amount_rs',
+    'd_l_price_rs', 'dealer_landing_price_rs', 'dealer_price_rs', 'landing_price_rs', 'dl_price_in_inr',
   ],
   selling_price: [
     'new_mrp_price', 'new mrp price', 'new_mrp', 'new mrp',
     'casl_mrp_price', 'casl mrp price', 'casl_mrp', 'casl mrp',
     'new_selling_price', 'new selling price', 'new_sp', 'new sp',
     'selling_price', 'selling price', 'selling', 'sell_price', 'sell price',
-    'mrp', 'maximum_retail_price', 'mrp_price', 'mrp_rs', 'mrp_amount',
+    'mrp', 'maximum_retail_price', 'mrp_price', 'mrp_rs', 'mrp_amount', 'mrp_rate',
     'price', 'unit_price', 'list_price', 'list price', 'retail_price', 'retail price',
     'customer_price', 'customer price', 'sp', 'sp_price', 'sale_price',
+    'mrp_price_rs', 'mrp_in_rs', 'selling_price_rs', 'list_price_rs',
   ],
   quantity: [
     'quantity', 'qty', 'stock', 'stock_quantity', 'stock quantity',
@@ -163,6 +170,19 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
   }
 }
 
+// Helper to look up normalised header key, including stripping currency suffixes (_rs, _inr, etc.)
+function lookupField(normHeader) {
+  if (_aliasLookup.has(normHeader)) {
+    return _aliasLookup.get(normHeader)
+  }
+  // Try stripping currency unit suffixes if present
+  const stripped = normHeader.replace(/_(rs|inr|rupees|in_rs|in_inr)$/g, '')
+  if (stripped !== normHeader && _aliasLookup.has(stripped)) {
+    return _aliasLookup.get(stripped)
+  }
+  return null
+}
+
 // ── matchHeaders ──────────────────────────────────────────────────────────────
 
 /**
@@ -186,21 +206,30 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
 export function matchHeaders(rawHeaders, supplierId = 'unknown') {
   const fieldMap = {}         // internalField → original header (first match wins)
   const unmatchedHeaders = []
-  const collisions = []      // [FIX] track every "second header lost the race" case
+  const collisions = []      // track every "second header lost the race" case
 
   for (const header of rawHeaders) {
     const normHeader = normalizeKey(header)
-    const internalField = _aliasLookup.get(normHeader)
+    const internalField = lookupField(normHeader)
 
     if (internalField) {
-      if (!fieldMap[internalField]) {
+      // Priority check for SKU: if already claimed by a generic term (e.g. 'Item No', 'S.No', 'Ref'),
+      // but current header is an explicit part number column ('Part No', 'Part Code', 'SKU'), override it!
+      const currentClaimedHeader = fieldMap[internalField]
+      const isExplicitPartNo = internalField === 'sku' && (
+        normHeader.includes('part') || normHeader.includes('sku') || normHeader.includes('material')
+      )
+      const isClaimedByGeneric = currentClaimedHeader && internalField === 'sku' && (
+        !normalizeKey(currentClaimedHeader).includes('part') && !normalizeKey(currentClaimedHeader).includes('sku')
+      )
+
+      if (!fieldMap[internalField] || isClaimedByGeneric) {
+        if (isClaimedByGeneric) {
+          unmatchedHeaders.push(fieldMap[internalField])
+          collisions.push({ field: internalField, kept: header, dropped: fieldMap[internalField] })
+        }
         fieldMap[internalField] = header
       } else {
-        // [FIX] Previously this header was silently dropped here — it never
-        // made it into fieldMap (already claimed) and never made it into
-        // unmatchedHeaders either, so it just vanished from every report.
-        // Now: surface it as unmatched AND log the collision explicitly so
-        // the UI/caller can show *why* it was dropped instead of a mystery.
         unmatchedHeaders.push(header)
         collisions.push({
           field: internalField,
@@ -221,7 +250,7 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
     if (fieldMap[field]) return
     for (let i = 0; i < unmatchedHeaders.length; i++) {
       const header = unmatchedHeaders[i]
-      const norm = normalizeKey(header)
+      const norm = normalizeKey(header).replace(/_(rs|inr|rupees|in_rs|in_inr)$/g, '')
       if (skipDescriptionLike && isDescriptionLike(norm)) continue
       if (keywords.some(kw => norm.includes(kw))) {
         fieldMap[field] = header
@@ -232,13 +261,22 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
   }
 
   checkFallback('name', ['desc', 'description', 'detail', 'particular', 'nomenclature', 'spec'])
-  checkFallback('planner', ['planner', 'plan', 'category', 'group', 'section', 'segment', 'family'])
+  checkFallback('planner', ['planner', 'plan', 'category', 'group', 'section', 'segment', 'family', 'axle'])
   // Never map "Description" to sku — it contains the substring "part"
   checkFallback('sku', ['part', 'sku', 'code', 'article', 'number'], { skipDescriptionLike: true })
   checkFallback('purchase_price', ['new_casl_dn', 'new_dn', 'casl_dn', 'dn', 'purchase', 'cost', 'buy', 'net'])
-  checkFallback('dealer_landing_price', ['new_casl_dl', 'new_dl', 'casl_dl', 'landing', 'dl', 'dealer'])
+  checkFallback('dealer_landing_price', ['new_casl_dl', 'new_dl', 'casl_dl', 'landing', 'dl', 'dealer', 'landed', 'dp'])
   checkFallback('selling_price', ['new_mrp', 'casl_mrp', 'mrp', 'sell', 'selling', 'price'])
   checkFallback('quantity', ['qty', 'quantity', 'stock', 'soh', 'balance', 'count'])
+
+  // If dealer_landing_price was not explicitly mapped, check if purchase_price was mapped from a DL/dealer header
+  if (!fieldMap.dealer_landing_price && fieldMap.purchase_price) {
+    const norm = normalizeKey(fieldMap.purchase_price)
+    if (norm.includes('dl') || norm.includes('dealer') || norm.includes('landing') || norm.includes('landed') || norm.includes('dp')) {
+      fieldMap.dealer_landing_price = fieldMap.purchase_price
+      delete fieldMap.purchase_price
+    }
+  }
 
   // Prefer latest (New …) price columns over legacy (Old …) when both exist — e.g. Cummins lists
   const preferNewPriceColumn = (field, hintTokens) => {
@@ -267,7 +305,7 @@ export function matchHeaders(rawHeaders, supplierId = 'unknown') {
     received: rawHeaders,
     matched: fieldMap,
     unmatched: unmatchedHeaders,
-    collisions, // [FIX] new — e.g. [{ field: 'name', kept: 'Description', dropped: 'Particulars' }]
+    collisions,
   }
 
   return { fieldMap, unmatchedHeaders, matchLog }

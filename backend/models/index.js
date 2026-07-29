@@ -44,6 +44,14 @@ const PurchaseOrderItem = require('./PurchaseOrderItem');
 const AppSetting = require('./AppSetting');
 const ChallanEditLog = require('./ChallanEditLog');
 const POEditLog = require('./POEditLog');
+const Payment = require('./Payment');
+const PaymentEditLog = require('./PaymentEditLog');
+
+Customer.hasMany(Payment, { foreignKey: 'customer_id', as: 'payments' });
+Payment.belongsTo(Customer, { foreignKey: 'customer_id', as: 'customer' });
+
+Payment.hasMany(PaymentEditLog, { foreignKey: 'payment_id', as: 'editLogs' });
+PaymentEditLog.belongsTo(Payment, { foreignKey: 'payment_id', as: 'payment' });
 
 // ── Auth & Users ─────────────────────────────────────────────────────────────
 Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
@@ -271,4 +279,5 @@ module.exports = {
   AppSetting,
   ChallanEditLog,
   POEditLog,
+  Payment,
 };

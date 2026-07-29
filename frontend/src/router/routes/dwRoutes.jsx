@@ -1,12 +1,13 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { PageLoader } from '../../components/ui/Spinner'
+import { safeLazy } from '../../utils/safeLazy'
 
 // Eager
 import DWDashboard from '../../modules/dashboard/dw/DWDashboard'
 
 // Lazy
-const DWPipelinePage    = lazy(() => import('../../modules/pipeline/pages/DWPipelinePage'))
-const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+const DWPipelinePage    = safeLazy(() => import('../../modules/pipeline/pages/DWPipelinePage'))
+const NotificationsPage = safeLazy(() => import('../../modules/notifications/pages/NotificationsPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>

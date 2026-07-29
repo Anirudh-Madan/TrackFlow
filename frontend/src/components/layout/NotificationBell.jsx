@@ -23,9 +23,11 @@ export default function NotificationBell({ className }) {
   const to = ROLE_PATH[role] || '/admin/notifications'
 
   const poll = useCallback(async () => {
+    const token = useAuthStore.getState().accessToken
+    if (!token) return
     try {
       const res = await getUnreadCount()
-      if (res.success) setUnreadCount(res.data.count)
+      if (res?.success) setUnreadCount(res.data.count)
     } catch { /* ignore */ }
   }, [setUnreadCount])
 

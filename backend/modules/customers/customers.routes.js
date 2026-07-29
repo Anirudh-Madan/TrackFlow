@@ -7,6 +7,7 @@ const requirePermission = require('../../middleware/authorizePermission');
 router.use(authenticate);
 
 router.get('/',       requirePermission('party.view'),   customersController.getCustomers);
+router.post('/bulk-import', requirePermission('party.create'), customersController.bulkImportCustomers);
 router.post('/',      requirePermission('party.create'), customersController.createCustomer);
 router.put('/:id',    requirePermission('party.edit'),   customersController.updateCustomer);
 router.delete('/:id', requirePermission('party.delete'), customersController.deleteCustomer);

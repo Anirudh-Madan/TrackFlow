@@ -3,8 +3,9 @@ import { useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import * as XLSX from 'xlsx'
 import {
-  getCustomers, createCustomer, updateCustomer, deleteCustomer
+  getCustomers, createCustomer, updateCustomer, deleteCustomer, bulkImportCustomers
 } from '../../../api/endpoints/parties.api'
 import { getRegions } from '../../../api/endpoints/regions.api'
 import { getUsers } from '../../../api/endpoints/users.api'
@@ -14,7 +15,7 @@ import Modal from '../../../components/ui/Modal'
 import Input from '../../../components/ui/Input'
 import {
   Plus, Search, User, MapPin, AlertCircle, Pencil, Trash2,
-  ClipboardList, UserPlus,
+  ClipboardList, UserPlus, FileSpreadsheet, Upload, Download, CheckCircle2, FileText
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '../../../utils/cn'
@@ -211,6 +212,13 @@ export default function CustomersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
+  // ── Bulk Import State ──
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [importFileName, setImportFileName] = useState('')
+  const [importRows, setImportRows] = useState([])
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+
   const salesManagers = allUsers.filter(u =>
     u.role?.name === 'sales_manager' || u.role_id === 2
   )
@@ -268,6 +276,74 @@ export default function CustomersPage() {
     }
   }
 
+  // ── Bulk Import Handlers ──
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportFileName(file.name)
+    setImportResult(null)
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+        setImportRows(rawJson)
+        toast.success(`Loaded ${rawJson.length} customer records from ${file.name}`)
+      } catch (err) {
+        toast.error('Failed to read Excel/CSV file')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Company Name': 'Acme Global Pvt Ltd',
+        'GST': '07AAAAA0000A1Z5',
+        'Region': 'North Zone (DEL)',
+        'Sales Manager': 'Rahul Sharma',
+        'Credit Limit': 500000,
+        'Remarks': 'Key enterprise account'
+      },
+      {
+        'Company Name': 'Apex Industrial Supplies',
+        'GST': '27BBBBB1111B2Z6',
+        'Region': 'West (MUM)',
+        'Sales Manager': 'Unassigned',
+        'Credit Limit': 250000,
+        'Remarks': ''
+      }
+    ]
+    const worksheet = XLSX.utils.json_to_sheet(templateData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Customers')
+    XLSX.writeFile(workbook, 'Customer_Import_Template.xlsx')
+  }
+
+  const handleExecuteImport = async () => {
+    if (importRows.length === 0) return toast.error('Please select an Excel or CSV file first')
+    setImporting(true)
+    try {
+      const res = await bulkImportCustomers({ items: importRows })
+      if (res.success) {
+        setImportResult(res.data)
+        toast.success(`Import complete! ${res.data.created} created, ${res.data.updated} updated.`)
+        fetchData()
+      } else {
+        toast.error(res.error || 'Import failed')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const tabs = [
     { id: 'list', label: 'Customer List', icon: ClipboardList },
     { id: 'new', label: 'New Customer', icon: UserPlus },
@@ -277,15 +353,31 @@ export default function CustomersPage() {
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
-          Customers
-        </h1>
-        <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-          {isSM
-            ? 'Manage your assigned client accounts and onboard new customers.'
-            : 'View and manage all customer accounts across all regions and managers.'}
-        </p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 tracking-tight">
+            Customers
+          </h1>
+          <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+            {isSM
+              ? 'Manage your assigned client accounts and onboard new customers.'
+              : 'View and manage all customer accounts across all regions and managers.'}
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          icon={FileSpreadsheet}
+          size="sm"
+          onClick={() => {
+            setImportFileName('')
+            setImportRows([])
+            setImportResult(null)
+            setIsImportOpen(true)
+          }}
+          id="bulk-import-customer-btn"
+        >
+          Bulk Import Customers
+        </Button>
       </div>
 
       {/* Tab Bar */}
@@ -356,6 +448,19 @@ export default function CustomersPage() {
               <span className="text-xs text-surface-500 font-medium whitespace-nowrap">
                 {filteredCustomers.length} customer{filteredCustomers.length !== 1 ? 's' : ''}
               </span>
+              <Button
+                variant="secondary"
+                icon={FileSpreadsheet}
+                size="sm"
+                onClick={() => {
+                  setImportFileName('')
+                  setImportRows([])
+                  setImportResult(null)
+                  setIsImportOpen(true)
+                }}
+              >
+                Import Excel/CSV
+              </Button>
               <Button icon={Plus} size="sm" id="add-customer-btn" onClick={() => setActiveTab('new')}>
                 Add Customer
               </Button>
@@ -378,7 +483,7 @@ export default function CustomersPage() {
                 {search ? 'No customers match your search' : 'No customers yet'}
               </h3>
               <p className="text-xs text-surface-500">
-                {search ? 'Try a different name or GST number.' : 'Click "Add Customer" above to create your first one.'}
+                {search ? 'Try a different name or GST number.' : 'Click "Add Customer" or "Import Excel/CSV" above to get started.'}
               </p>
             </div>
           ) : (
@@ -494,6 +599,144 @@ export default function CustomersPage() {
             <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="danger" size="sm" onClick={handleDeleteConfirm} disabled={deleting}>
               {deleting ? 'Deleting…' : 'Delete Customer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Import Customers Modal */}
+      <Modal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Bulk Import Customers from Excel / CSV"
+        description="Upload an Excel (.xlsx, .xls) or CSV (.csv) spreadsheet to batch create or update customer profiles."
+        size="lg"
+      >
+        <div className="space-y-5">
+          {/* Action strip */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-surface-200 dark:border-surface-700">
+            <div className="text-xs text-surface-600 dark:text-surface-400">
+              Expected headers: <strong>Company Name, GST, Region, Sales Manager, Credit Limit, Remarks</strong>
+            </div>
+            <Button
+              variant="secondary"
+              size="xs"
+              icon={Download}
+              onClick={handleDownloadTemplate}
+            >
+              Download Excel Template
+            </Button>
+          </div>
+
+          {/* Upload Dropzone */}
+          <div className="border-2 border-dashed border-surface-300 dark:border-surface-700 hover:border-primary-500 transition-colors rounded-2xl p-6 text-center bg-surface-50/40 dark:bg-surface-800/20">
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="customer-bulk-file-input"
+            />
+            <label htmlFor="customer-bulk-file-input" className="cursor-pointer space-y-2 block">
+              <div className="w-12 h-12 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center mx-auto">
+                <Upload className="h-6 w-6" />
+              </div>
+              <div className="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                {importFileName ? importFileName : 'Click or drop Excel / CSV file here'}
+              </div>
+              <p className="text-xs text-surface-500">Supports .xlsx, .xls, and .csv files</p>
+            </label>
+          </div>
+
+          {/* Preview Table */}
+          {importRows.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-xs font-semibold text-surface-700 dark:text-surface-300">
+                <span>Previewing {importRows.length} rows to import</span>
+                <span className="text-primary-600">{importRows.length} items ready</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-surface-200 dark:border-surface-700">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-surface-100 dark:bg-surface-800 sticky top-0 font-semibold text-surface-600 dark:text-surface-400">
+                    <tr>
+                      <th className="px-3 py-2">#</th>
+                      <th className="px-3 py-2">Company Name</th>
+                      <th className="px-3 py-2">GST</th>
+                      <th className="px-3 py-2">Region</th>
+                      <th className="px-3 py-2">Sales Manager</th>
+                      <th className="px-3 py-2">Credit Limit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700 font-mono">
+                    {importRows.slice(0, 10).map((r, i) => (
+                      <tr key={i} className="hover:bg-surface-50 dark:hover:bg-surface-800/50">
+                        <td className="px-3 py-1.5 text-surface-400">{i + 1}</td>
+                        <td className="px-3 py-1.5 font-sans font-medium text-surface-900 dark:text-surface-100">
+                          {r['Company Name'] || r.company_name || r.companyName || r.Customer || '—'}
+                        </td>
+                        <td className="px-3 py-1.5">{r['GST'] || r.gst || r.GSTIN || '—'}</td>
+                        <td className="px-3 py-1.5 font-sans">{r['Region'] || r.region || '—'}</td>
+                        <td className="px-3 py-1.5 font-sans">{r['Sales Manager'] || r.sales_manager || '—'}</td>
+                        <td className="px-3 py-1.5">₹{r['Credit Limit'] || r.credit_limit || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importRows.length > 10 && (
+                <div className="text-[11px] text-surface-400 text-center">
+                  Showing first 10 of {importRows.length} rows...
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Import Result Feedback */}
+          {importResult && (
+            <div className="p-4 rounded-xl bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 space-y-2 text-xs text-success-800 dark:text-success-300">
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-success-600" />
+                Import Processed Successfully
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-1 text-center font-medium">
+                <div className="bg-white/60 dark:bg-surface-800/60 p-2 rounded-lg border">
+                  <div className="text-lg font-bold text-success-700 dark:text-success-400">{importResult.created}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-surface-500">Created</div>
+                </div>
+                <div className="bg-white/60 dark:bg-surface-800/60 p-2 rounded-lg border">
+                  <div className="text-lg font-bold text-primary-600 dark:text-primary-400">{importResult.updated}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-surface-500">Updated</div>
+                </div>
+                <div className="bg-white/60 dark:bg-surface-800/60 p-2 rounded-lg border">
+                  <div className="text-lg font-bold text-surface-600 dark:text-surface-400">{importResult.skipped}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-surface-500">Skipped</div>
+                </div>
+              </div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div className="mt-2 text-[11px] text-danger-600 space-y-1 max-h-24 overflow-y-auto border-t pt-2 border-danger-200">
+                  {importResult.errors.map((err, idx) => (
+                    <div key={idx}>• {err}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
+            <Button
+              variant="secondary"
+              onClick={() => setIsImportOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              icon={Upload}
+              loading={importing}
+              disabled={importRows.length === 0 || importing}
+              onClick={handleExecuteImport}
+            >
+              {importing ? 'Importing Customers…' : `Import ${importRows.length} Customers`}
             </Button>
           </div>
         </div>

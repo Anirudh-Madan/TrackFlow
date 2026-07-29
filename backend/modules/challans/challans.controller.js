@@ -9,10 +9,7 @@ const {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function genChallanNumber() {
-  const d = new Date();
-  const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
-  const rand = String(Math.floor(1000 + Math.random() * 9000));
-  return `CHN-${ym}-${rand}`;
+  return String(Math.floor(1000 + Math.random() * 9000));
 }
 
 function genShareToken() {

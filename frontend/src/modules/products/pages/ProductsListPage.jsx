@@ -759,6 +759,7 @@ export default function ProductsListPage() {
       const isNewProduct = !dbProduct
 
       const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
+      const hasDealer = item.dealer_landing_price !== '' && item.dealer_landing_price !== null
       const hasSelling = item.selling_price !== '' && item.selling_price !== null
       const hasQty = item.quantity !== '' && item.quantity !== null
 
@@ -768,7 +769,7 @@ export default function ProductsListPage() {
       if (hasSelling && isNaN(parseFloat(item.selling_price))) {
         errors.push('Selling Price must be a number')
       }
-      if (item.dealer_landing_price !== '' && item.dealer_landing_price !== null && isNaN(parseFloat(item.dealer_landing_price))) {
+      if (hasDealer && isNaN(parseFloat(item.dealer_landing_price))) {
         errors.push('Dealer Landing Price must be a number')
       }
       if (item.gst_rate !== '' && item.gst_rate !== null && isNaN(parseFloat(item.gst_rate))) {
@@ -779,9 +780,7 @@ export default function ProductsListPage() {
       }
 
       if (hasQty && !isNaN(parseFloat(item.quantity)) && parseFloat(item.quantity) > 0) {
-        const rowHasPricing = (item.dealer_landing_price !== '' && item.dealer_landing_price !== null) ||
-                              (item.purchase_price !== '' && item.purchase_price !== null) ||
-                              (item.selling_price !== '' && item.selling_price !== null)
+        const rowHasPricing = hasDealer || hasPurchase || hasSelling
         const dbHasPricing = dbProduct?.dealer_landing_price != null || dbProduct?.purchase_price != null || dbProduct?.selling_price != null
         const inPriceList = rowHasPricing || dbHasPricing
         if (!inPriceList) {
@@ -789,7 +788,7 @@ export default function ProductsListPage() {
         }
       }
 
-      if (!hasPurchase && !hasSelling && !hasQty && item.gst_rate === '' && !isNewProduct) {
+      if (!hasPurchase && !hasSelling && !hasDealer && !hasQty && item.gst_rate === '' && !isNewProduct) {
         errors.push('No prices, GST %, or stock levels specified for update')
       }
 
