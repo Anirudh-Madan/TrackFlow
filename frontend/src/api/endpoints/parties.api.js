@@ -1,10 +1,11 @@
 import client from '../client'
 
 // Customers API
-export const getCustomers   = () => client.get('/customers')
-export const createCustomer = (data) => client.post('/customers', data)
-export const updateCustomer = (id, data) => client.put(`/customers/${id}`, data)
-export const deleteCustomer = (id) => client.delete(`/customers/${id}`)
+export const getCustomers        = () => client.get('/customers')
+export const createCustomer     = (data) => client.post('/customers', data)
+export const bulkImportCustomers = (data) => client.post('/customers/bulk-import', data)
+export const updateCustomer     = (id, data) => client.put(`/customers/${id}`, data)
+export const deleteCustomer     = (id) => client.delete(`/customers/${id}`)
 
 // Vendors API
 export const getVendors   = () => client.get('/vendors')

@@ -1,29 +1,30 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
 import { PageLoader } from '../../components/ui/Spinner'
+import { safeLazy } from '../../utils/safeLazy'
 
 // Eager
 import IMDashboard from '../../modules/dashboard/im/IMDashboard'
 
 // Lazy
-const StockOverviewPage = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
-const InwardListPage    = lazy(() => import('../../modules/inward/pages/InwardListPage'))
-const InwardNewPage     = lazy(() => import('../../modules/inward/pages/InwardNewPage'))
-const InwardDetailPage  = lazy(() => import('../../modules/inward/pages/InwardDetailPage'))
-const PriceListPage     = lazy(() => import('../../modules/prices/pages/PriceListPage'))
+const StockOverviewPage = safeLazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
+const InwardListPage    = safeLazy(() => import('../../modules/inward/pages/InwardListPage'))
+const InwardNewPage     = safeLazy(() => import('../../modules/inward/pages/InwardNewPage'))
+const InwardDetailPage  = safeLazy(() => import('../../modules/inward/pages/InwardDetailPage'))
+const PriceListPage     = safeLazy(() => import('../../modules/prices/pages/PriceListPage'))
 
-const OrdersPendingPage = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
-const ChallansPage      = lazy(() => import('../../modules/challans/pages/ChallansListPage'))
-const ReorderListPage   = lazy(() => import('../../modules/reorder/pages/ReorderListPage'))
-const NotificationsPage = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
-const PartRequestsPage   = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
+const OrdersPendingPage = safeLazy(() => import('../../modules/orders/pages/OrdersListPage'))
+const ChallansPage      = safeLazy(() => import('../../modules/challans/pages/ChallansListPage'))
+const ReorderListPage   = safeLazy(() => import('../../modules/reorder/pages/ReorderListPage'))
+const NotificationsPage = safeLazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+const PartRequestsPage  = safeLazy(() => import('../../modules/orders/pages/PartRequestsPage'))
 
 // Pipeline + requests
-const IMPipelinePage = lazy(() => import('../../modules/pipeline/pages/IMPipelinePage'))
-const IMRequestsPage = lazy(() => import('../../modules/pipeline/pages/IMRequestsPage'))
-const IMWorkersPage  = lazy(() => import('../../modules/pipeline/pages/IMWorkersPage'))
+const IMPipelinePage = safeLazy(() => import('../../modules/pipeline/pages/IMPipelinePage'))
+const IMRequestsPage = safeLazy(() => import('../../modules/pipeline/pages/IMRequestsPage'))
+const IMWorkersPage  = safeLazy(() => import('../../modules/pipeline/pages/IMWorkersPage'))
 
-const BillsListPage      = lazy(() => import('../../modules/challans/pages/BillsListPage'))
+const BillsListPage  = safeLazy(() => import('../../modules/challans/pages/BillsListPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>

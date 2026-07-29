@@ -142,7 +142,7 @@ exports.createOrder = async (req, res, next) => {
 
     // Create corresponding Challan entry
     const share_token = uuidv4().replace(/-/g, '');
-    const challanNo = challan_number || `CHN-${order_number.replace('ORD-', '')}`;
+    const challanNo = challan_number || String(Math.floor(1000 + Math.random() * 9000));
     await Challan.create({
       challan_number: challanNo,
       order_id: order.id,

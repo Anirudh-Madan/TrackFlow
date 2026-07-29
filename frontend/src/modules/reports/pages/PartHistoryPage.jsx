@@ -335,12 +335,12 @@ export default function PartHistoryPage() {
             {/* Legend Indicators */}
             <div className="flex items-center gap-4 text-xs font-semibold">
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-success-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-primary-500" />
                 <span className="text-surface-700 dark:text-surface-300">Purchase</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-danger-500" />
-                <span className="text-surface-700 dark:text-surface-300">Sale</span>
+                <span className="text-surface-700 dark:text-surface-300">Challan / Sale</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
@@ -357,7 +357,7 @@ export default function PartHistoryPage() {
                   <th className="px-5 py-3.5">DATE</th>
                   <th className="px-5 py-3.5">TYPE</th>
                   <th className="px-5 py-3.5">REFERENCE</th>
-                  <th className="px-5 py-3.5">PARTY</th>
+                  <th className="px-5 py-3.5">PARTY / SUPPLIER</th>
                   <th className="px-5 py-3.5">SALESMAN</th>
                   <th className="px-5 py-3.5 text-right">QTY CHANGE</th>
                   <th className="px-5 py-3.5 text-right">STOCK BEFORE</th>
@@ -373,9 +373,9 @@ export default function PartHistoryPage() {
                   </tr>
                 ) : (
                   transactions.map((tx) => {
-                    const isSale = tx.type === 'Sale'
-                    const isPurchase = tx.type === 'Purchase'
-                    const isReturn = tx.type === 'Return'
+                    const isChallan = tx.type === 'Challan' || tx.type === 'Sale'
+                    const isPurchase = tx.type === 'Purchase Order' || tx.type === 'PO' || tx.type === 'Inward' || tx.type === 'Purchase'
+                    const isReturn = tx.type === 'Return' || tx.type === 'Adjustment'
 
                     return (
                       <tr key={tx.id} className="table-row-hover">
@@ -389,16 +389,16 @@ export default function PartHistoryPage() {
                           <span className="inline-flex items-center gap-1.5 font-semibold">
                             <span className={cn(
                               'h-2 w-2 rounded-full',
-                              isSale && 'bg-danger-500',
-                              isPurchase && 'bg-success-500',
+                              isChallan && 'bg-danger-500',
+                              isPurchase && 'bg-primary-500',
                               isReturn && 'bg-amber-500'
                             )} />
                             <span className={cn(
-                              isSale && 'text-danger-600 dark:text-danger-400',
-                              isPurchase && 'text-success-600 dark:text-success-400',
+                              isChallan && 'text-danger-600 dark:text-danger-400',
+                              isPurchase && 'text-primary-600 dark:text-primary-400',
                               isReturn && 'text-amber-600 dark:text-amber-400'
                             )}>
-                              {tx.type}
+                              {isPurchase ? 'Purchase' : tx.type}
                             </span>
                           </span>
                         </td>

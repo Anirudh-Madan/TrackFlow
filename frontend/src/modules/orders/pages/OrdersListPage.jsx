@@ -37,7 +37,7 @@ export default function OrdersListPage() {
   const isPathChallan = location.pathname.endsWith('/challans')
 
   const [activeTab, setActiveTab]       = useState(() => {
-    if (isPathChallan) return 'challans'
+    if (isPathChallan) return 'new-challan'
     if (isSM) return 'new-challan'
     return 'orders'
   }) // 'orders' | 'challans' | 'my-orders' | 'order-history' | 'new-challan'
@@ -70,7 +70,7 @@ export default function OrdersListPage() {
       setActiveTab(location.state.activeTab)
       window.history.replaceState({}, document.title)
     } else if (isPathChallan) {
-      setActiveTab('challans')
+      setActiveTab('new-challan')
     }
   }, [location, isPathChallan])
 
@@ -167,17 +167,17 @@ export default function OrdersListPage() {
         {isAdmin ? (
           <>
             <button
-              onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
+              onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
               className={cn(
                 'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'orders'
+                activeTab === 'new-challan'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
                   : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
               )}
-              id="admin-orders-tab-btn"
+              id="admin-new-challan-tab-btn"
             >
-              <ShoppingCart className="h-4 w-4" />
-              Orders List
+              <Plus className="h-4 w-4" />
+              New Challan
             </button>
             <button
               onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
@@ -204,19 +204,6 @@ export default function OrdersListPage() {
             >
               <FileText className="h-4 w-4" />
               Bills Tab
-            </button>
-            <button
-              onClick={() => { setActiveTab('new-challan'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'new-challan'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="admin-new-challan-tab-btn"
-            >
-              <Plus className="h-4 w-4" />
-              New Challan
             </button>
           </>
         ) : isSM ? (
@@ -263,19 +250,6 @@ export default function OrdersListPage() {
           </>
         ) : (
           <>
-            <button
-              onClick={() => { setActiveTab('orders'); setSearch(''); setFilterStatus('all'); }}
-              className={cn(
-                'pb-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0',
-                activeTab === 'orders'
-                  ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300'
-              )}
-              id="orders-tab-btn"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Orders List
-            </button>
             <button
               onClick={() => { setActiveTab('challans'); setSearch(''); setFilterStatus('all'); }}
               className={cn(

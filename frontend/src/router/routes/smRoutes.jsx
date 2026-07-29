@@ -1,30 +1,31 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
 import { PageLoader } from '../../components/ui/Spinner'
+import { safeLazy } from '../../utils/safeLazy'
 
 // Eager — always needed
 import SMDashboard from '../../modules/dashboard/sm/SMDashboard'
 
 // Lazy — code-split by module
-const PartiesListPage   = lazy(() => import('../../modules/parties/pages/PartiesListPage'))
-const PartyDetailPage   = lazy(() => import('../../modules/parties/pages/PartyDetailPage'))
-const CustomersPage     = lazy(() => import('../../modules/parties/pages/CustomersPage'))
+const PartiesListPage   = safeLazy(() => import('../../modules/parties/pages/PartiesListPage'))
+const PartyDetailPage   = safeLazy(() => import('../../modules/parties/pages/PartyDetailPage'))
+const CustomersPage     = safeLazy(() => import('../../modules/parties/pages/CustomersPage'))
 
-const OrderNewPage      = lazy(() => import('../../modules/orders/pages/OrderNewPage'))
-const OrdersListPage    = lazy(() => import('../../modules/orders/pages/OrdersListPage'))
-const OrderDetailPage   = lazy(() => import('../../modules/orders/pages/OrderDetailPage'))
-const OrderHistoryPage  = lazy(() => import('../../modules/orders/pages/OrderHistoryPage'))
+const OrderNewPage      = safeLazy(() => import('../../modules/orders/pages/OrderNewPage'))
+const OrdersListPage    = safeLazy(() => import('../../modules/orders/pages/OrdersListPage'))
+const OrderDetailPage   = safeLazy(() => import('../../modules/orders/pages/OrderDetailPage'))
+const OrderHistoryPage  = safeLazy(() => import('../../modules/orders/pages/OrderHistoryPage'))
 
-const PaymentNewPage    = lazy(() => import('../../modules/payments/pages/PaymentNewPage'))
-const PaymentsListPage  = lazy(() => import('../../modules/payments/pages/PaymentsListPage'))
-const PartyLedgerPage   = lazy(() => import('../../modules/payments/pages/PartyLedgerPage'))
+const PaymentNewPage    = safeLazy(() => import('../../modules/payments/pages/PaymentNewPage'))
+const PaymentsListPage  = safeLazy(() => import('../../modules/payments/pages/PaymentsListPage'))
+const PartyLedgerPage   = safeLazy(() => import('../../modules/payments/pages/PartyLedgerPage'))
 
-const MyReorderFlagsPage = lazy(() => import('../../modules/reorder/pages/MyReorderFlagsPage'))
-const SMPipelinePage    = lazy(() => import('../../modules/pipeline/pages/SMPipelinePage'))
+const MyReorderFlagsPage = safeLazy(() => import('../../modules/reorder/pages/MyReorderFlagsPage'))
+const SMPipelinePage    = safeLazy(() => import('../../modules/pipeline/pages/SMPipelinePage'))
 
-const NotificationsPage  = lazy(() => import('../../modules/notifications/pages/NotificationsPage'))
-const PartRequestsPage   = lazy(() => import('../../modules/orders/pages/PartRequestsPage'))
-const StockOverviewPage  = lazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
+const NotificationsPage  = safeLazy(() => import('../../modules/notifications/pages/NotificationsPage'))
+const PartRequestsPage   = safeLazy(() => import('../../modules/orders/pages/PartRequestsPage'))
+const StockOverviewPage  = safeLazy(() => import('../../modules/inventory/pages/StockOverviewPage'))
 
 const Wrap = ({ children }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>

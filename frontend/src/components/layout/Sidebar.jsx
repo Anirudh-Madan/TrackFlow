@@ -176,7 +176,7 @@ export default function Sidebar() {
     // Default: Admin menu
     return (
       <>
-        {/* Dashboard */}
+        {/* Overview */}
         <SidebarGroup label="Overview" collapsed={sidebarCollapsed}>
           <SidebarItem
             to="/admin"
@@ -187,7 +187,40 @@ export default function Sidebar() {
           />
         </SidebarGroup>
 
-        {/* Users & Roles */}
+        {/* Stock */}
+        <SidebarGroup label="Stock" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/stock-movement" icon={Activity} label="Stock Movement" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/velocity-min-stock" icon={BarChart3} label="Velocity & Min Stock" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/part-history" icon={History} label="Part History" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Operations */}
+        <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/challans" icon={FileText} label="Delivery Challans" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/purchase-orders" icon={FileUp} label="Purchase Orders" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Directory */}
+        <SidebarGroup label="Directory" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/customers" icon={User} label="Customers" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/parties" icon={Building2} label="Vendors" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Finance */}
+        <SidebarGroup label="Finance" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/payments" icon={CreditCard} label="Payments & Accounts" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Intelligence */}
+        <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
+          <SidebarItem to="/admin/reports" icon={BarChart3} label="Executive Reports & AI" collapsed={sidebarCollapsed} />
+        </SidebarGroup>
+
+        {/* Access */}
         <SidebarGroup label="Access" collapsed={sidebarCollapsed}>
           <SidebarItem
             to="/admin/users"
@@ -201,33 +234,6 @@ export default function Sidebar() {
             label="Activity Logs"
             collapsed={sidebarCollapsed}
           />
-        </SidebarGroup>
-
-        {/* Operations */}
-        <SidebarGroup label="Operations" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/regions" icon={MapPin} label="Regions" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/customers" icon={User} label="Customers" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/parties" icon={Building2} label="Parties" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/products" icon={Package} label="Products & Inventory" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/part-history" icon={History} label="Part History" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/prices" icon={TrendingUp} label="Price List" collapsed={sidebarCollapsed} />
-        </SidebarGroup>
-
-        {/* Fulfilment */}
-        <SidebarGroup label="Fulfilment" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/challans" icon={FileText} label="Delivery Challans" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/purchase-orders" icon={FileUp} label="Purchase Orders" collapsed={sidebarCollapsed} />
-          <SidebarItem to="/admin/pipeline" icon={GitBranch} label="Pipeline" collapsed={sidebarCollapsed} />
-        </SidebarGroup>
-
-        {/* Intelligence */}
-        <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/reports" icon={BarChart3} label="Reports & AI Insights" collapsed={sidebarCollapsed} />
-          <CollapsibleGroup label="Other Reports" icon={BarChart3} collapsed={sidebarCollapsed}>
-            <SidebarItem to="/admin/reports/sales" icon={TrendingUp} label="Sales Reports" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/below-dl" icon={AlertTriangle} label="Below DL Reports" collapsed={sidebarCollapsed} />
-            <SidebarItem to="/admin/reports/stock" icon={Warehouse} label="Stock Reports" collapsed={sidebarCollapsed} />
-          </CollapsibleGroup>
         </SidebarGroup>
 
         {/* System */}

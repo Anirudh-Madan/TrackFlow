@@ -13,6 +13,7 @@ import {
   deletePurchaseOrder, returnPurchaseOrder
 } from '../../../api/endpoints/purchaseOrders.api'
 import { getProducts } from '../../../api/endpoints/products.api'
+import { getVendors } from '../../../api/endpoints/parties.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
 
@@ -136,6 +137,7 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
 
   const [pos, setPos]             = useState([])
   const [products, setProducts]   = useState([])
+  const [vendors, setVendors]     = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filterStatus, setFilter] = useState('all')
@@ -164,6 +166,8 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
       if (res.success) setPos(res.data)
       const pRes = await getProducts()
       if (pRes.success) setProducts(pRes.data)
+      const vRes = await getVendors().catch(() => ({ success: false, data: [] }))
+      if (vRes && vRes.success && Array.isArray(vRes.data)) setVendors(vRes.data)
     }
     catch { toast.error('Failed to load purchase orders') }
     finally { setLoading(false) }
@@ -205,7 +209,6 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
   const handlePreview = (e) => {
     e.preventDefault()
     if (!form.vendor_name?.trim()) { toast.error('Vendor / Supplier is compulsory for Purchase Orders'); return }
-    if (!form.bill_number.trim()) { toast.error('Bill number is mandatory'); return }
     if (form.items.some(i => !i.part_number.trim())) { toast.error('All items must have a part number'); return }
     setShowPreview(true)
   }
@@ -532,10 +535,33 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Purchase Order" size="xl">
         <form onSubmit={handlePreview} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="label-base">Vendor / Supplier <span className="text-danger-500">*</span></label><input type="text" value={form.vendor_name} onChange={e => setForm(f => ({ ...f, vendor_name: e.target.value }))} className="input-base" placeholder="Vendor / supplier name" required /></div>
+            <div>
+              <label className="label-base">Vendor / Supplier <span className="text-danger-500">*</span></label>
+              {vendors.length > 0 ? (
+                <select
+                  value={form.vendor_name}
+                  onChange={e => setForm(f => ({ ...f, vendor_name: e.target.value }))}
+                  className="input-base"
+                  required
+                >
+                  <option value="">— Select Compulsory Supplier —</option>
+                  {vendors.map(v => (
+                    <option key={v.id} value={v.company_name}>{v.company_name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={form.vendor_name}
+                  onChange={e => setForm(f => ({ ...f, vendor_name: e.target.value }))}
+                  className="input-base"
+                  placeholder="Enter vendor / supplier name"
+                  required
+                />
+              )}
+            </div>
             <div><label className="label-base">PO Date</label><input type="date" value={form.po_date} onChange={e => setForm(f => ({ ...f, po_date: e.target.value }))} className="input-base" /></div>
-            <div><label className="label-base">Bill Number <span className="text-danger-500">*</span></label><input type="text" value={form.bill_number} onChange={e => setForm(f => ({ ...f, bill_number: e.target.value }))} className="input-base" placeholder="Bill no" required /></div>
-            <div><label className="label-base">Notes</label><input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-base" placeholder="Optional notes" /></div>
+            <div className="col-span-2"><label className="label-base">Notes</label><input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-base" placeholder="Optional notes" /></div>
           </div>
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-surface-500 uppercase pb-1 border-b border-surface-200 dark:border-surface-700">
@@ -606,8 +632,7 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
           <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-700/40 border border-surface-200 dark:border-surface-700 grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-xs text-surface-400">Vendor:</span><div className="font-medium">{form.vendor_name || '—'}</div></div>
             <div><span className="text-xs text-surface-400">Date:</span><div className="font-medium">{form.po_date}</div></div>
-            <div><span className="text-xs text-surface-400">Bill No:</span><div className="font-semibold text-primary-700 dark:text-primary-400">{form.bill_number}</div></div>
-            <div><span className="text-xs text-surface-400">Notes:</span><div className="font-medium">{form.notes || '—'}</div></div>
+            <div className="col-span-2"><span className="text-xs text-surface-400">Notes:</span><div className="font-medium">{form.notes || '—'}</div></div>
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="secondary" icon={ArrowLeft} onClick={() => setShowPreview(false)}>Back to Edit</Button>
@@ -620,7 +645,7 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
       <Modal open={!!editPO} onClose={() => setEditPO(null)} title={`Edit PO: ${editPO?.po_number}`} size="lg">
         <div className="space-y-4">
           <div className="p-3 rounded-xl bg-warning-50 text-xs text-warning-700 dark:bg-warning-950/30 dark:text-warning-300 border border-warning-200 dark:border-warning-900/40">
-            <strong>Audit Required:</strong> Compulsory edit reason is required for audit logging. Setting a bill number will lock this PO from further edits.
+            <strong>Audit Required:</strong> Compulsory edit reason is required for audit logging.
           </div>
 
           <div>
@@ -635,28 +660,16 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="label-base">Vendor / Supplier Name <span className="text-danger-500">*</span></label>
-              <input
-                type="text"
-                value={editForm.vendor_name || ''}
-                onChange={e => setEditForm(f => ({ ...f, vendor_name: e.target.value }))}
-                className="input-base"
-                placeholder="Vendor Name"
-                required
-              />
-            </div>
-            <div>
-              <label className="label-base">Bill Number (locks PO)</label>
-              <input
-                type="text"
-                value={editForm.bill_number || ''}
-                onChange={e => setEditForm(f => ({ ...f, bill_number: e.target.value }))}
-                className="input-base font-mono"
-                placeholder="e.g. BILL-2026-001"
-              />
-            </div>
+          <div>
+            <label className="label-base">Vendor / Supplier Name <span className="text-danger-500">*</span></label>
+            <input
+              type="text"
+              value={editForm.vendor_name || ''}
+              onChange={e => setEditForm(f => ({ ...f, vendor_name: e.target.value }))}
+              className="input-base"
+              placeholder="Vendor Name"
+              required
+            />
           </div>
 
           <div>

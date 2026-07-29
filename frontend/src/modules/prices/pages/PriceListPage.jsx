@@ -514,7 +514,19 @@ export default function PriceListPage() {
         }
         setMatchedFields(displayFieldMap)
 
-        normalizedRows = normalizedRows.filter(r => r.sku || r.purchase_price || r.selling_price || r.quantity || r.planner || r.location || r.gst_rate)
+        normalizedRows = normalizedRows.filter(r => {
+          const hasVal = r.sku || r.purchase_price || r.dealer_landing_price || r.selling_price || r.quantity || r.planner || r.location
+          if (!hasVal) return false
+          // Filter out sub-header banner rows (e.g. "MS-04", "MS-100") that have no description, price, or stock
+          const pVal = parseFloat(r.purchase_price || 0)
+          const dlVal = parseFloat(r.dealer_landing_price || 0)
+          const sVal = parseFloat(r.selling_price || 0)
+          const qVal = parseFloat(r.quantity || 0)
+          if (!r.name && pVal === 0 && dlVal === 0 && sVal === 0 && qVal === 0 && r.sku && r.sku.length < 10 && !/\d/.test(r.sku)) {
+            return false
+          }
+          return true
+        })
 
         setUnmatchedHeaders(unmatched)
         setParsedImportData(normalizedRows)
@@ -570,6 +582,7 @@ export default function PriceListPage() {
       const isNewProduct = !dbProduct
 
       const hasPurchase = item.purchase_price !== '' && item.purchase_price !== null
+      const hasDealer = item.dealer_landing_price !== '' && item.dealer_landing_price !== null
       const hasSelling = item.selling_price !== '' && item.selling_price !== null
       const hasQty = item.quantity !== '' && item.quantity !== null
 
@@ -579,7 +592,7 @@ export default function PriceListPage() {
       if (hasSelling && isNaN(parseFloat(item.selling_price))) {
         errors.push('Selling Price must be a number')
       }
-      if (item.dealer_landing_price !== '' && item.dealer_landing_price !== null && isNaN(parseFloat(item.dealer_landing_price))) {
+      if (hasDealer && isNaN(parseFloat(item.dealer_landing_price))) {
         errors.push('DL Price must be a number')
       }
       if (item.gst_rate !== '' && item.gst_rate !== null && isNaN(parseFloat(item.gst_rate))) {
@@ -589,7 +602,7 @@ export default function PriceListPage() {
         errors.push('Stock Quantity must be a number')
       }
 
-      if (!hasPurchase && !hasSelling && !hasQty && item.gst_rate === '' && !isNewProduct) {
+      if (!hasPurchase && !hasSelling && !hasDealer && !hasQty && item.gst_rate === '' && !isNewProduct) {
         errors.push('No prices, GST %, or stock levels specified for update')
       }
 

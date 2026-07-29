@@ -24,7 +24,7 @@ const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-const genPO  = () => { const d = new Date(); return `PO-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}-${String(Math.floor(1000+Math.random()*9000))}` }
+const genPO  = () => `#${Math.floor(1000 + Math.random() * 9000)}`
 const genINV = () => { const d = new Date(); return `INV-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}-${String(Math.floor(10000+Math.random()*90000))}` }
 
 // ─── Input cls ────────────────────────────────────────────────────────────────
@@ -165,12 +165,10 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
         <div><h1>Purchase Order</h1><div style="color:#666;font-size:12px">TrackFlow</div></div>
         <div style="text-align:right">
           <div class="label">PO Number</div><div class="value" style="font-family:monospace">${data.po_number}</div>
-          <div class="label" style="margin-top:6px">Invoice No.</div><div class="value" style="font-family:monospace">${data.invoice_number}</div>
         </div>
       </div>
       <div class="grid">
         <div><div class="label">Supplier</div><div class="value">${vendor?.company_name || '—'}</div>${vendor?.gst ? `<div style="font-size:10px;color:#666;font-family:monospace">${vendor.gst}</div>` : ''}</div>
-        <div><div class="label">Bill Number</div><div class="value" style="font-family:monospace">${data.bill_number || '—'}</div></div>
         <div><div class="label">PO Date</div><div class="value">${data.po_date ? new Date(data.po_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '—'}</div></div>
         <div><div class="label">Prepared By</div><div class="value">${user?.name || '—'}</div></div>
         ${data.notes ? `<div style="grid-column:span 3"><div class="label">Notes</div><div>${data.notes}</div></div>` : ''}
@@ -203,7 +201,7 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
             </div>
             <div>
               <h2 className="text-base font-bold text-surface-900 dark:text-surface-100">Purchase Order Preview</h2>
-              <p className="text-xs text-surface-400 font-mono">{data.po_number} · {data.invoice_number}</p>
+              <p className="text-xs text-surface-400 font-mono">{data.po_number}</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
@@ -220,10 +218,6 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
               {vendor?.gst && <p className="text-xs text-surface-400 font-mono">{vendor.gst}</p>}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">Bill Number</p>
-              <p className="text-sm font-bold font-mono text-primary-700 dark:text-primary-300">{data.bill_number || '—'}</p>
-            </div>
-            <div>
               <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">PO Date</p>
               <p className="text-sm font-semibold text-surface-800 dark:text-surface-200">
                 {data.po_date ? new Date(data.po_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '—'}
@@ -232,10 +226,6 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
             <div>
               <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">Prepared By</p>
               <p className="text-sm font-semibold text-surface-800 dark:text-surface-200">{user?.name || '—'}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">Invoice No.</p>
-              <p className="text-sm font-bold font-mono text-surface-800 dark:text-surface-200">{data.invoice_number}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-primary-500 uppercase tracking-wider mb-0.5">PO Number</p>
@@ -312,45 +302,80 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
   )
 }
 
-function ProductDropdown({ products, value, onSelect }) {
+function PartNumberDropdown({ products, vendor, value, onSelect }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const ref = useRef(null)
 
-  const filtered = useMemo(() =>
-    products.filter(p =>
-      (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (p.sku || '').toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 30),
-    [products, search]
-  )
+  const hasSupplier = Boolean(vendor && (vendor.company_name || vendor.name))
+  const supplierName = vendor?.company_name || vendor?.name || ''
 
-  const selected = value ? products.find(p => p.id === value) : null
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!hasSupplier) return []
+
+    const sLower = supplierName.trim().toLowerCase()
+    let list = products.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
+    if (list.length === 0) list = products
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(p =>
+        (p.sku || '').toLowerCase().includes(q) ||
+        (p.name || '').toLowerCase().includes(q)
+      )
+    }
+    return list.slice(0, 40)
+  }, [products, supplierName, search, hasSupplier])
+
+  const selected = value ? products.find(p => p.id === value || p.sku === value) : null
+
+  const handleToggle = () => {
+    if (!hasSupplier) {
+      toast.error('Please select a Supplier in Order Details first!')
+      return
+    }
+    setOpen(o => !o)
+  }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         className={cn(
           'w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-sm transition-colors',
           'bg-white dark:bg-surface-800',
-          open
-            ? 'border-primary-400 ring-2 ring-primary-500/20'
-            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600',
+          !hasSupplier
+            ? 'border-warning-300 dark:border-warning-900/50 bg-warning-50/30 dark:bg-warning-900/10 cursor-pointer'
+            : open
+              ? 'border-primary-400 ring-2 ring-primary-500/20'
+              : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600',
         )}
       >
-        {selected ? (
+        {!hasSupplier ? (
+          <span className="text-warning-600 dark:text-warning-400 font-medium flex items-center gap-1.5 text-xs">
+            <span className="shrink-0">⚠️</span> Select Supplier First
+          </span>
+        ) : selected ? (
           <div className="min-w-0 text-left">
-            <p className="font-medium text-surface-900 dark:text-surface-100 truncate">{selected.name}</p>
-            <p className="text-[11px] text-surface-400 font-mono">{selected.sku}</p>
+            <p className="font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{selected.sku}</p>
+            <p className="text-[11px] text-surface-400 truncate">{selected.name}</p>
           </div>
         ) : (
-          <span className="text-surface-400">Search product…</span>
+          <span className="text-surface-400">
+            Search {supplierName} Part No…
+          </span>
         )}
         <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && hasSupplier && (
         <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
           <div className="p-2 border-b border-surface-100 dark:border-surface-800">
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-800">
@@ -359,14 +384,18 @@ function ProductDropdown({ products, value, onSelect }) {
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name or SKU…"
-                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400"
+                placeholder={`Filter ${supplierName} Part No (SKU)…`}
+                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400 font-mono"
               />
             </div>
           </div>
+          <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
+            <span>Supplier: <strong>{supplierName}</strong></span>
+            <span className="text-[10px] opacity-80">{filtered.length} part(s) available</span>
+          </div>
           <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
             {filtered.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found</p>
+              <p className="px-4 py-4 text-xs text-surface-400 text-center italic">No catalog parts found for {supplierName}</p>
             ) : filtered.map(p => (
               <button
                 key={p.id}
@@ -375,8 +404,8 @@ function ProductDropdown({ products, value, onSelect }) {
                 className="w-full flex items-center justify-between px-3.5 py-2.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-surface-900 dark:text-surface-100 truncate">{p.name}</p>
-                  <p className="text-[11px] text-surface-400 font-mono">{p.sku}</p>
+                  <p className="text-xs font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{p.sku}</p>
+                  <p className="text-[11px] text-surface-400 truncate">{p.name}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.selling_price)}</p>
@@ -398,56 +427,50 @@ const BLANK_ITEM = () => ({ part_number: '', description: '', unit_price: '', qt
 function NewPOTab({ vendors, products }) {
   const { user } = useAuthStore()
   const [vendorId, setVendorId]   = useState(null)
-  const [billNumber, setBillNumber] = useState('')
   const [poDate, setPoDate]       = useState(todayStr)
   const [notes, setNotes]         = useState('')
   const [items, setItems]         = useState([BLANK_ITEM()])
   const [showPreview, setShowPreview] = useState(false)
   const [submitting, setSubmitting]   = useState(false)
 
-  const [poNumber, setPoNumber]           = useState(genPO)
-  const [invoiceNumber, setInvoiceNumber] = useState(genINV)
+  const [poNumber, setPoNumber]   = useState(genPO)
 
-  // Lookup product by part_number typed
-  const lookupProduct = useCallback((idx, partNum) => {
-    const p = products.find(pr => (pr.sku || '').toLowerCase() === partNum.toLowerCase())
-    if (p) {
-      setItems(prev => prev.map((it, i) => i === idx ? {
-        ...it,
-        part_number: partNum,
-        product_id: p.id,
-        description: it.description || p.name || '',
-        unit_price: it.unit_price || String(p.dealer_landing_price || p.selling_price || ''),
-      } : it))
-    } else {
-      setItems(prev => prev.map((it, i) => i === idx ? { ...it, part_number: partNum, product_id: null } : it))
-    }
-  }, [products])
+  const selectedVendor = useMemo(() => vendors.find(v => String(v.id) === String(vendorId)), [vendors, vendorId])
 
   const updateItem = (idx, patch) => setItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it))
-  const addItem    = () => setItems(prev => [...prev, BLANK_ITEM()])
+  const addItem    = () => {
+    if (!vendorId) {
+      toast.error('Please select a Supplier first!')
+      return
+    }
+    setItems(prev => [...prev, BLANK_ITEM()])
+  }
   const removeItem = (idx) => setItems(prev => prev.length === 1 ? [BLANK_ITEM()] : prev.filter((_, i) => i !== idx))
 
   const subtotal = items.reduce((s, it) => s + fmtN(it.unit_price) * fmtN(it.qty), 0)
 
   const handlePreview = () => {
-    if (!billNumber.trim()) { toast.error('Bill Number is required'); return }
+    if (!vendorId) {
+      toast.error('Supplier selection is compulsory to create a Purchase Order')
+      return
+    }
     const valid = items.filter(it => (it.product_id || it.part_number || it.description) && fmtN(it.qty) > 0)
-    if (valid.length === 0) { toast.error('Add at least one item with a Part Number or Product and Qty'); return }
+    if (valid.length === 0) { toast.error('Add at least one item with a Part Number and Qty'); return }
     setShowPreview(true)
   }
 
   const handleSubmit = async () => {
-    if (!billNumber.trim()) { toast.error('Bill Number is required'); return }
+    if (!vendorId) {
+      toast.error('Supplier selection is compulsory to create a Purchase Order')
+      return
+    }
     const valid = items.filter(it => (it.product_id || it.part_number || it.description) && fmtN(it.qty) > 0)
-    if (valid.length === 0) { toast.error('Add at least one item with a Part Number or Product and Qty'); return }
+    if (valid.length === 0) { toast.error('Add at least one item with a Part Number and Qty'); return }
     setSubmitting(true)
     try {
       const res = await createPurchaseOrder({
-        vendor_id: vendorId || undefined,
+        vendor_id: vendorId,
         po_date: poDate,
-        bill_number: billNumber.trim(),
-        invoice_number: invoiceNumber,
         notes: notes || undefined,
         items: valid.map(it => ({
           product_id: it.product_id || undefined,
@@ -458,14 +481,12 @@ function NewPOTab({ vendors, products }) {
         })),
       })
       if (res?.success) {
-        toast.success(`Purchase Order ${res.data?.po_number} submitted!`)
+        toast.success(`Purchase Order ${res.data?.po_number || poNumber} submitted!`)
         setShowPreview(false)
         setItems([BLANK_ITEM()])
         setNotes('')
-        setBillNumber('')
         setVendorId(null)
         setPoNumber(genPO())
-        setInvoiceNumber(genINV())
       } else {
         toast.error(res?.error || 'Failed to create PO')
       }
@@ -483,7 +504,7 @@ function NewPOTab({ vendors, products }) {
         onClose={() => setShowPreview(false)}
         onConfirm={handleSubmit}
         submitting={submitting}
-        data={{ po_number: poNumber, invoice_number: invoiceNumber, bill_number: billNumber.trim(), vendor_id: vendorId, po_date: poDate, notes }}
+        data={{ po_number: poNumber, vendor_id: vendorId, po_date: poDate, notes }}
         items={items}
         vendors={vendors}
         user={user}
@@ -511,16 +532,10 @@ function NewPOTab({ vendors, products }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Supplier */}
+            {/* Supplier (Compulsory) */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-surface-500">Supplier</label>
-              <VendorDropdown vendors={vendors} value={vendorId} onChange={setVendorId} />
-            </div>
-
-            {/* Bill Number */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-surface-500">Bill Number <span className="text-danger-500">*</span></label>
-              <input type="text" required value={billNumber} onChange={e => setBillNumber(e.target.value)} placeholder="Enter bill number" className={inputCls('font-mono')} id="po-tab-bill-input" />
+              <label className="text-xs font-semibold text-surface-500">Supplier <span className="text-danger-500">*</span></label>
+              <VendorDropdown vendors={vendors} value={vendorId} onChange={setVendorId} placeholder="Select compulsory supplier…" />
             </div>
 
             {/* PO Date */}
@@ -529,15 +544,6 @@ function NewPOTab({ vendors, products }) {
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
                 <input type="date" value={poDate} onChange={e => setPoDate(e.target.value)} className={inputCls('pl-9')} />
-              </div>
-            </div>
-
-            {/* Invoice Number */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-surface-500">Invoice Number</label>
-              <div className="relative">
-                <input type="text" disabled value={invoiceNumber} className={roInputCls} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-surface-400 bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded font-medium">AUTO</span>
               </div>
             </div>
 
@@ -577,8 +583,8 @@ function NewPOTab({ vendors, products }) {
           </div>
 
           {/* Column Headers */}
-          <div className="hidden lg:grid gap-3 px-4 mb-2" style={{ gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr 1fr auto' }}>
-            {['Product', 'Part No. *', 'Description', 'Unit Price', 'Qty', 'Total', ''].map(h => (
+          <div className="hidden lg:grid gap-3 px-4 mb-2" style={{ gridTemplateColumns: '2.5fr 2fr 1fr 1fr 1.5fr auto' }}>
+            {['Part No. (SKU) *', 'Description', 'Unit Price', 'Qty *', 'Total', ''].map(h => (
               <div key={h} className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">{h}</div>
             ))}
           </div>
@@ -588,36 +594,28 @@ function NewPOTab({ vendors, products }) {
               const lineTotal = fmtN(item.unit_price) * fmtN(item.qty)
               return (
                 <div key={idx} className="grid gap-3 p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30"
-                  style={{ gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr 1fr auto' }}
+                  style={{ gridTemplateColumns: '2.5fr 2fr 1fr 1fr 1.5fr auto' }}
                 >
-                  {/* Product Search Dropdown */}
-                  <ProductDropdown
+                  {/* Part Number Search Dropdown */}
+                  <PartNumberDropdown
                     products={products}
-                    value={item.product_id}
+                    vendor={selectedVendor}
+                    value={item.product_id || item.part_number}
                     onSelect={p => {
                       updateItem(idx, {
                         product_id: p.id,
-                        part_number: p.sku || item.part_number || '',
-                        description: p.name || item.description || '',
+                        part_number: p.sku || '',
+                        description: p.name || '',
                         unit_price: String(p.dealer_landing_price || p.selling_price || ''),
                       })
                     }}
                   />
-                  {/* Part Number */}
-                  <input
-                    type="text"
-                    value={item.part_number}
-                    onChange={e => updateItem(idx, { part_number: e.target.value })}
-                    onBlur={e => lookupProduct(idx, e.target.value)}
-                    placeholder="e.g. SKU-001"
-                    className={inputCls('text-xs font-mono')}
-                  />
-                  {/* Description */}
+                  {/* Description (auto-filled) */}
                   <input
                     type="text"
                     value={item.description}
                     onChange={e => updateItem(idx, { description: e.target.value })}
-                    placeholder="Item description"
+                    placeholder="Catalog description"
                     className={inputCls('text-xs')}
                   />
                   {/* Unit Price */}
@@ -625,7 +623,7 @@ function NewPOTab({ vendors, products }) {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-surface-400">₹</span>
                     <input type="number" min="0" step="0.01" value={item.unit_price}
                       onChange={e => updateItem(idx, { unit_price: e.target.value })}
-                      placeholder="0.00" className={inputCls('pl-6 text-xs')}
+                      placeholder="0.00" className={inputCls('pl-6 text-xs font-mono')}
                     />
                   </div>
                   {/* Qty */}
@@ -654,27 +652,23 @@ function NewPOTab({ vendors, products }) {
           </div>
 
           <button type="button" onClick={addItem}
-            className="mt-4 flex items-center gap-2 w-full px-4 py-3 rounded-2xl border-2 border-dashed border-surface-200 dark:border-surface-700 text-sm text-surface-400 hover:border-primary-400 hover:text-primary-500 dark:hover:border-primary-600 dark:hover:text-primary-400 transition-all justify-center"
+            className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
           >
             <Plus className="h-4 w-4" /> Add Line Item
           </button>
         </div>
 
-        {/* Summary + Submit */}
-        <div className="bg-white dark:bg-surface-900 rounded-2xl border border-surface-200 dark:border-surface-800 p-6">
-          <div className="flex items-end justify-between gap-5">
-            <div className="space-y-2">
-              <div className="flex justify-between gap-10 pt-2 border-t border-surface-100 dark:border-surface-800">
-                <span className="font-bold text-surface-900 dark:text-surface-100">Total</span>
-                <span className="text-xl font-bold font-mono text-primary-600 dark:text-primary-400">{fmt(subtotal)}</span>
-              </div>
-            </div>
-            <button type="button" id="preview-po-btn" onClick={handlePreview}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 shadow-lg shadow-primary-500/25 transition-all"
-            >
-              <Eye className="h-4 w-4" /> Preview & Submit
-            </button>
+        {/* Footer Bar */}
+        <div className="flex items-center justify-between p-5 bg-white dark:bg-surface-900 rounded-2xl border border-surface-200 dark:border-surface-800 shadow-sm">
+          <div>
+            <span className="text-xs text-surface-400 block mb-0.5">Total</span>
+            <span className="text-xl font-bold font-mono text-surface-900 dark:text-surface-50">{fmt(subtotal)}</span>
           </div>
+          <button type="button" onClick={handlePreview} id="po-tab-preview-btn"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 shadow-lg shadow-primary-500/25 transition-all"
+          >
+            <Eye className="h-4 w-4" /> Preview & Submit
+          </button>
         </div>
       </div>
     </>
@@ -867,29 +861,22 @@ function OrderHistoryTab({ vendors }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PartRequestsPage() {
-  const location = useLocation()
   const { user } = useAuthStore()
+  const location = useLocation()
   const roleName = typeof user?.role === 'object' ? user.role.name : user?.role
   const isSM = roleName === 'sales_manager'
   const isAdmin = roleName === 'admin'
 
-  const [activeTab, setActiveTab] = useState('history')
-  const [vendors, setVendors]   = useState([])
-  const [products, setProducts] = useState([])
+  const [activeTab, setActiveTab] = useState('new-po')
+  const [vendors, setVendors]     = useState([])
+  const [products, setProducts]   = useState([])
 
   useEffect(() => {
-    if (isSM) {
-      setActiveTab('history')
-      return
-    }
-    if (location.state?.openNewPO) {
-      setActiveTab('new-po')
-      window.history.replaceState({}, document.title)
-    } else if (location.state?.activeTab) {
+    if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab)
       window.history.replaceState({}, document.title)
     }
-  }, [location, isSM])
+  }, [location])
 
   useEffect(() => {
     getVendors().then(r => { if (r?.success) setVendors(r.data ?? []) }).catch(() => {})
@@ -900,13 +887,13 @@ export default function PartRequestsPage() {
     ? [{ id: 'history', label: 'Ordered Items', icon: ClipboardList }]
     : isAdmin
     ? [
-        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
         { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
         { id: 'po-list', label: 'Purchase Orders List', icon: ShoppingBag },
+        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
       ]
     : [
-        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
         { id: 'new-po',  label: 'New Purchase Order', icon: FilePlus },
+        { id: 'history', label: 'Ordered Items', icon: ClipboardList },
       ]
 
   return (

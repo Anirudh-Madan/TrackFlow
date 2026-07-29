@@ -146,7 +146,7 @@ export default function AdminDashboard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" icon={RefreshCcw} onClick={fetchData}>Refresh</Button>
-          <Link to="/admin/challans"><Button size="sm" variant="secondary" icon={FileText}>Create Challan</Button></Link>
+          <Link to="/admin/challans" state={{ activeTab: 'new-challan' }}><Button size="sm" variant="secondary" icon={FileText}>Create Challan</Button></Link>
           <Link to="/admin/purchase-orders" state={{ openNewPO: true }}><Button size="sm" variant="secondary" icon={FileUp}>Create PO</Button></Link>
           <Link to="/admin/pipeline"><Button size="sm" icon={GitBranch}>Open Pipeline</Button></Link>
         </div>

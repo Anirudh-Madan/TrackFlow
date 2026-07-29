@@ -25,8 +25,7 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function genChallanNo() {
-  const d = new Date()
-  return `CHN-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`
+  return String(Math.floor(1000 + Math.random() * 9000))
 }
 
 // ─── Field component ─────────────────────────────────────────────────────────
@@ -339,66 +338,89 @@ function printChallan(data, items, user) {
   }, 300)
 }
 
-// ─── Product Search Dropdown ──────────────────────────────────────────────────
-function ProductDropdown({ products, value, onSelect, supplier }) {
+// ─── Part Number Search Dropdown ──────────────────────────────────────────────
+function PartNumberDropdown({ products, supplier, value, onSelect }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef(null)
 
+  const hasSupplier = Boolean(supplier && supplier.trim())
+
   useEffect(() => {
-    const handler = event => {
-      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const filtered = useMemo(() => {
-    let list = products
-    if (supplier && supplier.trim()) {
-      const sLower = supplier.trim().toLowerCase()
-      const supplierParts = list.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
-      if (supplierParts.length > 0) list = supplierParts
-    }
+    if (!hasSupplier) return []
+
+    const sLower = supplier.trim().toLowerCase()
+    let list = products.filter(p => {
+      // 1. Must match selected supplier
+      const suppMatch = p.supplier && p.supplier.trim().toLowerCase() === sLower
+      if (!suppMatch) return false
+
+      // 2. Must have available stock > 0
+      const stockQty = parseFloat(p.available ?? p.on_hand ?? p.stock ?? p.quantity ?? 0)
+      return stockQty > 0
+    })
+
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(p =>
-        (p.name || '').toLowerCase().includes(q) ||
-        (p.sku || '').toLowerCase().includes(q)
+        (p.sku || '').toLowerCase().includes(q) ||
+        (p.name || '').toLowerCase().includes(q)
       )
     }
-    return list.slice(0, 40)
-  }, [products, supplier, search])
+    return list.slice(0, 50)
+  }, [products, supplier, search, hasSupplier])
 
-  const selected = value ? products.find(p => p.id === value) : null
+  const selected = value ? products.find(p => p.id === value || p.sku === value) : null
+
+  const handleToggle = () => {
+    if (!hasSupplier) {
+      toast.error('Please select a Supplier / Vendor in Challan Details first!')
+      return
+    }
+    setOpen(o => !o)
+  }
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         className={cn(
           'w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-sm transition-colors',
           'bg-white dark:bg-surface-800',
-          open
-            ? 'border-primary-400 ring-2 ring-primary-500/20'
-            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600',
+          !hasSupplier
+            ? 'border-warning-300 dark:border-warning-900/50 bg-warning-50/30 dark:bg-warning-900/10 cursor-pointer'
+            : open
+              ? 'border-primary-400 ring-2 ring-primary-500/20'
+              : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600',
         )}
       >
-        {selected ? (
+        {!hasSupplier ? (
+          <span className="text-warning-600 dark:text-warning-400 font-medium flex items-center gap-1.5 text-xs">
+            <span className="shrink-0">⚠️</span> Select Supplier First
+          </span>
+        ) : selected ? (
           <div className="min-w-0 text-left">
-            <p className="font-medium text-surface-900 dark:text-surface-100 truncate">{selected.name}</p>
-            <p className="text-[11px] text-surface-400 font-mono">{selected.sku}</p>
+            <p className="font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{selected.sku}</p>
+            <p className="text-[11px] text-surface-400 truncate">{selected.name}</p>
           </div>
         ) : (
           <span className="text-surface-400">
-            {supplier ? `Search ${supplier} parts…` : 'Search product…'}
+            Search {supplier} Part No (In Stock)…
           </span>
         )}
         <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && (
+      {open && hasSupplier && (
         <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
           <div className="p-2 border-b border-surface-100 dark:border-surface-800">
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-800">
@@ -407,37 +429,38 @@ function ProductDropdown({ products, value, onSelect, supplier }) {
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={supplier ? `Filter ${supplier} parts by name or SKU…` : 'Search by name or SKU…'}
-                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400"
+                placeholder={`Filter ${supplier} Part No (SKU)…`}
+                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400 font-mono"
               />
             </div>
           </div>
-          {supplier && (
-            <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
-              <span>Supplier Filter: <strong>{supplier}</strong></span>
-              <span className="text-[10px] opacity-80">{filtered.length} part(s) available</span>
-            </div>
-          )}
+          <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
+            <span>Supplier: <strong>{supplier}</strong></span>
+            <span className="text-[10px] opacity-80">{filtered.length} in-stock part(s)</span>
+          </div>
           <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
             {filtered.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-surface-400 text-center">No products found for {supplier || 'search'}</p>
-            ) : filtered.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => { onSelect(p); setOpen(false); setSearch('') }}
-                className="w-full flex items-center justify-between px-3.5 py-2.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-surface-900 dark:text-surface-100 truncate">{p.name}</p>
-                  <p className="text-[11px] text-surface-400 font-mono">{p.sku}</p>
-                </div>
-                <div className="text-right shrink-0 ml-3">
-                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.purchase_price)}</p>
-                  <p className="text-[10px] text-surface-400">DL Price</p>
-                </div>
-              </button>
-            ))}
+              <p className="px-4 py-4 text-xs text-surface-400 text-center italic">No in-stock catalog parts found for {supplier}</p>
+            ) : filtered.map(p => {
+              const stockQty = p.available ?? p.on_hand ?? p.stock ?? p.quantity ?? 0
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { onSelect(p); setOpen(false); setSearch('') }}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{p.sku}</p>
+                    <p className="text-[11px] text-surface-400 truncate">{p.name}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.purchase_price)}</p>
+                    <p className="text-[10px] text-success-600 dark:text-success-400 font-medium">Stock: {stockQty}</p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -477,42 +500,28 @@ function ItemRow({ item, index, products, supplier, onChange, onRemove }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_1.5fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative items-center">
-      {/* Product / Part search */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2.5fr_2fr_1fr_1fr_1.5fr_1fr_auto] gap-3 p-4 pr-10 lg:pr-4 lg:p-4 rounded-2xl border border-surface-100 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-800/30 relative items-center">
+      {/* Part Number (Search & Select) */}
       <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">Product</label>
-        <ProductDropdown
+        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">
+          Part No. <span className="text-danger-500">*</span>
+        </label>
+        <PartNumberDropdown
           products={products}
           supplier={supplier}
-          value={item.product_id}
+          value={item.product_id || item.part_number}
           onSelect={p => {
             const dlVal = p.dealer_landing_price != null ? String(p.dealer_landing_price) : (p.selling_price != null ? String(p.selling_price) : '0')
             const spVal = p.selling_price != null ? String(p.selling_price) : dlVal
             onChange(index, {
               product_id: p.id,
               product_name: p.name,
-              part_number: item.part_number || p.sku || '',
-              description: item.description || p.name || '',
+              part_number: p.sku || '',
+              description: p.name || '',
               dl_price: dlVal,
               sell_price: spVal || dlVal,
             })
           }}
-        />
-      </div>
-
-      {/* Part Number (Auto-filled from Catalog) */}
-      <div className="flex flex-col gap-1 md:col-span-1 lg:col-span-1">
-        <label className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide lg:hidden">
-          Part No. <span className="text-danger-500">*</span>
-        </label>
-        <input
-          type="text"
-          readOnly
-          disabled
-          value={item.part_number}
-          placeholder="Select Catalog Product"
-          className={roInputCls + ' text-xs font-mono'}
-          title="Auto-filled from catalog product"
         />
       </div>
 
@@ -838,6 +847,10 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
   // Validate and open preview
   const handlePreview = () => {
+    if (!supplierId && !supplier) {
+      toast.error('Supplier selection is compulsory to create a Challan')
+      return
+    }
     if (!customerName.trim()) {
       toast.error('Customer Name is required')
       return
@@ -950,6 +963,16 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
               </div>
             </Field>
 
+            {/* Supplier / Vendor (Compulsory) */}
+            <Field label="Supplier / Vendor" required>
+              <VendorDropdown
+                vendors={vendors}
+                value={supplierId}
+                onChange={handleSupplierSelect}
+                placeholder="Select compulsory supplier"
+              />
+            </Field>
+
             {/* Customer Name — searchable dropdown */}
             <Field label="Customer Name" required>
               <CustomerSearchDropdown
@@ -1003,9 +1026,9 @@ export default function OrderNewPage({ isModal = false, onClose, onSuccess, pres
 
           {/* Column labels (desktop) */}
           <div className="hidden lg:grid gap-3 px-4 mb-2"
-            style={{ gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr 1fr auto' }}
+            style={{ gridTemplateColumns: '2.5fr 2fr 1fr 1fr 1.5fr 1fr auto' }}
           >
-            {['Product', 'Part No. *', 'Description', 'DL Price', 'Qty *', 'Sell Price/Unit', 'Total'].map(h => (
+            {['Part No. (SKU) *', 'Description', 'DL Price', 'Qty *', 'Sell Price/Unit *', 'Total'].map(h => (
               <div key={h} className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide">{h}</div>
             ))}
             <div />

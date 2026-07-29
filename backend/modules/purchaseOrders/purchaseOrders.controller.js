@@ -9,10 +9,8 @@ const {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function genPONumber() {
-  const d = new Date();
-  const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
   const rand = String(Math.floor(1000 + Math.random() * 9000));
-  return `#${ym}-${rand}`;   // # prefix as requested
+  return `#${rand}`;   // #1234 format
 }
 
 function genShareToken() {
@@ -141,10 +139,6 @@ exports.create = async (req, res, next) => {
     if (!vendor_name?.trim() && !vendor_id) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Supplier / Vendor Name is compulsory for Purchase Orders' });
-    }
-    if (!bill_number?.trim()) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'Bill number is required' });
     }
 
     let resolvedVendorName = (vendor_name || '').trim();
