@@ -1246,9 +1246,9 @@ exports.stockMovement = async (req, res, next) => {
       return {
         id: p.id,
         partNumber: p.sku || `SKU-${String(p.id).padStart(4, '0')}`,
-        description: p.name || 'Auto Spare Component',
-        supplier: p.supplier || 'CUMMINS 2S',
-        planner: p.planner || (idx % 2 === 0 ? 'TCL' : 'LUCAS'),
+        description: p.name || '—',
+        supplier: p.supplier || '—',
+        planner: p.planner || '—',
         stock,
         unitCost,
         valueStuck,
@@ -1261,7 +1261,7 @@ exports.stockMovement = async (req, res, next) => {
 
     const supplierSet = new Set();
     allItems.forEach(item => {
-      if (item.supplier) supplierSet.add(item.supplier);
+      if (item.supplier && item.supplier !== '—') supplierSet.add(item.supplier);
     });
     const suppliers = Array.from(supplierSet).sort();
 
@@ -1356,9 +1356,9 @@ exports.velocityMinStock = async (req, res, next) => {
       return {
         id: p.id,
         partNumber: p.sku || `SKU-${String(p.id).padStart(4, '0')}`,
-        description: p.name || 'AUTOMOTIVE COMPONENT',
-        planner: p.planner || (idx % 3 === 0 ? 'TCL' : idx % 3 === 1 ? 'LOCALP' : 'FG-I'),
-        supplier: p.supplier || 'CUMMINS 2S',
+        description: p.name || '—',
+        planner: p.planner || '—',
+        supplier: p.supplier || '—',
         currentStock: stock,
         totalSold,
         avgMonthly,
@@ -1370,7 +1370,7 @@ exports.velocityMinStock = async (req, res, next) => {
 
     const supplierSet = new Set();
     allItems.forEach(item => {
-      if (item.supplier) supplierSet.add(item.supplier);
+      if (item.supplier && item.supplier !== '—') supplierSet.add(item.supplier);
     });
     const suppliers = Array.from(supplierSet).sort();
 

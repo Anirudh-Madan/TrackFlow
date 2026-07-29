@@ -1,4 +1,4 @@
-const { sequelize, Product, StockOnHand, Order, OrderItem, User } = require('./models');
+const { sequelize, Product, StockOnHand, Order, OrderItem, User, Vendor } = require('./models');
 
 async function seedProductsAndMovement() {
   try {
@@ -60,6 +60,15 @@ async function seedProductsAndMovement() {
       { sku: 'ETN-GR-014', name: 'GEAR 4TH SPEED COUNTERSHAFT', supplier: 'EATON', planner: 'FG-I', stock: 15, dlPrice: 7200.00, lastSoldDays: null },
       { sku: 'SKU-001', name: 'STANDARD BUSHING CLAMP', supplier: 'TCL SPARES', planner: 'TCL', stock: 200, dlPrice: 150.00, lastSoldDays: 250 },
     ];
+
+    // Ensure all unique suppliers exist in Vendor model
+    const uniqueSuppliers = [...new Set(catalogData.map(c => c.supplier).filter(Boolean))];
+    for (const supName of uniqueSuppliers) {
+      await Vendor.findOrCreate({
+        where: { company_name: supName },
+        defaults: { company_name: supName, remarks: 'Catalog supplier' }
+      });
+    }
 
     const refDate = new Date('2026-07-28');
     let seededCount = 0;

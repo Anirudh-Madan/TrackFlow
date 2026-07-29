@@ -223,14 +223,14 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
       if (pinFor === 'create') {
         const body = {
           pin,
-          vendor_name: form.vendor_name.trim() || undefined,
+          vendor_name: form.vendor_name?.trim() || undefined,
           po_date:     form.po_date,
-          notes:       form.notes.trim() || undefined,
-          bill_number: form.bill_number.trim(),
+          notes:       form.notes?.trim() || undefined,
+          bill_number: form.bill_number?.trim() || undefined,
           items: form.items.map(i => ({
-            part_number: i.part_number.trim().toUpperCase(),
+            part_number: (i.part_number || '').trim().toUpperCase(),
             description: i.description,
-            quantity:    parseInt(i.quantity),
+            quantity:    parseInt(i.quantity) || 1,
             unit_price:  parseFloat(i.unit_price) || 0,
           })),
         }

@@ -165,12 +165,12 @@ exports.create = async (req, res, next) => {
       if (product_id) {
         foundProd = await Product.findByPk(product_id, { transaction: t });
       } else if (part_number) {
-        foundProd = await Product.findOne({ where: { sku: part_number.trim().toUpperCase() }, transaction: t });
+        foundProd = await Product.findOne({ where: { sku: String(part_number).trim().toUpperCase() }, transaction: t });
       }
 
       if (!foundProd && part_number) {
         foundProd = await Product.create({
-          sku: part_number.trim().toUpperCase(),
+          sku: String(part_number).trim().toUpperCase(),
           name: description || part_number,
           dealer_landing_price: price,
         }, { transaction: t });
@@ -200,7 +200,7 @@ exports.create = async (req, res, next) => {
       vendor_name: resolvedVendorName,
       po_date:     po_date || new Date(),
       notes:       notes || null,
-      bill_number: bill_number.trim(),
+      bill_number: bill_number?.trim() || null,
       status:      'SUBMITTED',
       subtotal:    +subtotal.toFixed(2),
       total:       +subtotal.toFixed(2),
