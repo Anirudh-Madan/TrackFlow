@@ -218,7 +218,7 @@ export default function Sidebar() {
 
         {/* Intelligence */}
         <SidebarGroup label="Intelligence" collapsed={sidebarCollapsed}>
-          <SidebarItem to="/admin/reports" icon={BarChart3} label="Executive Reports & AI" collapsed={sidebarCollapsed} />
+          <SidebarItem to="/admin/reports" icon={BarChart3} label="Reports" collapsed={sidebarCollapsed} />
         </SidebarGroup>
 
         {/* Access */}

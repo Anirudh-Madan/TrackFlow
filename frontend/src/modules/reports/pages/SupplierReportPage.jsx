@@ -190,7 +190,7 @@ export default function SupplierReportPage() {
             {/* Top Navigation Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-xs text-surface-500 font-medium">
-                <Link to="/admin/reports" className="hover:text-primary-600">Executive Reports</Link>
+                <Link to="/admin/reports" className="hover:text-primary-600">Reports</Link>
                 <span>/</span>
                 <Link to="/admin/reports/supplier" className="hover:text-primary-600">Supplier Reports</Link>
                 <span>/</span>
