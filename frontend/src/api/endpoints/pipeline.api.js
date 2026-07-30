@@ -4,7 +4,7 @@ import client from '../client'
 export const getPipelines       = (params)  => client.get('/pipeline', { params })
 export const getPipelineById     = (id)       => client.get(`/pipeline/${id}`)
 export const getPipelineStats     = ()         => client.get('/pipeline/stats')
-export const getDispatchWorkers   = ()         => client.get('/pipeline/workers')
+export const getDispatchWorkers   = (params)   => client.get('/pipeline/workers', { params })
 export const getPendingApproval   = ()         => client.get('/pipeline/pending-approval')
 export const getAvailableParts    = (orderId)  => client.get(`/pipeline/order/${orderId}/available-parts`)
 

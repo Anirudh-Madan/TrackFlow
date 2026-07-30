@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { UserCheck, Loader2, Check, Truck } from 'lucide-react'
 import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
@@ -18,9 +18,15 @@ import { quickAssignWorker } from '../../../api/endpoints/pipeline.api'
  *   workers   — [{ id, name }] list of dispatch workers
  *   onAssigned(updatedPipeline) — called after a successful assign/reassign
  */
-export default function AssignWorkerControl({ orderId, pipeline, workers = [], onAssigned }) {
+export default function AssignWorkerControl({ orderId, pipeline, party, regionId: propRegionId, workers = [], onAssigned }) {
   const [dwId, setDwId] = useState(pipeline?.dw_id ? String(pipeline.dw_id) : '')
   const [busy, setBusy] = useState(false)
+
+  const targetRegionId = propRegionId || party?.region_id || party?.region?.id || pipeline?.order?.party?.region_id || pipeline?.order?.party?.region?.id
+  const filteredWorkers = useMemo(() => {
+    if (!targetRegionId) return workers
+    return workers.filter(w => !w.region_id || String(w.region_id) === String(targetRegionId))
+  }, [workers, targetRegionId])
 
   // Assignable only when the order is in the pipeline and pre-delivery.
   const stage = pipeline?.stage
@@ -67,7 +73,9 @@ export default function AssignWorkerControl({ orderId, pipeline, workers = [], o
 
   const isReassign = stage === 'DW_ASSIGNMENT'
   const isApproval = notInPipeline || stage === 'ADMIN_APPROVAL' || stage === 'IM_APPROVAL'
-  const selectLabel = isReassign ? 'Reassign…' : isApproval ? 'Approve & assign…' : 'Assign worker…'
+  const selectLabel = filteredWorkers.length === 0
+    ? 'No workers in region'
+    : isReassign ? 'Reassign…' : isApproval ? 'Approve & assign…' : 'Assign worker…'
   const buttonLabel = isReassign ? 'Reassign' : isApproval ? 'Approve' : 'Assign'
 
   return (
@@ -81,7 +89,7 @@ export default function AssignWorkerControl({ orderId, pipeline, workers = [], o
           className="h-8 rounded-lg border border-surface-200 bg-white pl-7 pr-2 text-xs text-surface-700 focus:border-primary-400 focus:outline-none dark:border-surface-600 dark:bg-surface-800 dark:text-surface-200"
         >
           <option value="">{selectLabel}</option>
-          {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          {filteredWorkers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
       </div>
       <button

@@ -84,8 +84,11 @@ async function seed() {
     { login_id: 'im_meena',  name: 'Meena Iyer',      role: 'inventory_manager', region: regions[2], phone: '9900001006' },
     { login_id: 'im_rohan',  name: 'Rohan Desai',     role: 'inventory_manager', region: regions[2], phone: '9900001007' },
     { login_id: 'dw_kiran',  name: 'Kiran Gowda',     role: 'dispatch_worker',   region: regions[2], phone: '9900001008' },
-    { login_id: 'dw_latha',  name: 'Latha Bhat',      role: 'dispatch_worker',   region: regions[2], phone: '9900001009' },
-    { login_id: 'dw_raj',    name: 'Raj Shetty',      role: 'dispatch_worker',   region: regions[2], phone: '9900001010' },
+    { login_id: 'dw_latha',  name: 'Latha Bhat',      role: 'dispatch_worker',   region: regions[0], phone: '9900001009' },
+    { login_id: 'dw_raj',    name: 'Raj Shetty',      role: 'dispatch_worker',   region: regions[1], phone: '9900001010' },
+    { login_id: 'dw_vikram', name: 'Vikram Singh',    role: 'dispatch_worker',   region: regions[3] || regions[0], phone: '9900001011' },
+    { login_id: 'dw_sanjay', name: 'Sanjay Verma',    role: 'dispatch_worker',   region: regions[4] || regions[1], phone: '9900001012' },
+    { login_id: 'dw_anil',   name: 'Anil Kumar',      role: 'dispatch_worker',   region: regions[5] || regions[2], phone: '9900001013' },
   ];
   const users = {};
   for (const u of userDefs) {

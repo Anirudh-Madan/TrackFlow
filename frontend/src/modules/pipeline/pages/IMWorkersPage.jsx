@@ -165,7 +165,7 @@ export default function IMWorkersPage() {
                     <span className="flex items-center gap-1"><UserCheck className="h-3.5 w-3.5" /> {item.salesManager?.name || '—'}</span>
                   </div>
                 </div>
-                <AssignWorkerControl orderId={item.order_id} pipeline={item.pipeline} workers={workers} onAssigned={onAssigned} />
+                <AssignWorkerControl orderId={item.order_id} pipeline={item.pipeline} party={item.party} workers={workers} onAssigned={onAssigned} />
               </div>
             ))}
           </div>
@@ -195,7 +195,7 @@ export default function IMWorkersPage() {
                       {p.expected_delivery_at && <span className="flex items-center gap-1 text-warning-600 dark:text-warning-400"><Clock className="h-3.5 w-3.5" /> by {new Date(p.expected_delivery_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
                     </div>
                   </div>
-                  <AssignWorkerControl orderId={p.order_id} pipeline={p} workers={workers} onAssigned={onAssigned} />
+                  <AssignWorkerControl orderId={p.order_id} pipeline={p} party={p.order?.party} workers={workers} onAssigned={onAssigned} />
                 </div>
               )
             })}

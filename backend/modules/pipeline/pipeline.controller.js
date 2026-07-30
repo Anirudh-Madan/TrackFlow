@@ -1,7 +1,7 @@
 const { Op, fn, col } = require('sequelize');
 const {
   FulfillmentOrder, PipelineTracking, PipelineItem, PipelineStageHistory,
-  Order, OrderItem, Customer, Product, User, Role, Region,
+  Order, OrderItem, Customer, Product, User, Role, Region, Challan,
   StockOnHand, StockReserved, StockDamaged, StockTransaction,
   PartRequest, AuditLog, sequelize,
 } = require('../../models');
@@ -28,6 +28,9 @@ const PIPELINE_INCLUDE = [
       {
         model: Customer, as: 'party', attributes: ['id', 'company_name', 'region_id'],
         include: [{ model: Region, as: 'region', attributes: ['id', 'name', 'code'] }],
+      },
+      {
+        model: Challan, as: 'challan',
       },
     ],
   },
@@ -284,7 +287,16 @@ exports.imApprove = (req, res, next) =>
       if (!dw || dw.role?.name !== 'dispatch_worker') throw Object.assign(new Error('Assigned user must be a Dispatch Worker'), { statusCode: 400 });
 
       // IM approval moves the order out of PENDING.
-      const ord = await Order.findByPk(pipeline.order_id, { transaction: t, lock: true });
+      const ord = await Order.findByPk(pipeline.order_id, {
+        include: [{ model: Customer, as: 'party', attributes: ['region_id'] }],
+        transaction: t,
+        lock: true
+      });
+
+      if (dw.region_id && ord?.party?.region_id && String(dw.region_id) !== String(ord.party.region_id)) {
+        throw Object.assign(new Error(`Dispatch Worker (${dw.name}) does not belong to the customer's region`), { statusCode: 400 });
+      }
+
       if (ord && ord.status === 'PENDING') await ord.update({ status: 'APPROVED' }, { transaction: t });
 
       // Write picked parts (uniform product_id / SKU).
@@ -353,8 +365,17 @@ exports.quickAssignWorker = async (req, res, next) => {
     const dw = await User.findByPk(dw_id, { include: [{ model: Role, as: 'role' }], transaction: t });
     if (!dw || dw.role?.name !== 'dispatch_worker') { await t.rollback(); return res.status(400).json({ success: false, error: 'Assigned user must be a Dispatch Worker' }); }
 
-    const order = await Order.findByPk(orderId, { transaction: t, lock: true });
+    const order = await Order.findByPk(orderId, {
+      include: [{ model: Customer, as: 'party', attributes: ['region_id'] }],
+      transaction: t,
+      lock: true
+    });
     if (!order) { await t.rollback(); return res.status(404).json({ success: false, error: 'Order not found' }); }
+
+    if (dw.region_id && order.party?.region_id && String(dw.region_id) !== String(order.party.region_id)) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: `Dispatch Worker (${dw.name}) does not belong to the customer's region` });
+    }
 
     let pipeline = await PipelineTracking.findOne({ where: { order_id: orderId }, transaction: t, lock: true });
 
@@ -476,7 +497,7 @@ exports.startDelivery = (req, res, next) =>
     toStage: 'OUT_FOR_DELIVERY',
     normalRoles: ['dispatch_worker'],
     successMessage: 'Marked out for delivery.',
-    apply: async (pipeline, patch) => {
+    apply: async (pipeline, patch, t) => {
       if (req.user.role === 'dispatch_worker' && pipeline.dw_id && String(pipeline.dw_id) !== String(req.user.id)) {
         throw Object.assign(new Error('This delivery is assigned to a different worker'), { statusCode: 403 });
       }
@@ -485,6 +506,11 @@ exports.startDelivery = (req, res, next) =>
       if (vehicle_number !== undefined) patch.vehicle_number = vehicle_number;
       if (driver_name !== undefined) patch.driver_name = driver_name;
       if (driver_phone !== undefined) patch.driver_phone = driver_phone;
+
+      // Update Order status
+      const order = await Order.findByPk(pipeline.order_id, { transaction: t });
+      if (order && order.status !== 'DISPATCHED') await order.update({ status: 'DISPATCHED' }, { transaction: t });
+
       return `Picked up by ${req.user.name}`;
     },
   });
@@ -501,6 +527,10 @@ exports.markDelivered = (req, res, next) =>
         throw Object.assign(new Error('This delivery is assigned to a different worker'), { statusCode: 403 });
       }
       patch.delivered_at = new Date();
+
+      // Update Order status
+      const order = await Order.findByPk(pipeline.order_id, { transaction: t });
+      if (order && order.status !== 'DISPATCHED') await order.update({ status: 'DISPATCHED' }, { transaction: t });
 
       const items = await PipelineItem.findAll({ where: { pipeline_id: pipeline.id }, transaction: t });
       for (const item of items) {
@@ -625,11 +655,33 @@ exports.reject = (req, res, next) => {
 // ─── Dispatch worker list (for IM assignment) ─────────────────────────────────
 exports.getDispatchWorkers = async (req, res, next) => {
   try {
+    const { region_id, order_id } = req.query;
+
+    let targetRegionId = region_id;
+    if (order_id && !targetRegionId) {
+      const ord = await Order.findByPk(order_id, {
+        include: [{ model: Customer, as: 'party', attributes: ['region_id'] }]
+      });
+      if (ord?.party?.region_id) {
+        targetRegionId = ord.party.region_id;
+      }
+    }
+
+    const where = { is_active: true };
+    if (targetRegionId) {
+      where[Op.or] = [{ region_id: targetRegionId }, { region_id: null }];
+    }
+
     const workers = await User.findAll({
-      attributes: ['id', 'name', 'login_id'],
-      include: [{ model: Role, as: 'role', attributes: [], where: { name: 'dispatch_worker' } }],
-      where: { is_active: true }, order: [['name', 'ASC']],
+      attributes: ['id', 'name', 'login_id', 'region_id'],
+      include: [
+        { model: Role, as: 'role', attributes: [], where: { name: 'dispatch_worker' } },
+        { model: Region, as: 'region', attributes: ['id', 'name', 'code'] }
+      ],
+      where,
+      order: [['name', 'ASC']],
     });
+
     res.json({ success: true, data: workers });
   } catch (err) { next(err); }
 };

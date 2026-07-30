@@ -13,6 +13,7 @@ import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import { cn } from '../../../utils/cn'
 import { getOrders, approveOrder, flagOrder, returnOrder } from '../../../api/endpoints/orders.api'
+import { getDispatchWorkers } from '../../../api/endpoints/pipeline.api'
 import { useAuthStore } from '../../../store/authStore'
 import toast from 'react-hot-toast'
 import TablePagination from '../../../components/data/TablePagination'
@@ -117,13 +118,32 @@ export default function OrdersListPage() {
     }
   }, [orders])
 
+  const [dwWorkers, setDwWorkers] = useState([])
+  const [selectedDwId, setSelectedDwId] = useState('')
+
+  useEffect(() => {
+    if (viewOrder && isIM && viewOrder.status === 'PENDING') {
+      setSelectedDwId('')
+      getDispatchWorkers({ order_id: viewOrder.id, region_id: viewOrder.party?.region_id })
+        .then(res => {
+          if (res.success) setDwWorkers(res.data || [])
+        })
+        .catch(() => setDwWorkers([]))
+    }
+  }, [viewOrder, isIM])
+
   const handleApprove = async (orderId) => {
+    if (isIM && !selectedDwId) {
+      toast.error('Please select a dispatch worker before approving the order')
+      return
+    }
     setSubmittingAction(true)
     try {
-      const res = await approveOrder(orderId)
+      const res = await approveOrder(orderId, { dw_id: selectedDwId ? Number(selectedDwId) : undefined })
       if (res.success) {
         toast.success(`Order approved successfully. Challan generated: ${res.data.challan_number}`)
         setViewOrder(null)
+        setSelectedDwId('')
         fetchOrdersList()
       } else {
         toast.error(res.error || 'Failed to approve order')
@@ -587,6 +607,31 @@ export default function OrdersListPage() {
                     Confirm Flag
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Dispatch Worker Selection for IM Approval */}
+            {viewOrder.status === 'PENDING' && isIM && !showFlagInput && (
+              <div className="space-y-1.5 p-3.5 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+                <label className="text-xs font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-1.5">
+                  <Truck className="h-4 w-4 text-primary-600" />
+                  Assign Dispatch Worker {viewOrder.party?.region?.name ? `(${viewOrder.party.region.name} Region)` : ''} <span className="text-danger-500">*</span>
+                </label>
+                <select
+                  value={selectedDwId}
+                  onChange={e => setSelectedDwId(e.target.value)}
+                  className="input-base w-full text-sm"
+                >
+                  <option value="">-- Select Dispatch Worker --</option>
+                  {dwWorkers.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} ({w.login_id}) {w.region?.name ? `[${w.region.name}]` : ''}
+                    </option>
+                  ))}
+                </select>
+                {dwWorkers.length === 0 && (
+                  <p className="text-xs text-danger-500 font-medium">No dispatch workers available for this region.</p>
+                )}
               </div>
             )}
 
