@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, StockOnHand, StockReserved, StockTransaction, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
+const { Order, OrderItem, OrderStatusHistory, Customer, User, Product, Challan, Region, StockOnHand, StockReserved, StockTransaction, AuditLog, Role, FulfillmentOrder, PipelineTracking, PipelineStageHistory, sequelize } = require('../../models');
 const { notify } = require('../../services/notification.service');
 
 async function adjustStock(productId, qty, type, reference, performedBy, notes, t) {
@@ -254,7 +254,7 @@ exports.getPendingOrders = async (req, res, next) => {
     const orders = await Order.findAll({
       where: { status: 'PENDING' },
       include: [
-        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit'] },
+        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit', 'region_id'], include: [{ model: Region, as: 'region', attributes: ['id', 'name', 'code'] }] },
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
       ],
@@ -277,7 +277,7 @@ exports.getOrders = async (req, res, next) => {
     const orders = await Order.findAll({
       where,
       include: [
-        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit'] },
+        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit', 'region_id'], include: [{ model: Region, as: 'region', attributes: ['id', 'name', 'code'] }] },
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }] },
       ],
@@ -297,7 +297,7 @@ exports.getOrderById = async (req, res, next) => {
 
     const order = await Order.findByPk(id, {
       include: [
-        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit'] },
+        { model: Customer, as: 'party', attributes: ['id', 'company_name', 'credit_limit', 'region_id'], include: [{ model: Region, as: 'region', attributes: ['id', 'name', 'code'] }] },
         { model: User, as: 'salesManager', attributes: ['id', 'name'] },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'selling_price'] }] },
         { model: OrderStatusHistory, as: 'statusHistory', include: [{ model: User, as: 'changer', attributes: ['id', 'name'] }] },
@@ -415,6 +415,73 @@ exports.approveOrder = async (req, res, next) => {
       ip_address: req.ip,
       user_agent: req.headers['user-agent'],
     }, { transaction: t });
+
+    // Handle Dispatch Worker Assignment if dw_id is provided
+    const { dw_id } = req.body;
+    if (dw_id) {
+      const dw = await User.findByPk(dw_id, { include: [{ model: Role, as: 'role' }], transaction: t });
+      if (dw && dw.role?.name === 'dispatch_worker') {
+        const party = await Customer.findByPk(order.party_id, { attributes: ['region_id'], transaction: t });
+        if (dw.region_id && party?.region_id && String(dw.region_id) !== String(party.region_id)) {
+          await t.rollback();
+          return res.status(400).json({ success: false, error: `Assigned Dispatch Worker (${dw.name}) does not belong to the customer's region` });
+        }
+
+        const [fulfillment] = await FulfillmentOrder.findOrCreate({
+          where: { order_id: order.id },
+          defaults: { order_id: order.id, state: 'INCOMPLETE' },
+          transaction: t,
+        });
+
+        let pipeline = await PipelineTracking.findOne({ where: { order_id: order.id }, transaction: t });
+        if (!pipeline) {
+          pipeline = await PipelineTracking.create({
+            order_id: order.id,
+            fulfillment_order_id: fulfillment.id,
+            stage: 'DW_ASSIGNMENT',
+            im_approved_by: req.user.id,
+            im_approved_at: new Date(),
+            dw_id,
+            dw_assigned_by: req.user.id,
+            dw_assigned_at: new Date(),
+            sales_manager_id: order.sales_manager_id,
+            expected_delivery_at: new Date(Date.now() + 24 * 3600 * 1000),
+          }, { transaction: t });
+        } else {
+          await pipeline.update({
+            stage: 'DW_ASSIGNMENT',
+            im_approved_by: req.user.id,
+            im_approved_at: new Date(),
+            dw_id,
+            dw_assigned_by: req.user.id,
+            dw_assigned_at: new Date(),
+            expected_delivery_at: pipeline.expected_delivery_at || new Date(Date.now() + 24 * 3600 * 1000),
+          }, { transaction: t });
+        }
+
+        for (const item of (order.items || [])) {
+          if (item.product_id) {
+            await PipelineItem.findOrCreate({
+              where: { pipeline_id: pipeline.id, product_id: item.product_id },
+              defaults: { pipeline_id: pipeline.id, product_id: item.product_id, quantity: item.quantity },
+              transaction: t,
+            });
+          }
+        }
+
+        await notify({
+          recipient_id: dw_id,
+          recipient_role: 'dispatch_worker',
+          sender_id: req.user.id,
+          type: 'PIPELINE_ADVANCED',
+          title: 'New delivery assigned to you',
+          body: `You have been assigned a delivery for order ${order.order_number}.`,
+          link: '/dw/pipeline',
+          entity_type: 'pipeline_tracking',
+          entity_id: pipeline.id,
+        }, t);
+      }
+    }
 
     await t.commit();
 

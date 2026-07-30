@@ -1,5 +1,5 @@
 const { fn, col } = require('sequelize');
-const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockOnHand, StockReserved, StockDamaged, StockTransaction, InventoryAdjustment, sequelize } = require('../../models');
+const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockOnHand, StockReserved, StockDamaged, StockTransaction, InventoryAdjustment, Vendor, sequelize } = require('../../models');
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -551,7 +551,32 @@ exports.bulkImport = async (req, res, next) => {
     const { items, stock_mode = 'absolute', price_mode = 'merge', target_supplier, effective_from, notes } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
+      await t.rollback();
       return res.status(400).json({ success: false, error: 'No items provided for import' });
+    }
+
+    // Require vendor selection and verify vendor exists in database
+    const supplierName = target_supplier?.trim() || items.find(i => i.supplier?.trim())?.supplier?.trim();
+    if (!supplierName) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'Please select a vendor from the dropdown before uploading a price list.'
+      });
+    }
+
+    const { Op } = require('sequelize');
+    const vendorRecord = await Vendor.findOne({
+      where: { company_name: { [Op.like]: supplierName } },
+      transaction: t
+    });
+
+    if (!vendorRecord) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Vendor "${supplierName}" does not exist in the database. Please add the vendor in the Vendors directory (Parties page) before importing a price list.`
+      });
     }
 
     const skus = items.map(item => item.sku?.trim().toUpperCase()).filter(Boolean);

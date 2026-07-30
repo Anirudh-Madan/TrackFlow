@@ -164,6 +164,7 @@ export default function Sidebar() {
 
           <SidebarGroup label="Deliveries" collapsed={sidebarCollapsed}>
             <SidebarItem to="/dw/pipeline" icon={Truck} label="My Deliveries" collapsed={sidebarCollapsed} />
+            <SidebarItem to="/dw/challans" icon={FileText} label="Delivery Challans" collapsed={sidebarCollapsed} />
           </SidebarGroup>
 
           <SidebarGroup label="System" collapsed={sidebarCollapsed}>

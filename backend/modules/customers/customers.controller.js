@@ -39,6 +39,14 @@ exports.createCustomer = async (req, res, next) => {
 
     const limitVal = parseFloat(credit_limit) || 0;
 
+    if (sales_manager_id) {
+      const sm = await User.findByPk(sales_manager_id);
+      if (sm && sm.region_id && String(sm.region_id) !== String(region_id)) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, error: `Assigned Sales Manager (${sm.name}) does not belong to the selected region` });
+      }
+    }
+
     const customer = await Customer.create({
       company_name: company_name.trim(),
       gst: gst.trim().toUpperCase(),
@@ -100,6 +108,16 @@ exports.updateCustomer = async (req, res, next) => {
       }
       customer.gst = gst.trim().toUpperCase();
     }
+    const targetRegionId = region_id || customer.region_id;
+    const targetSmId = sales_manager_id !== undefined ? sales_manager_id : customer.sales_manager_id;
+    if (targetSmId) {
+      const sm = await User.findByPk(targetSmId);
+      if (sm && sm.region_id && targetRegionId && String(sm.region_id) !== String(targetRegionId)) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, error: `Assigned Sales Manager (${sm.name}) does not belong to the selected region` });
+      }
+    }
+
     if (sales_manager_id !== undefined) customer.sales_manager_id = sales_manager_id || null;
     if (region_id) customer.region_id = region_id;
     if (remarks !== undefined) customer.remarks = remarks || null;

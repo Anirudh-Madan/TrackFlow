@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search, Truck, Package, FileText, Building2, User as UserIcon, Phone,
   Loader2, PackageCheck, Home, CheckCircle2, XCircle, ClipboardList, ShieldAlert, GitBranch, Clock,
+  Eye, Printer, MapPin,
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
@@ -40,6 +41,7 @@ export default function PipelineBoard({ title, subtitle }) {
   const [fulfillModal, setFulfillModal] = useState(null)
   const [rejectModal, setRejectModal] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [viewChallan, setViewChallan] = useState(null)
 
   const fetchPipelines = useCallback(async () => {
     setLoading(true)
@@ -100,6 +102,13 @@ export default function PipelineBoard({ title, subtitle }) {
     const canDW = isAdmin || role === 'dispatch_worker'
     const canSM = isAdmin || role === 'sales_manager'
 
+    // Everyone with pipeline access can view the Challan
+    btns.push(
+      <Button key="vc" size="sm" variant="secondary" icon={Eye} disabled={busy} onClick={() => setViewChallan(p)}>
+        View Challan
+      </Button>
+    )
+
     if (p.stage === 'IM_APPROVAL' && canIM) {
       btns.push(<Button key="im" size="sm" icon={PackageCheck} disabled={busy} onClick={() => setImModal(p)}>{isAdmin ? 'Override: Approve & Assign' : 'Approve & Assign'}</Button>)
     }
@@ -116,7 +125,6 @@ export default function PipelineBoard({ title, subtitle }) {
       btns.push(<Button key="rj" size="sm" variant="danger" icon={XCircle} disabled={busy} onClick={() => setRejectModal(p)}>Reject</Button>)
     }
 
-    if (btns.length === 0) return <span className="text-xs text-surface-400">No action</span>
     return <div className="flex flex-wrap justify-end gap-2">{btns}</div>
   }
 
@@ -239,6 +247,90 @@ export default function PipelineBoard({ title, subtitle }) {
           <span>Reason <span className="text-danger-500">*</span></span>
           <textarea className="input-base min-h-[100px] w-full" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Why is this being rejected?" />
         </label>
+      </Modal>
+
+      {/* View Challan Modal */}
+      <Modal
+        open={!!viewChallan}
+        onClose={() => setViewChallan(null)}
+        title={`Delivery Challan: ${viewChallan?.order?.challan?.challan_number || viewChallan?.order?.order_number || `#${viewChallan?.order_id}`}`}
+        size="lg"
+        footer={(
+          <div className="flex justify-between w-full">
+            <Button variant="secondary" icon={Printer} onClick={() => window.print()}>Print Challan</Button>
+            <Button variant="primary" onClick={() => setViewChallan(null)}>Close</Button>
+          </div>
+        )}
+      >
+        {viewChallan && (
+          <div className="space-y-4 text-sm">
+            {/* Header */}
+            <div className="flex justify-between items-start pb-3 border-b border-surface-200 dark:border-surface-700">
+              <div>
+                <h3 className="text-lg font-bold text-surface-900 dark:text-surface-50 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary-600" />
+                  DELIVERY CHALLAN
+                </h3>
+                <p className="text-xs text-surface-500 font-mono mt-0.5">
+                  Challan No: <strong className="text-surface-900 dark:text-surface-100">{viewChallan.order?.challan?.challan_number || viewChallan.order?.order_number || `CHN-${viewChallan.order_id}`}</strong>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-surface-500">Date: {new Date(viewChallan.created_at || new Date()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                <span className={cn('inline-flex items-center gap-1 mt-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase', stageConfig(viewChallan.stage).color)}>
+                  {stageConfig(viewChallan.stage).label}
+                </span>
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3.5 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Customer Details</p>
+                <p className="font-bold text-surface-900 dark:text-surface-50 text-sm">{viewChallan.order?.party?.company_name || '—'}</p>
+                {viewChallan.order?.party?.region?.name && (
+                  <p className="text-xs text-surface-600 dark:text-surface-300 flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-surface-400" /> Region: {viewChallan.order.party.region.name}
+                  </p>
+                )}
+                <p className="text-xs text-surface-500 font-mono">Order: {viewChallan.order?.order_number}</p>
+              </div>
+
+              <div className="p-3.5 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Logistics & Driver</p>
+                <p className="text-xs text-surface-700 dark:text-surface-200"><strong>Assigned DW:</strong> {viewChallan.dispatchWorker?.name || 'Unassigned'}</p>
+                <p className="text-xs text-surface-700 dark:text-surface-200"><strong>Sales Rep:</strong> {viewChallan.salesManager?.name || '—'}</p>
+                {viewChallan.vehicle_number && <p className="text-xs text-surface-700 dark:text-surface-200"><strong>Vehicle:</strong> {viewChallan.vehicle_number}</p>}
+                {viewChallan.driver_name && <p className="text-xs text-surface-700 dark:text-surface-200"><strong>Driver:</strong> {viewChallan.driver_name} ({viewChallan.driver_phone || 'N/A'})</p>}
+              </div>
+            </div>
+
+            {/* Dispatched Parts Table */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Dispatched Items & Parts</p>
+              <div className="overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-surface-50 dark:bg-surface-700/50">
+                    <tr className="text-surface-500 font-semibold uppercase tracking-wider">
+                      <th className="px-3 py-2">#</th>
+                      <th className="px-3 py-2">Part Name (SKU)</th>
+                      <th className="px-3 py-2 text-right">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
+                    {viewChallan.items?.map((it, idx) => (
+                      <tr key={it.id || idx}>
+                        <td className="px-3 py-2 text-surface-400">{idx + 1}</td>
+                        <td className="px-3 py-2 font-medium text-surface-900 dark:text-surface-50">{it.product?.name || it.product?.sku || `#${it.product_id}`}</td>
+                        <td className="px-3 py-2 text-right font-bold text-primary-600 dark:text-primary-400">{Number(it.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

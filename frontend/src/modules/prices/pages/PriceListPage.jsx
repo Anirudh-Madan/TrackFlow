@@ -650,33 +650,20 @@ export default function PriceListPage() {
     document.body.removeChild(link)
   }
 
-  // Auto-create vendor if the typed supplier name is new
-  const ensureVendorExists = async (supplierName) => {
-    if (!supplierName?.trim()) return
-    const exists = vendors.some(
-      v => v.company_name.toLowerCase() === supplierName.trim().toLowerCase()
-    )
-    if (exists) return
-    // Skip known static options
-    const statics = ['cummins', 'meritor', 'other']
-    if (statics.includes(supplierName.trim().toLowerCase())) return
-
-    try {
-      setCreatingSupplier(true)
-      const res = await createVendor({ company_name: supplierName.trim() })
-      if (res.success) {
-        toast.success(`New vendor "${supplierName.trim()}" added to the Vendors directory. You can edit the details at /admin/parties.`, { duration: 5000 })
-        // Refresh vendors list
-        getVendors().then(r => { if (r.success) setVendors(r.data || []) })
-      }
-    } catch {
-      // Silent — vendor creation is best-effort
-    } finally {
-      setCreatingSupplier(false)
-    }
-  }
-
   const handleImportSubmit = async () => {
+    if (!selectedImportSupplier) {
+      toast.error('Please select a supplier/vendor from the dropdown first.')
+      return
+    }
+
+    const vendorMatch = vendors.find(
+      v => v.company_name.toLowerCase() === selectedImportSupplier.trim().toLowerCase()
+    )
+    if (!vendorMatch) {
+      toast.error(`Vendor "${selectedImportSupplier}" does not exist in system. Please add vendor in Vendors directory (Parties page) first.`)
+      return
+    }
+
     const validPayloadItems = validatedImportItems
       .filter(item => item.isValid)
       .map(item => ({

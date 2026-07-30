@@ -18,10 +18,16 @@ export default function IMApproveModal({ pipeline, open, onClose, onDone }) {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const regionId = pipeline?.order?.party?.region_id || pipeline?.order?.party?.region?.id
+  const regionName = pipeline?.order?.party?.region?.name
+
   useEffect(() => {
     if (!open || !pipeline) return
     setLoading(true)
-    Promise.all([getAvailableParts(pipeline.order_id), getDispatchWorkers()])
+    Promise.all([
+      getAvailableParts(pipeline.order_id),
+      getDispatchWorkers(regionId ? { region_id: regionId } : { order_id: pipeline.order_id })
+    ])
       .then(([partsRes, wRes]) => {
         if (partsRes.success) {
           const p = partsRes.data.parts || []
@@ -30,11 +36,11 @@ export default function IMApproveModal({ pipeline, open, onClose, onDone }) {
           p.forEach(part => { init[part.product_id] = { checked: part.dispatchable > 0, qty: part.dispatchable } })
           setSelected(init)
         }
-        if (wRes.success) setWorkers(wRes.data)
+        if (wRes.success) setWorkers(wRes.data || [])
       })
       .catch(err => toast.error(err.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [open, pipeline])
+  }, [open, pipeline, regionId])
 
   useEffect(() => {
     if (!open) { setForm({ dw_id: '', vehicle_number: '', driver_name: '', driver_phone: '' }); setParts([]); setSelected({}) }
@@ -123,13 +129,16 @@ export default function IMApproveModal({ pipeline, open, onClose, onDone }) {
 
           {/* Worker + logistics */}
           <div className="rounded-2xl border border-surface-200 p-4 dark:border-surface-700">
-            <div className="mb-3 flex items-center gap-2"><Truck className="h-4 w-4 text-surface-400" /><h3 className="text-sm font-semibold text-surface-900 dark:text-surface-50">Assign worker</h3></div>
+            <div className="mb-3 flex items-center gap-2"><Truck className="h-4 w-4 text-surface-400" /><h3 className="text-sm font-semibold text-surface-900 dark:text-surface-50">Assign worker {regionName ? `(${regionName} Region)` : ''}</h3></div>
             <label className="block space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200">
               <span>Dispatch Worker <span className="text-danger-500">*</span></span>
               <select className="input-base w-full" value={form.dw_id} onChange={(e) => setForm(f => ({ ...f, dw_id: e.target.value }))}>
                 <option value="">Select a worker…</option>
                 {workers.map(w => <option key={w.id} value={w.id}>{w.name} ({w.login_id})</option>)}
               </select>
+              {workers.length === 0 && (
+                <p className="mt-1 text-xs text-danger-500 font-medium">No dispatch workers registered for region: {regionName || 'this region'}</p>
+              )}
             </label>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <label className="space-y-1.5 text-sm font-medium text-surface-700 dark:text-surface-200"><span>Vehicle No.</span><input className="input-base w-full" value={form.vehicle_number} onChange={(e) => setForm(f => ({ ...f, vehicle_number: e.target.value }))} placeholder="KA01 AB 1234" /></label>

@@ -38,7 +38,7 @@ function CustomerForm({ regions, salesManagers, isSM, currentUser, onSuccess, on
   const [submitting, setSubmitting] = useState(false)
   const isEdit = !!editData
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm({
     resolver: zodResolver(customerSchema),
     defaultValues: isEdit ? {
       company_name: editData.company_name || '',
@@ -58,6 +58,11 @@ function CustomerForm({ regions, salesManagers, isSM, currentUser, onSuccess, on
       credit_change_reason: '',
     }
   })
+
+  const selectedRegionId = watch('region_id')
+  const filteredSalesManagers = salesManagers.filter(
+    sm => selectedRegionId && sm.region_id && String(sm.region_id) === String(selectedRegionId)
+  )
 
   const onSubmit = async (data) => {
     setSubmitError(null)
@@ -137,7 +142,7 @@ function CustomerForm({ regions, salesManagers, isSM, currentUser, onSuccess, on
 
         <div>
           <label className="block text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider mb-1.5">
-            Sales Manager
+            Sales Manager (Region Only)
           </label>
           {isSM ? (
             <div className="input-base bg-surface-50 dark:bg-surface-800 text-surface-500 cursor-not-allowed select-none">
@@ -145,10 +150,18 @@ function CustomerForm({ regions, salesManagers, isSM, currentUser, onSuccess, on
             </div>
           ) : (
             <select {...register('sales_manager_id')} className="input-base w-full">
-              <option value="">Unassigned</option>
-              {salesManagers.map(sm => (
-                <option key={sm.id} value={sm.id}>{sm.name} ({sm.login_id})</option>
-              ))}
+              {!selectedRegionId ? (
+                <option value="">Select a region first</option>
+              ) : filteredSalesManagers.length === 0 ? (
+                <option value="">No Sales Managers assigned to this region</option>
+              ) : (
+                <>
+                  <option value="">Unassigned</option>
+                  {filteredSalesManagers.map(sm => (
+                    <option key={sm.id} value={sm.id}>{sm.name} ({sm.login_id})</option>
+                  ))}
+                </>
+              )}
             </select>
           )}
         </div>
