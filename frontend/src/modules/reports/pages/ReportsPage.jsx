@@ -349,7 +349,7 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50 flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-primary-600" />
-            Executive Reports & Intelligence
+            Reports
           </h1>
           <p className="text-xs text-surface-500 mt-1">
             Real-time analytics for revenue, salesman productivity, supplier spend, and customer accounts.
