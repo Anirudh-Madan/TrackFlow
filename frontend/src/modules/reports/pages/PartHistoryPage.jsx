@@ -25,7 +25,7 @@ export default function PartHistoryPage() {
   const { sku } = useParams()
   const navigate = useNavigate()
 
-  const [searchQuery, setSearchQuery] = useState(sku || 'FLT-AIR-002')
+  const [searchQuery, setSearchQuery] = useState(sku || '')
   const [loading, setLoading] = useState(false)
   const [partData, setPartData] = useState(null)
   const [transactions, setTransactions] = useState([])
@@ -97,7 +97,9 @@ export default function PartHistoryPage() {
 
   // Initial Fetch & Outside Click Listener
   useEffect(() => {
-    fetchHistory(searchQuery)
+    if (searchQuery) {
+      fetchHistory(searchQuery)
+    }
 
     const handleClickOutside = (event) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
@@ -163,7 +165,7 @@ export default function PartHistoryPage() {
                 value={searchQuery}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
-                placeholder="Type part number or description (e.g. AX1006948 or FILTER)"
+                placeholder=""
                 className="input-base w-full py-2.5 pl-3.5 pr-9 text-sm font-mono font-semibold"
                 autoComplete="off"
               />
@@ -252,23 +254,6 @@ export default function PartHistoryPage() {
             </Button>
           </div>
         </form>
-
-        {/* Quick Suggestion Pills */}
-        <div className="mt-4 pt-3 border-t border-surface-100 dark:border-surface-800 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-surface-400 font-medium">Quick Catalog Items:</span>
-          {['FLT-AIR-002', 'FLT-OIL-001', 'BRK-PAD-003', 'SKU-001'].map((sample) => (
-            <button
-              key={sample}
-              onClick={() => {
-                setSearchQuery(sample)
-                fetchHistory(sample)
-              }}
-              className="px-2.5 py-1 rounded-md bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-950/40 dark:hover:text-primary-400 transition-colors font-mono font-medium"
-            >
-              {sample}
-            </button>
-          ))}
-        </div>
       </Card>
 
 

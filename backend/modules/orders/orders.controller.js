@@ -116,8 +116,8 @@ exports.createOrder = async (req, res, next) => {
       });
     }
 
-    const gst_amount = parseFloat((subtotal * 0.18).toFixed(2));
-    const grand_total = subtotal + gst_amount;
+    const gst_amount = 0;
+    const grand_total = subtotal;
 
     // Check credit hold: if grand_total + current party outstanding > credit_limit
     const credit_hold = customer ? (grand_total > parseFloat(customer.credit_limit || 0)) : false;

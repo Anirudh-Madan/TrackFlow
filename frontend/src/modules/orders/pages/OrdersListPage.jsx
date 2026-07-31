@@ -15,6 +15,7 @@ import { cn } from '../../../utils/cn'
 import { getOrders, approveOrder, flagOrder, returnOrder } from '../../../api/endpoints/orders.api'
 import { getDispatchWorkers } from '../../../api/endpoints/pipeline.api'
 import { useAuthStore } from '../../../store/authStore'
+import { printChallanPDF } from '../../../utils/challanPrint'
 import toast from 'react-hot-toast'
 import TablePagination from '../../../components/data/TablePagination'
 
@@ -562,17 +563,9 @@ export default function OrdersListPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-surface-50 dark:bg-surface-700/50 text-xs">
-                      <td colSpan={4} className="px-4 py-1.5 text-surface-500 text-right">Subtotal</td>
-                      <td className="px-4 py-1.5 text-right font-medium">{formatCurrency(viewOrder.subtotal)}</td>
-                    </tr>
-                    <tr className="bg-surface-50 dark:bg-surface-700/50 text-xs">
-                      <td colSpan={4} className="px-4 py-1.5 text-surface-500 text-right">GST (18%)</td>
-                      <td className="px-4 py-1.5 text-right font-medium">{formatCurrency(viewOrder.gst_amount)}</td>
-                    </tr>
                     <tr className="bg-surface-50 dark:bg-surface-700/50 font-bold text-sm">
-                      <td colSpan={4} className="px-4 py-2.5 text-surface-900 dark:text-surface-50 text-right">Grand Total</td>
-                      <td className="px-4 py-2.5 text-right text-primary-600 dark:text-primary-400">{formatCurrency(viewOrder.grand_total)}</td>
+                      <td colSpan={4} className="px-4 py-2.5 text-surface-900 dark:text-surface-50 text-right">Grand Total (GST Incl.)</td>
+                      <td className="px-4 py-2.5 text-right text-primary-600 dark:text-primary-400">{formatCurrency(viewOrder.grand_total || viewOrder.subtotal)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -648,6 +641,9 @@ export default function OrdersListPage() {
                 )}
               </div>
               <div className="flex gap-2">
+                <Button variant="secondary" icon={Printer} onClick={() => printChallanPDF(viewOrder)}>
+                  Print / Save PDF
+                </Button>
                 <Button variant="secondary" onClick={() => { setViewOrder(null); setShowFlagInput(false); }}>
                   Close
                 </Button>

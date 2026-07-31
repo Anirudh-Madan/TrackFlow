@@ -10,6 +10,7 @@ import { cn } from '../../../utils/cn'
 import toast from 'react-hot-toast'
 import { getChallans, setBillNumber } from '../../../api/endpoints/challans.api'
 import { usePermission } from '../../../hooks/usePermission'
+import { printChallanPDF, getChallanHTML } from '../../../utils/challanPrint'
 
 const STATUS_CONFIG = {
   delivered:  { label: 'Delivered',  color: 'bg-success-50 text-success-700 border-success-200 dark:bg-success-900/20 dark:text-success-400 dark:border-success-900/40', icon: CheckCircle },
@@ -18,161 +19,12 @@ const STATUS_CONFIG = {
   cancelled:  { label: 'Cancelled',  color: 'bg-danger-50 text-danger-600 border-danger-200 dark:bg-danger-900/20 dark:text-danger-400 dark:border-danger-900/40', icon: X },
 }
 
-// ─── PDF Utility ─────────────────────────────────────────────────────────────
-function getChallanHTML(challan) {
-  const now = new Date().toLocaleString('en-IN')
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <title>Delivery Challan — ${challan.id}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; font-size: 13px; margin: 0; padding: 40px; color: #0f172a; }
-        
-        .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .company-info h1 { font-size: 22px; font-weight: 700; color: #1e3a8a; margin: 0 0 8px 0; letter-spacing: 0.5px; }
-        .company-info p { font-size: 12px; color: #334155; margin: 4px 0; font-weight: 500; }
-        
-        .challan-meta { text-align: right; }
-        .challan-number-box { border: 1px solid #1e3a8a; border-radius: 6px; padding: 6px 14px; display: inline-block; margin-bottom: 12px; }
-        .challan-number-box span:first-child { font-weight: 400; font-size: 13px; color: #1e3a8a; margin-right: 6px; }
-        .challan-number-box span:last-child { font-weight: 700; font-size: 15px; color: #0f172a; }
-        .challan-date { font-size: 12px; color: #475569; font-weight: 500; }
-        
-        .divider { border-top: 1px solid #0f172a; border-bottom: 1px solid #0f172a; height: 2px; margin: 20px 0; }
-        
-        .title-section { text-align: center; margin: 24px 0 32px 0; }
-        .title-section h2 { font-size: 14px; font-weight: 600; letter-spacing: 2.5px; color: #0f172a; margin: 0; }
-        
-        .customer-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
-        .customer-block h4 { font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        .customer-block p { font-size: 14px; font-weight: 500; color: #1e3a8a; margin: 0; }
-        .customer-right { text-align: right; }
-        
-        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-        th { text-align: left; font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 16px; }
-        th.text-right { text-align: right; }
-        th.text-center { text-align: center; }
-        td { padding: 16px 0; font-size: 13px; color: #0f172a; }
-        td.text-right { text-align: right; }
-        td.text-center { text-align: center; }
-        td.font-medium { font-weight: 500; color: #1e3a8a; }
-        
-        .summary-section { display: flex; justify-content: space-between; margin-bottom: 100px; }
-        .salesman-block { font-size: 11px; font-weight: 600; color: #64748b; }
-        .salesman-block span { display: block; font-size: 15px; font-weight: 700; color: #1e3a8a; margin-top: 4px; }
-        .total-block { text-align: right; font-size: 11px; font-weight: 600; color: #64748b; }
-        .total-block span { display: block; font-size: 16px; font-weight: 700; color: #1e3a8a; margin-top: 4px; }
-        
-        .footer-sig-container { display: flex; justify-content: flex-end; margin-top: 60px; }
-        .footer-sig { text-align: center; width: 220px; }
-        .footer-sig .line { border-top: 1px solid #0f172a; margin-bottom: 8px; }
-        .footer-sig p { font-size: 11px; color: #64748b; font-weight: 500; margin: 0; }
-      </style>
-    </head>
-    <body>
-      <div class="header-container">
-        <div class="company-info">
-          <h1>SHREE RAMDEV MOTORS</h1>
-          <p>OLD POWER HOUSE ROAD, BIKANER</p>
-          <p>GSTIN: 08ALDPD3168N1ZW</p>
-        </div>
-        <div class="challan-meta">
-          <div class="challan-number-box">
-            <span>No.</span><span>${challan.id.replace('CHN-', '')}</span>
-          </div>
-          <div class="challan-date">Date: ${(() => { const d = new Date(challan.date); return `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`; })()}</div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="title-section">
-        <h2>DELIVERY CHALLAN</h2>
-      </div>
-
-      <div class="customer-section">
-        <div class="customer-block">
-          <h4>CUSTOMER NAME</h4>
-          <p>${challan.party_name}</p>
-        </div>
-        <div class="customer-block customer-right">
-          <h4>CUSTOMER COMPANY</h4>
-          <p>—</p>
-        </div>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>SR</th>
-            <th>PART NUMBER</th>
-            <th>DESCRIPTION</th>
-            <th class="text-right">QTY</th>
-            <th class="text-right">PRICE/UNIT</th>
-            <th class="text-right">TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${challan.items.map((item, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td class="font-medium">${item.sku}</td>
-              <td>${item.name}</td>
-              <td class="text-right font-medium">${item.qty}</td>
-              <td class="text-right font-medium">₹${item.price.toFixed(2)}</td>
-              <td class="text-right font-medium">₹${item.total.toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div class="summary-section">
-        <div class="salesman-block">
-          Salesman
-          <span>${challan.dispatched_by}</span>
-        </div>
-        <div class="total-block">
-          Total Amount
-          <span>₹${challan.grand_total ? challan.grand_total.toFixed(2) : '0.00'}</span>
-        </div>
-      </div>
-
-      <div class="footer-sig-container">
-        <div class="footer-sig">
-          <div class="line"></div>
-          <p>Authorized Signature</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
-}
-
 function generateChallanPDF(challan) {
-  const html = getChallanHTML(challan)
-  const win = window.open('', '_blank', 'width=900,height=700')
-  if (!win) { alert('Please allow popups for this site to download challan.'); return; }
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  win.print()
+  printChallanPDF(challan)
 }
 
 function downloadChallanHTML(challan) {
-  const html = getChallanHTML(challan)
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `challan_${challan.id}.html`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-  toast.success('Challan HTML file downloaded!')
+  printChallanPDF(challan)
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -623,22 +475,11 @@ export default function ChallansListPage() {
                             <Button
                               variant="secondary"
                               size="sm"
-                              icon={Download}
-                              onClick={() => downloadChallanHTML(c)}
-                              id={`download-html-${c.dbId}`}
-                            >
-                              Download
-                            </Button>
-                          )}
-                          {canDownload && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
                               icon={Printer}
                               onClick={() => generateChallanPDF(c)}
                               id={`download-challan-${c.dbId}`}
                             >
-                              Print
+                              Print / Save PDF
                             </Button>
                           )}
                         </div>
@@ -783,14 +624,9 @@ export default function ChallansListPage() {
                 Close
               </Button>
               {canDownload && (
-                <>
-                  <Button variant="secondary" icon={Download} onClick={() => downloadChallanHTML(viewChallan)} id="challan-modal-download">
-                    Download HTML
-                  </Button>
-                  <Button icon={Printer} onClick={() => generateChallanPDF(viewChallan)} id="challan-modal-print">
-                    Print
-                  </Button>
-                </>
+                <Button icon={Printer} onClick={() => generateChallanPDF(viewChallan)} id="challan-modal-print">
+                  Print / Save PDF
+                </Button>
               )}
             </div>
           </div>

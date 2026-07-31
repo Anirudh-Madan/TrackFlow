@@ -17,6 +17,7 @@ import {
 import { getProducts } from '../../../api/endpoints/products.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
+import { printChallanPDF } from '../../../utils/challanPrint'
 
 const STATUS_CONFIG = {
   delivered:  { label: 'Delivered',  color: 'bg-success-50 text-success-700 border-success-200 dark:bg-success-900/20 dark:text-success-400', icon: CheckCircle },
@@ -36,107 +37,12 @@ function StatusBadge({ status }) {
   )
 }
 
-// ── PDF Generator Utility ──────────────────────────────────────────────────────
-function getChallanHTML(challan) {
-  const now = new Date().toLocaleString('en-IN')
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <title>Delivery Challan — ${challan.challan_number || challan.id}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; font-size: 13px; margin: 0; padding: 40px; color: #0f172a; }
-        .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .company-info h1 { font-size: 22px; font-weight: 700; color: #1e3a8a; margin: 0 0 8px 0; letter-spacing: 0.5px; }
-        .company-info p { font-size: 12px; color: #334155; margin: 4px 0; font-weight: 500; }
-        .challan-meta { text-align: right; }
-        .challan-number-box { border: 1px solid #1e3a8a; border-radius: 6px; padding: 6px 14px; display: inline-block; margin-bottom: 12px; }
-        .challan-number-box span:first-child { font-weight: 400; font-size: 13px; color: #1e3a8a; margin-right: 6px; }
-        .challan-number-box span:last-child { font-weight: 700; font-size: 15px; color: #0f172a; }
-        .challan-date { font-size: 12px; color: #475569; font-weight: 500; }
-        .divider { border-top: 1px solid #0f172a; border-bottom: 1px solid #0f172a; height: 2px; margin: 20px 0; }
-        .title-section { text-align: center; margin: 24px 0 32px 0; }
-        .title-section h2 { font-size: 14px; font-weight: 600; letter-spacing: 2.5px; color: #0f172a; margin: 0; }
-        .customer-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
-        .customer-block h4 { font-size: 10px; font-weight: 600; color: #64748b; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        .customer-block p { font-size: 14px; font-weight: 500; color: #1e3a8a; margin: 0; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-        th { text-align: left; font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 16px; }
-        th.text-right { text-align: right; }
-        td { padding: 16px 0; font-size: 13px; color: #0f172a; }
-        td.text-right { text-align: right; }
-        td.font-medium { font-weight: 500; color: #1e3a8a; }
-      </style>
-    </head>
-    <body>
-      <div class="header-container">
-        <div class="company-info">
-          <h1>SHREE RAMDEV MOTORS</h1>
-          <p>OLD POWER HOUSE ROAD, BIKANER</p>
-          <p>GSTIN: 08ALDPD3168N1ZW</p>
-        </div>
-        <div class="challan-meta">
-          <div class="challan-number-box">
-            <span>No.</span><span>${challan.challan_number || challan.id}</span>
-          </div>
-          <div class="challan-date">Date: ${new Date(challan.generated_at || challan.created_at || new Date()).toLocaleDateString('en-IN')}</div>
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div class="title-section"><h2>DELIVERY CHALLAN</h2></div>
-      <div class="customer-section">
-        <div class="customer-block">
-          <h4>CUSTOMER / PARTY</h4>
-          <p>${challan.party_name || challan.party?.company_name || '—'}</p>
-        </div>
-        <div class="customer-block" style="text-align: right;">
-          <h4>BILL NUMBER</h4>
-          <p>${challan.bill_number || '—'}</p>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr><th>PART NO</th><th>DESCRIPTION</th><th class="text-right">QTY</th><th class="text-right">PRICE</th></tr>
-        </thead>
-        <tbody>
-          ${(challan.order?.items || challan.items || []).map(i => `
-            <tr>
-              <td class="font-medium">${i.sku || i.product?.sku || '—'}</td>
-              <td>${i.product?.name || i.name || '—'}</td>
-              <td class="text-right">${i.quantity || i.qty || 1}</td>
-              <td class="text-right">₹${parseFloat(i.price || i.unit_price || i.product?.dealer_landing_price || 0).toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
-}
-
 function generateChallanPDF(challan) {
-  const html = getChallanHTML(challan)
-  const win = window.open('', '_blank')
-  if (!win) { toast.error('Popup blocked'); return }
-  win.document.write(html)
-  win.document.close()
-  setTimeout(() => win.print(), 500)
+  printChallanPDF(challan)
 }
 
 function downloadChallanHTML(challan) {
-  const html = getChallanHTML(challan)
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `challan_${challan.challan_number || challan.id}.html`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-  toast.success('Challan HTML downloaded!')
+  printChallanPDF(challan)
 }
 
 // ── PIN Modal ──────────────────────────────────────────────────────────────────
@@ -1116,8 +1022,7 @@ export default function AdminChallanPage({ onCreateChallan } = {}) {
             {/* Actions */}
             <div className="flex justify-end gap-2 pt-3 border-t border-surface-200 dark:border-surface-700">
               <Button variant="secondary" onClick={() => setViewChallan(null)}>Close</Button>
-              <Button variant="secondary" icon={Download} onClick={() => downloadChallanHTML(viewChallan)}>Download HTML</Button>
-              <Button icon={Printer} onClick={() => generateChallanPDF(viewChallan)}>Print PDF</Button>
+              <Button icon={Printer} onClick={() => generateChallanPDF(viewChallan)}>Print / Save PDF</Button>
             </div>
           </div>
         </Modal>
