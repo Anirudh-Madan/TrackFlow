@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Package, Building2, Calendar, Hash, Clock, CheckCircle2,
   AlertCircle, AlertTriangle, Loader2, Flag, RotateCcw, FileText,
-  ChevronRight, IndianRupee, User, MapPin,
+  ChevronRight, IndianRupee, User, MapPin, Printer,
 } from 'lucide-react'
 import { getOrderDetails, flagOrder, returnOrder } from '../../../api/endpoints/orders.api'
 import { useAuthStore } from '../../../store/authStore'
 import { cn } from '../../../utils/cn'
+import { printChallanPDF } from '../../../utils/challanPrint'
 import toast from 'react-hot-toast'
 
 function formatCurrency(val) {
@@ -178,7 +179,6 @@ export default function OrderDetailPage() {
   }
 
   const subtotal = (order.items || []).reduce((acc, it) => acc + ((it.sm_price || 0) * (it.quantity || 0)), 0)
-  const gst = subtotal * 0.18
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -207,6 +207,12 @@ export default function OrderDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => printChallanPDF(order)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-surface-200 dark:border-surface-700 text-sm font-medium text-surface-700 dark:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors shadow-sm"
+          >
+            <Printer className="h-4 w-4 text-primary-600" /> Print / Save PDF
+          </button>
           {isIM && order.status === 'PENDING' && (
             <>
               <button
@@ -389,16 +395,12 @@ export default function OrderDetailPage() {
           <div className="flex justify-end">
             <div className="w-64 space-y-1.5">
               <div className="flex justify-between text-sm">
-                <span className="text-surface-500">Subtotal</span>
+                <span className="text-surface-500 font-medium">Subtotal (GST Incl.)</span>
                 <span className="font-medium text-surface-900 dark:text-surface-100 tabular-nums">{formatCurrency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-surface-500">GST (18%)</span>
-                <span className="font-medium text-surface-900 dark:text-surface-100 tabular-nums">{formatCurrency(gst)}</span>
               </div>
               <div className="flex justify-between pt-1.5 border-t border-surface-100 dark:border-surface-800">
                 <span className="text-sm font-semibold text-surface-900 dark:text-surface-100">Grand Total</span>
-                <span className="text-base font-bold text-primary-600 dark:text-primary-400 tabular-nums">{formatCurrency(order.grand_total || (subtotal + gst))}</span>
+                <span className="text-base font-bold text-primary-600 dark:text-primary-400 tabular-nums">{formatCurrency(order.grand_total || subtotal)}</span>
               </div>
             </div>
           </div>

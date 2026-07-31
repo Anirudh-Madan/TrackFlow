@@ -16,6 +16,7 @@ import { getProducts } from '../../../api/endpoints/products.api'
 import { getVendors } from '../../../api/endpoints/parties.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
+import { printPOPDF, getPOHTML } from '../../../utils/poPrint'
 
 const STATUS_CONFIG = {
   SUBMITTED:  { label: 'Submitted',  color: 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/20 dark:text-primary-400' },
@@ -29,81 +30,12 @@ function StatusBadge({ status }) {
   return <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', cfg.color)}>{cfg.label}</span>
 }
 
-function getPOHTML(po) {
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <title>Purchase Order — ${po.po_number}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; font-size: 13px; margin: 0; padding: 40px; color: #0f172a; }
-        .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .company-info h1 { font-size: 22px; font-weight: 700; color: #1e3a8a; margin: 0 0 8px 0; }
-        .po-number-box { border: 1px solid #1e3a8a; border-radius: 6px; padding: 6px 14px; display: inline-block; }
-        table { width: 100%; border-collapse: collapse; margin: 30px 0; }
-        th { text-align: left; font-size: 10px; color: #9ca3af; text-transform: uppercase; padding-bottom: 12px; }
-        td { padding: 12px 0; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
-        .text-right { text-align: right; }
-      </style>
-    </head>
-    <body>
-      <div class="header-container">
-        <div class="company-info">
-          <h1>SHREE RAMDEV MOTORS</h1>
-          <p>Purchase Order ${po.po_number}</p>
-        </div>
-        <div>Date: ${new Date(po.po_date).toLocaleDateString('en-IN')}</div>
-      </div>
-      <div style="margin: 20px 0;">
-        <p><strong>Vendor:</strong> ${po.vendor?.company_name || po.vendor_name || '—'}</p>
-        <p><strong>Bill No:</strong> ${po.bill_number || '—'}</p>
-      </div>
-      <table>
-        <thead>
-          <tr><th>Part No</th><th>Description</th><th class="text-right">Qty</th><th class="text-right">Unit Price</th><th class="text-right">Total</th></tr>
-        </thead>
-        <tbody>
-          ${(po.items || []).map(i => `
-            <tr>
-              <td>${i.part_number || i.product?.sku || '—'}</td>
-              <td>${i.description || i.product?.name || '—'}</td>
-              <td class="text-right">${i.quantity}</td>
-              <td class="text-right">₹${parseFloat(i.unit_price || 0).toFixed(2)}</td>
-              <td class="text-right">₹${parseFloat(i.total || 0).toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <div style="text-align: right;"><h3>Total: ₹${parseFloat(po.total || 0).toFixed(2)}</h3></div>
-    </body>
-    </html>
-  `
-}
-
 function generatePOPDF(po) {
-  const html = getPOHTML(po)
-  const win = window.open('', '_blank', 'width=900,height=700')
-  if (!win) return
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  win.print()
+  printPOPDF(po)
 }
 
 function downloadPOHTML(po) {
-  const html = getPOHTML(po)
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `purchase_order_${po.po_number || po.id}.html`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-  toast.success('PO HTML downloaded!')
+  printPOPDF(po)
 }
 
 function PinModal({ open, onVerify, onClose, loading }) {
@@ -1003,8 +935,7 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-surface-100 dark:border-surface-700">
               <Button variant="secondary" onClick={() => setViewPO(null)}>Close</Button>
-              <Button variant="secondary" icon={Download} onClick={() => downloadPOHTML(viewPO)}>Download HTML</Button>
-              <Button icon={Printer} onClick={() => generatePOPDF(viewPO)}>Print PDF</Button>
+              <Button icon={Printer} onClick={() => generatePOPDF(viewPO)}>Print / Save PDF</Button>
             </div>
           </div>
         </Modal>

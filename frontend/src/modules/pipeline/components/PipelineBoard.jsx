@@ -16,6 +16,7 @@ import { PIPELINE_FLOW, stageConfig } from '../constants'
 import PipelineProgress from './PipelineProgress'
 import IMApproveModal from './IMApproveModal'
 import FulfillModal from './FulfillModal'
+import { printChallanPDF } from '../../../utils/challanPrint'
 
 /**
  * PipelineBoard — one component powering the pipeline view for every role.
@@ -257,7 +258,7 @@ export default function PipelineBoard({ title, subtitle }) {
         size="lg"
         footer={(
           <div className="flex justify-between w-full">
-            <Button variant="secondary" icon={Printer} onClick={() => window.print()}>Print Challan</Button>
+            <Button variant="secondary" icon={Printer} onClick={() => printChallanPDF(viewChallan.order || viewChallan)}>Print Challan / PDF</Button>
             <Button variant="primary" onClick={() => setViewChallan(null)}>Close</Button>
           </div>
         )}

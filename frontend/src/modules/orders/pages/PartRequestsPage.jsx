@@ -13,6 +13,7 @@ import toast from 'react-hot-toast'
 import { useLocation } from 'react-router-dom'
 import AdminPOPage from '../../inward/pages/AdminPOPage'
 import TablePagination from '../../../components/data/TablePagination'
+import { printPOPDF } from '../../../utils/poPrint'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v) => {
@@ -160,33 +161,7 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
   const subtotal = items.reduce((s, it) => s + fmtN(it.unit_price) * fmtN(it.qty), 0)
 
   const handlePrint = () => {
-    const html = `
-      <div class="header">
-        <div><h1>Purchase Order</h1><div style="color:#666;font-size:12px">TrackFlow</div></div>
-        <div style="text-align:right">
-          <div class="label">PO Number</div><div class="value" style="font-family:monospace">${data.po_number}</div>
-        </div>
-      </div>
-      <div class="grid">
-        <div><div class="label">Supplier</div><div class="value">${vendor?.company_name || '—'}</div>${vendor?.gst ? `<div style="font-size:10px;color:#666;font-family:monospace">${vendor.gst}</div>` : ''}</div>
-        <div><div class="label">PO Date</div><div class="value">${data.po_date ? new Date(data.po_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '—'}</div></div>
-        <div><div class="label">Prepared By</div><div class="value">${user?.name || '—'}</div></div>
-        ${data.notes ? `<div style="grid-column:span 3"><div class="label">Notes</div><div>${data.notes}</div></div>` : ''}
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>Part No.</th><th>Description</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Qty</th><th style="text-align:right">Total</th></tr></thead>
-        <tbody>
-          ${items.filter(it => it.part_number || it.description).map((it,i) => {
-            const tot = fmtN(it.unit_price)*fmtN(it.qty)
-            return `<tr><td>${i+1}</td><td style="font-family:monospace">${it.part_number||'—'}</td><td>${it.description||'—'}</td><td style="text-align:right">₹${fmtN(it.unit_price).toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td style="text-align:right">${it.qty}</td><td style="text-align:right">₹${tot.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
-          }).join('')}
-        </tbody>
-      </table>
-      <div class="totals"><div class="totals-box">
-        <div class="total-row grand"><span>Total</span><span>₹${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
-      </div></div>
-    `
-    printDoc(html)
+    printPOPDF({ ...data, vendor_name: vendor?.company_name, vendor_gst: vendor?.gst, items }, user)
   }
 
   return (
@@ -283,7 +258,7 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
           <button type="button" onClick={handlePrint}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-surface-200 dark:border-surface-700 text-sm font-medium text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
           >
-            <Printer className="h-4 w-4" /> Print PO
+            <Printer className="h-4 w-4" /> Print / Save PDF
           </button>
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-surface-200 dark:border-surface-700 text-sm font-medium text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors">
