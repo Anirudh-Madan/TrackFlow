@@ -1,7 +1,7 @@
 const { Op, fn, col } = require('sequelize');
 const {
   Order, OrderItem, Product, User, Role, Challan, Customer,
-  StockOnHand, StockReserved, StockDamaged,
+  StockOnHand, StockReserved, StockDamaged, StockTransaction, InwardItem,
   Vendor, VendorProductMapping, sequelize
 } = require('../../models');
 
@@ -1173,10 +1173,25 @@ exports.stockMovement = async (req, res, next) => {
     const products = await Product.findAll({
       where: { deleted_at: null },
       include: [
-        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] }
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] }
       ],
       order: [['id', 'ASC']]
     });
+
+    const withTx = await StockTransaction.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true
+    });
+    const txSet = new Set(withTx.map(t => t.product_id));
+
+    const withInward = await InwardItem.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true
+    });
+    const inwardSet = new Set(withInward.map(i => i.product_id));
 
     const lastSales = await OrderItem.findAll({
       attributes: ['product_id', [sequelize.fn('MAX', sequelize.col('order.order_date')), 'last_sold_date']],
@@ -1197,6 +1212,18 @@ exports.stockMovement = async (req, res, next) => {
       }
     });
 
+    // Exclude catalog-only Price List items that have 0 stock, no sales history, no min stock setup, and no inventory movements
+    const stockProducts = products.filter(p => {
+      const stock = parseFloat(p.stockOnHand?.quantity || 0);
+      const reserved = parseFloat(p.stockReserved?.quantity || 0);
+      const sold = !!lastSalesMap[p.id];
+      const minSet = p.reorder_threshold || 0;
+      const hasTx = txSet.has(p.id);
+      const hasInward = inwardSet.has(p.id);
+
+      return stock > 0 || reserved > 0 || sold || minSet > 0 || hasTx || hasInward;
+    });
+
     const now = new Date('2026-07-28');
 
     let slowMoversCount = 0;
@@ -1204,7 +1231,7 @@ exports.stockMovement = async (req, res, next) => {
     let deadStockCount = 0;
     let neverSoldCount = 0;
 
-    let allItems = products.map((p, idx) => {
+    let allItems = stockProducts.map((p, idx) => {
       const stock = Math.round(parseFloat(p.stockOnHand?.quantity || 0));
       const unitCost = parseFloat(p.dealer_landing_price || p.purchase_price || 0);
       const valueStuck = stock * unitCost;
@@ -1313,7 +1340,8 @@ exports.velocityMinStock = async (req, res, next) => {
     const products = await Product.findAll({
       where: { deleted_at: null },
       include: [
-        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] }
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] }
       ],
       order: [['id', 'ASC']]
     });
@@ -1335,7 +1363,33 @@ exports.velocityMinStock = async (req, res, next) => {
       if (s.product_id) salesMap[s.product_id] = parseFloat(s.total_sold || 0);
     });
 
-    let allItems = products.map((p, idx) => {
+    const withTx = await StockTransaction.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true
+    });
+    const txSet = new Set(withTx.map(t => t.product_id));
+
+    const withInward = await InwardItem.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true
+    });
+    const inwardSet = new Set(withInward.map(i => i.product_id));
+
+    // Exclude catalog-only Price List items that have 0 stock, no sales history, no min stock setup, and no inventory movements
+    const stockProducts = products.filter(p => {
+      const stock = parseFloat(p.stockOnHand?.quantity || 0);
+      const reserved = parseFloat(p.stockReserved?.quantity || 0);
+      const sold = salesMap[p.id] || 0;
+      const minSet = p.reorder_threshold || 0;
+      const hasTx = txSet.has(p.id);
+      const hasInward = inwardSet.has(p.id);
+
+      return stock > 0 || reserved > 0 || sold > 0 || minSet > 0 || hasTx || hasInward;
+    });
+
+    let allItems = stockProducts.map((p, idx) => {
       const stock = Math.round(parseFloat(p.stockOnHand?.quantity || 0));
       const totalSold = Math.round(salesMap[p.id] || 0);
       const avgMonthly = parseFloat((totalSold / 1.2).toFixed(1));
