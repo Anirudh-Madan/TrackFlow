@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   ShoppingBag, Plus, Pencil, Trash2, RotateCcw, Eye, Search, Filter,
   AlertCircle, CheckCircle, X, Loader2, Shield, Calendar,
-  ExternalLink, Lock, Info, ArrowLeft, Hash, Download, Printer, History
+  ExternalLink, Lock, Info, ArrowLeft, Hash, Download, Printer, History,
+  ChevronDown, Package
 } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
@@ -12,7 +13,7 @@ import {
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
   deletePurchaseOrder, returnPurchaseOrder
 } from '../../../api/endpoints/purchaseOrders.api'
-import { getProducts } from '../../../api/endpoints/products.api'
+import { getProducts, initializeProductStock } from '../../../api/endpoints/products.api'
 import { getVendors } from '../../../api/endpoints/parties.api'
 import { useAuthStore } from '../../../store/authStore'
 import TablePagination from '../../../components/data/TablePagination'
@@ -61,7 +62,190 @@ function PinModal({ open, onVerify, onClose, loading }) {
   )
 }
 
-const EMPTY_ITEM = { part_number: '', description: '', quantity: 1, unit_price: '' }
+const EMPTY_ITEM = { product_id: '', part_number: '', description: '', quantity: 1, unit_price: '' }
+
+// ─── Part Number Dropdown ─────────────────────────────────────────────────────
+function PartNumberDropdown({ products, supplier, value, onSelect }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [addingId, setAddingId] = useState(null)
+  const ref = useRef(null)
+
+  const hasSupplier = Boolean(supplier && supplier.trim())
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const supplierProducts = useMemo(() => {
+    if (!hasSupplier) return products
+    const sLower = supplier.trim().toLowerCase()
+    let list = products.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
+    if (list.length === 0) list = products
+    return list
+  }, [products, supplier, hasSupplier])
+
+  const { inStockItems, priceListOnlyItems } = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let matched = supplierProducts
+    if (q) {
+      matched = matched.filter(p =>
+        (p.sku || '').toLowerCase().includes(q) ||
+        (p.name || '').toLowerCase().includes(q)
+      )
+    }
+    const inStock = []
+    const priceListOnly = []
+    matched.forEach(p => {
+      const isStock = p.is_in_stock || (p.available ?? p.on_hand ?? p.stock ?? p.quantity ?? 0) > 0
+      if (isStock) inStock.push(p)
+      else priceListOnly.push(p)
+    })
+    return { inStockItems: inStock.slice(0, 40), priceListOnlyItems: priceListOnly.slice(0, 20) }
+  }, [supplierProducts, search])
+
+  const handleAddToStock = async (e, product) => {
+    e.stopPropagation()
+    setAddingId(product.id)
+    try {
+      const res = await initializeProductStock(product.id)
+      if (res?.success) {
+        toast.success(`Item "${product.sku}" added to stock inventory (0 Qty)`)
+        const updated = res.data || { ...product, is_in_stock: true, on_hand: 0, available: 0 }
+        onSelect(updated)
+        setOpen(false)
+        setSearch('')
+      } else {
+        toast.error(res?.error || 'Failed to add item to stock')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to add item to stock')
+    } finally {
+      setAddingId(null)
+    }
+  }
+
+  const selected = value ? products.find(p => String(p.id) === String(value) || p.sku === value) : null
+
+  const handleToggle = () => {
+    if (!hasSupplier) {
+      toast.error('Please select a Vendor / Supplier first!')
+      return
+    }
+    setOpen(o => !o)
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        className={cn(
+          'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left text-xs transition-colors',
+          'bg-white dark:bg-surface-900',
+          !hasSupplier
+            ? 'border-warning-300 dark:border-warning-900/50 bg-warning-50/30 cursor-pointer'
+            : open
+              ? 'border-primary-400 ring-2 ring-primary-500/20'
+              : 'border-surface-200 dark:border-surface-700 hover:border-surface-300',
+        )}
+      >
+        {!hasSupplier ? (
+          <span className="text-warning-600 font-medium flex items-center gap-1 text-[11px]">
+            <span className="shrink-0">⚠️</span> Select Vendor First
+          </span>
+        ) : selected ? (
+          <div className="min-w-0">
+            <p className="font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{selected.sku}</p>
+            <p className="text-[10px] text-surface-400 truncate">{selected.name}</p>
+          </div>
+        ) : (
+          <span className="text-surface-400 text-[11px] flex items-center gap-1">
+            <Package className="h-3 w-3" /> Search {supplier || ''} part…
+          </span>
+        )}
+        <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && hasSupplier && (
+        <div className="absolute z-50 mt-1.5 w-full min-w-[300px] rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-surface-100 dark:border-surface-800">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-800">
+              <Search className="h-3 w-3 text-surface-400 shrink-0" />
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={`Filter ${supplier} parts…`}
+                className="bg-transparent text-xs outline-none w-full text-surface-900 dark:text-surface-100 placeholder-surface-400 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="px-3 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
+            <span>Supplier: <strong>{supplier}</strong></span>
+            <span className="text-[10px] opacity-80">{inStockItems.length} in-stock part(s)</span>
+          </div>
+
+          <div className="max-h-60 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
+            {inStockItems.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => { onSelect(p); setOpen(false); setSearch('') }}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{p.sku}</p>
+                  <p className="text-[10px] text-surface-400 truncate">{p.name}</p>
+                </div>
+                <div className="text-right shrink-0 ml-2">
+                  <p className="text-xs font-mono text-surface-700 dark:text-surface-300">₹{parseFloat(p.purchase_price || p.dealer_landing_price || 0).toFixed(2)}</p>
+                  <p className="text-[10px] text-success-600 dark:text-success-400 font-medium">Stock: {p.available ?? p.on_hand ?? '0'}</p>
+                </div>
+              </button>
+            ))}
+
+            {priceListOnlyItems.length > 0 && (
+              <div className="bg-amber-50/50 dark:bg-amber-950/20 border-t border-amber-200 dark:border-amber-900/50">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-100/60 dark:bg-amber-900/40">
+                  ⚠️ Price List Items (Not in Stock)
+                </div>
+                {priceListOnlyItems.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={addingId === p.id}
+                    onClick={e => handleAddToStock(e, p)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 border-b border-amber-100 dark:border-amber-900/30 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 transition-colors text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{p.sku}</p>
+                        <span className="px-1.5 text-[9px] font-bold rounded bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">Price List</span>
+                      </div>
+                      <p className="text-[10px] text-surface-500 truncate">{p.name}</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Not in stock — click to add 0 Qty & select</p>
+                    </div>
+                    <div className="shrink-0 text-xs px-2.5 py-1 rounded-lg font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all flex items-center gap-1">
+                      {addingId === p.id ? 'Adding…' : '➕ Add to Stock'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {inStockItems.length === 0 && priceListOnlyItems.length === 0 && (
+              <p className="px-4 py-6 text-xs text-surface-400 text-center italic">No matching parts found for {supplier}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AdminPOPage({ onSwitchToNewPO }) {
   const { user } = useAuthStore()
@@ -497,41 +681,31 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
           </div>
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-surface-500 uppercase pb-1 border-b border-surface-200 dark:border-surface-700">
-              <div className="col-span-3">Part No *</div><div className="col-span-3">Description</div><div className="col-span-2">Qty</div><div className="col-span-2">Unit Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
+              <div className="col-span-4">Part No *</div><div className="col-span-2">Description</div><div className="col-span-2">Qty</div><div className="col-span-2">Unit Price</div><div className="col-span-1">Total</div><div className="col-span-1"></div>
             </div>
             {form.items.map((item, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-center bg-surface-50/50 dark:bg-surface-800/20 p-2 rounded-xl border border-surface-200 dark:border-surface-700">
-                <div className="col-span-3">
-                  <select
-                    className="input-base text-xs font-mono bg-white dark:bg-surface-900"
+                <div className="col-span-4">
+                  <PartNumberDropdown
+                    products={products}
+                    supplier={form.vendor_name}
                     value={item.product_id || ''}
-                    onChange={e => {
-                      const selId = e.target.value
-                      const p = products.find(prod => String(prod.id) === String(selId))
-                      if (p) {
-                        setForm(f => {
-                          const items = [...f.items]
-                          items[i] = {
-                            ...items[i],
-                            product_id: p.id,
-                            part_number: p.sku,
-                            description: p.name || p.sku,
-                            unit_price: p.purchase_price != null ? p.purchase_price : (p.dealer_landing_price != null ? p.dealer_landing_price : '0')
-                          }
-                          return { ...f, items }
-                        })
-                      }
+                    onSelect={p => {
+                      setForm(f => {
+                        const items = [...f.items]
+                        items[i] = {
+                          ...items[i],
+                          product_id: p.id,
+                          part_number: p.sku,
+                          description: p.name || p.sku,
+                          unit_price: p.purchase_price != null ? p.purchase_price : (p.dealer_landing_price != null ? p.dealer_landing_price : '0')
+                        }
+                        return { ...f, items }
+                      })
                     }}
-                  >
-                    <option value="">— Select Catalog Part —</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.sku} – {p.name || 'No Name'}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <input type="text" readOnly disabled value={item.description} className="input-base text-xs bg-surface-100 dark:bg-surface-800 cursor-not-allowed" placeholder="Description" />
                 </div>
                 <div className="col-span-2">
@@ -636,32 +810,24 @@ export default function AdminPOPage({ onSwitchToNewPO }) {
               {(editForm.items || []).map((item, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center bg-surface-50/50 dark:bg-surface-800/20 p-2 rounded-xl border border-surface-200 dark:border-surface-700">
                   <div className="col-span-4">
-                    <select
-                      className="input-base text-xs font-mono bg-white dark:bg-surface-900"
+                    <PartNumberDropdown
+                      products={products}
+                      supplier={editForm.vendor_name}
                       value={item.product_id || ''}
-                      onChange={e => {
-                        const selId = e.target.value
-                        const prod = products.find(p => String(p.id) === String(selId))
+                      onSelect={prod => {
                         setEditForm(f => {
                           const updated = [...(f.items || [])]
                           updated[i] = {
                             ...updated[i],
-                            product_id: prod ? prod.id : '',
-                            part_number: prod ? prod.sku : updated[i].part_number,
-                            description: prod ? prod.name : updated[i].description,
-                            unit_price: prod && prod.purchase_price != null ? prod.purchase_price : (prod && prod.dealer_landing_price != null ? prod.dealer_landing_price : updated[i].unit_price)
+                            product_id: prod.id,
+                            part_number: prod.sku,
+                            description: prod.name || prod.sku,
+                            unit_price: prod.purchase_price != null ? prod.purchase_price : (prod.dealer_landing_price != null ? prod.dealer_landing_price : updated[i].unit_price)
                           }
                           return { ...f, items: updated }
                         })
                       }}
-                    >
-                      <option value="">— Select Catalog Part —</option>
-                      {products.map(prod => (
-                        <option key={prod.id} value={prod.id}>
-                          {prod.sku} – {prod.name || 'No Name'}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div className="col-span-3">
                     <input

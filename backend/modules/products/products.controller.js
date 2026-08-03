@@ -5,6 +5,7 @@ const { Product, ProductCategory, UnitOfMeasure, Pricing, AuditLog, User, StockO
 
 exports.getProducts = async (req, res, next) => {
   try {
+    const { InwardItem } = require('../../models');
     const products = await Product.findAll({
       include: [
         { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
@@ -23,6 +24,20 @@ exports.getProducts = async (req, res, next) => {
     const damagedMap = {};
     damagedTotals.forEach(d => { damagedMap[d.product_id] = parseFloat(d.total_damaged) || 0; });
 
+    const withTx = await StockTransaction.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true,
+    });
+    const txSet = new Set(withTx.map(t => t.product_id));
+
+    const withInward = await InwardItem.findAll({
+      attributes: ['product_id'],
+      group: ['product_id'],
+      raw: true,
+    });
+    const inwardSet = new Set(withInward.map(i => i.product_id));
+
     const data = products.map(p => {
       const onHand    = parseFloat(p.stockOnHand?.quantity || 0);
       const reserved  = parseFloat(p.stockReserved?.quantity || 0);
@@ -36,11 +51,66 @@ exports.getProducts = async (req, res, next) => {
       productJson.damaged = damaged;
       productJson.available = available;
       productJson.is_low_stock = threshold > 0 && available <= threshold;
+      productJson.is_in_stock = onHand > 0 || reserved > 0 || threshold > 0 || txSet.has(p.id) || inwardSet.has(p.id);
 
       return productJson;
     });
 
     res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.initializeStock = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByPk(id);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    let stockRow = await StockOnHand.findOne({ where: { product_id: id } });
+    if (!stockRow) {
+      stockRow = await StockOnHand.create({ product_id: id, quantity: 0 });
+    }
+    let reservedRow = await StockReserved.findOne({ where: { product_id: id } });
+    if (!reservedRow) {
+      await StockReserved.create({ product_id: id, quantity: 0 });
+    }
+
+    await StockTransaction.create({
+      product_id: id,
+      type: 'adjustment',
+      reference: `INIT-STOCK-${id}`,
+      quantity_change: 0,
+      quantity_after: parseFloat(stockRow.quantity || 0),
+      performed_by: req.user?.id || 1,
+      notes: 'Added item to stock inventory for PO/Challan'
+    });
+
+    const updated = await Product.findByPk(id, {
+      include: [
+        { model: ProductCategory, as: 'category', attributes: ['id', 'name', 'parent_id'] },
+        { model: UnitOfMeasure, as: 'uom', attributes: ['id', 'name', 'code'] },
+        { model: StockOnHand, as: 'stockOnHand', attributes: ['quantity'] },
+        { model: StockReserved, as: 'stockReserved', attributes: ['quantity'] },
+      ],
+    });
+
+    const productJson = updated.toJSON();
+    const onHand = parseFloat(updated.stockOnHand?.quantity || 0);
+    const reserved = parseFloat(updated.stockReserved?.quantity || 0);
+    productJson.on_hand = onHand;
+    productJson.reserved = reserved;
+    productJson.available = onHand - reserved;
+    productJson.is_in_stock = true;
+
+    res.json({
+      success: true,
+      message: `Item "${updated.sku}" added to stock inventory (0 Qty)`,
+      data: productJson
+    });
   } catch (err) {
     next(err);
   }

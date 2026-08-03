@@ -5,7 +5,7 @@ import {
   FileText, Filter, Building2, ShoppingBag,
 } from 'lucide-react'
 import { getVendors } from '../../../api/endpoints/parties.api'
-import { getProducts } from '../../../api/endpoints/products.api'
+import { getProducts, initializeProductStock } from '../../../api/endpoints/products.api'
 import { getOrderItems, createPurchaseOrder, getPurchaseOrders } from '../../../api/endpoints/purchaseOrders.api'
 import { useAuthStore } from '../../../store/authStore'
 import { cn } from '../../../utils/cn'
@@ -277,9 +277,10 @@ function POPreviewModal({ open, onClose, onConfirm, submitting, data, items, ven
   )
 }
 
-function PartNumberDropdown({ products, vendor, value, onSelect }) {
+function PartNumberDropdown({ products, vendor, value, onSelect, onProductUpdated }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [addingId, setAddingId] = useState(null)
   const ref = useRef(null)
 
   const hasSupplier = Boolean(vendor && (vendor.company_name || vendor.name))
@@ -291,22 +292,65 @@ function PartNumberDropdown({ products, vendor, value, onSelect }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const filtered = useMemo(() => {
+  const supplierProducts = useMemo(() => {
     if (!hasSupplier) return []
-
     const sLower = supplierName.trim().toLowerCase()
     let list = products.filter(p => p.supplier && p.supplier.trim().toLowerCase() === sLower)
     if (list.length === 0) list = products
+    return list
+  }, [products, supplierName, hasSupplier])
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter(p =>
+  const { inStockItems, priceListOnlyItems } = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
+    let matched = supplierProducts
+    if (q) {
+      matched = matched.filter(p =>
         (p.sku || '').toLowerCase().includes(q) ||
         (p.name || '').toLowerCase().includes(q)
       )
     }
-    return list.slice(0, 40)
-  }, [products, supplierName, search, hasSupplier])
+
+    const inStock = []
+    const priceListOnly = []
+
+    matched.forEach(p => {
+      const isStock = p.is_in_stock || (p.available ?? p.on_hand ?? p.stock ?? p.quantity ?? 0) > 0
+      if (isStock) {
+        inStock.push(p)
+      } else {
+        priceListOnly.push(p)
+      }
+    })
+
+    return {
+      inStockItems: inStock.slice(0, 40),
+      priceListOnlyItems: priceListOnly.slice(0, 20),
+    }
+  }, [supplierProducts, search])
+
+  const handleAddToStock = async (e, product) => {
+    e.stopPropagation()
+    setAddingId(product.id)
+    try {
+      const res = await initializeProductStock(product.id)
+      if (res?.success) {
+        toast.success(`Item "${product.sku}" added to stock inventory (0 Qty)`)
+        const updated = res.data || { ...product, is_in_stock: true, on_hand: 0, available: 0 }
+        if (onProductUpdated) onProductUpdated(updated)
+        onSelect(updated)
+        setOpen(false)
+        setSearch('')
+      } else {
+        toast.error(res?.error || 'Failed to add item to stock')
+      }
+    } catch (err) {
+      console.error('Error adding item to stock:', err)
+      toast.error(err.message || 'Failed to add item to stock')
+    } finally {
+      setAddingId(null)
+    }
+  }
 
   const selected = value ? products.find(p => p.id === value || p.sku === value) : null
 
@@ -344,14 +388,14 @@ function PartNumberDropdown({ products, vendor, value, onSelect }) {
           </div>
         ) : (
           <span className="text-surface-400">
-            Search {supplierName} Part No…
+            Search {supplierName} Part No (In Stock)…
           </span>
         )}
         <ChevronDown className={cn('h-3.5 w-3.5 text-surface-400 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && hasSupplier && (
-        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden">
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-2xl overflow-hidden min-w-[320px]">
           <div className="p-2 border-b border-surface-100 dark:border-surface-800">
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-800">
               <Search className="h-3 w-3 text-surface-400 shrink-0" />
@@ -366,12 +410,11 @@ function PartNumberDropdown({ products, vendor, value, onSelect }) {
           </div>
           <div className="px-3.5 py-1.5 bg-primary-50/70 dark:bg-primary-950/40 text-[11px] font-semibold text-primary-700 dark:text-primary-300 border-b border-primary-100/60 dark:border-primary-900/40 flex items-center justify-between">
             <span>Supplier: <strong>{supplierName}</strong></span>
-            <span className="text-[10px] opacity-80">{filtered.length} part(s) available</span>
+            <span className="text-[10px] opacity-80">{inStockItems.length} in-stock part(s)</span>
           </div>
-          <div className="max-h-52 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
-            {filtered.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-surface-400 text-center italic">No catalog parts found for {supplierName}</p>
-            ) : filtered.map(p => (
+
+          <div className="max-h-60 overflow-y-auto divide-y divide-surface-50 dark:divide-surface-800">
+            {inStockItems.map(p => (
               <button
                 key={p.id}
                 type="button"
@@ -384,10 +427,43 @@ function PartNumberDropdown({ products, vendor, value, onSelect }) {
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   <p className="text-xs font-mono text-surface-700 dark:text-surface-300">{fmt(p.dealer_landing_price || p.selling_price)}</p>
-                  <p className="text-[10px] text-surface-400">Unit Price</p>
+                  <p className="text-[10px] text-success-600 dark:text-success-400 font-medium">Stock: {p.available ?? p.on_hand ?? 0}</p>
                 </div>
               </button>
             ))}
+
+            {priceListOnlyItems.length > 0 && (
+              <div className="bg-amber-50/50 dark:bg-amber-950/20 border-t border-amber-200 dark:border-amber-900/50">
+                <div className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-100/60 dark:bg-amber-900/40">
+                  ⚠️ Price List Items (Not Available in Stock)
+                </div>
+                {priceListOnlyItems.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={addingId === p.id}
+                    onClick={(e) => handleAddToStock(e, p)}
+                    className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-amber-100 dark:border-amber-900/30 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 transition-colors text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-mono font-bold text-surface-900 dark:text-surface-100 truncate">{p.sku}</p>
+                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">Price List</span>
+                      </div>
+                      <p className="text-[11px] text-surface-500 truncate">{p.name}</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Not in stock (Click to add 0 Qty & select)</p>
+                    </div>
+                    <div className="shrink-0 text-xs px-2.5 py-1 rounded-lg font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-all flex items-center gap-1">
+                      {addingId === p.id ? 'Adding…' : '➕ Add to Stock'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {inStockItems.length === 0 && priceListOnlyItems.length === 0 && (
+              <p className="px-4 py-6 text-xs text-surface-400 text-center italic">No matching parts found for {supplierName}</p>
+            )}
           </div>
         </div>
       )}
@@ -399,7 +475,7 @@ function PartNumberDropdown({ products, vendor, value, onSelect }) {
 const BLANK_ITEM = () => ({ part_number: '', description: '', unit_price: '', qty: '1', product_id: null })
 
 // ─── Tab 2: New Purchase Order ────────────────────────────────────────────────
-function NewPOTab({ vendors, products }) {
+function NewPOTab({ vendors, products, onProductUpdated }) {
   const { user } = useAuthStore()
   const [vendorId, setVendorId]   = useState(null)
   const [poDate, setPoDate]       = useState(todayStr)
@@ -576,6 +652,7 @@ function NewPOTab({ vendors, products }) {
                     products={products}
                     vendor={selectedVendor}
                     value={item.product_id || item.part_number}
+                    onProductUpdated={onProductUpdated}
                     onSelect={p => {
                       updateItem(idx, {
                         product_id: p.id,
@@ -871,6 +948,10 @@ export default function PartRequestsPage() {
         { id: 'history', label: 'Ordered Items', icon: ClipboardList },
       ]
 
+  const handleProductUpdated = useCallback((updatedProd) => {
+    setProducts(prev => prev.map(p => p.id === updatedProd.id ? { ...p, ...updatedProd, is_in_stock: true } : p))
+  }, [])
+
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in space-y-0">
       {/* Tab bar */}
@@ -902,7 +983,7 @@ export default function PartRequestsPage() {
           ? <OrderHistoryTab vendors={vendors} />
           : activeTab === 'po-list'
           ? <AdminPOPage onSwitchToNewPO={() => setActiveTab('new-po')} />
-          : <NewPOTab vendors={vendors} products={products} />
+          : <NewPOTab vendors={vendors} products={products} onProductUpdated={handleProductUpdated} />
         }
       </div>
     </div>
